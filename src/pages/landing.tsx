@@ -158,7 +158,7 @@ export default function LandingPage() {
                     <div className="flex items-center gap-3">
                         {!isAuthed ? (
                             <Button
-                                className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                 onClick={() => navigate('/auth')}
                             >
                                 Login / Register
@@ -196,7 +196,7 @@ export default function LandingPage() {
                             {!isAuthed ? (
                                 <Button
                                     size="lg"
-                                    className="px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                    className="cursor-pointer px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                     onClick={() => navigate('/auth')}
                                 >
                                     Get Started
@@ -331,7 +331,7 @@ export default function LandingPage() {
                     />
                     <Button
                         size="lg"
-                        className="px-8 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                        className="cursor-pointer px-8 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                         onClick={() => navigate(isAuthed ? dashboardHref : '/auth')}
                     >
                         {isAuthed ? 'Go to Dashboard' : 'Login / Register'}

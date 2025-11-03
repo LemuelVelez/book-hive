@@ -1,44 +1,64 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Eye, EyeOff, Lock, Mail, User, IdCard } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import React, { useEffect, useMemo, useRef, useState } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
+import { ArrowLeft, Eye, EyeOff, Lock, Mail, User, IdCard } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
-import logo from '@/assets/images/logo.png'
+import {
+    Field,
+    FieldContent,
+    FieldError,
+    FieldLabel,
+} from "@/components/ui/field"
 
-type AccountType = 'student' | 'other'
+import logo from "@/assets/images/logo.png"
+
+type AccountType = "student" | "other"
 type CourseName =
-    | 'BACHELOR OF SCIENCE IN EDUCATION'
-    | 'BACHELOR OF SCIENCE IN SOCIAL WORK'
-    | 'BACHELOR OF SCIENCE IN COMPUTER SCIENCE'
-    | 'BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY'
+    | "BACHELOR OF SCIENCE IN EDUCATION"
+    | "BACHELOR OF SCIENCE IN SOCIAL WORK"
+    | "BACHELOR OF SCIENCE IN COMPUTER SCIENCE"
+    | "BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY"
 
 const COURSES: CourseName[] = [
-    'BACHELOR OF SCIENCE IN EDUCATION',
-    'BACHELOR OF SCIENCE IN SOCIAL WORK',
-    'BACHELOR OF SCIENCE IN COMPUTER SCIENCE',
-    'BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY',
+    "BACHELOR OF SCIENCE IN EDUCATION",
+    "BACHELOR OF SCIENCE IN SOCIAL WORK",
+    "BACHELOR OF SCIENCE IN COMPUTER SCIENCE",
+    "BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY",
 ]
 
 const COURSE_ACRONYM: Record<CourseName, string> = {
-    'BACHELOR OF SCIENCE IN EDUCATION': 'BSED',
-    'BACHELOR OF SCIENCE IN SOCIAL WORK': 'BSSW',
-    'BACHELOR OF SCIENCE IN COMPUTER SCIENCE': 'BSCS',
-    'BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY': 'BSIT',
+    "BACHELOR OF SCIENCE IN EDUCATION": "BSED",
+    "BACHELOR OF SCIENCE IN SOCIAL WORK": "BSSW",
+    "BACHELOR OF SCIENCE IN COMPUTER SCIENCE": "BSCS",
+    "BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY": "BSIT",
 }
 
-const YEAR_LEVELS = ['1st', '2nd', '3rd', '4th', '5th'] as const
+const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th", "5th"] as const
 type YearLevel = (typeof YEAR_LEVELS)[number]
 
-const REMEMBER_FLAG_KEY = 'bookhive:remember'
-const REMEMBER_EMAIL_KEY = 'bookhive:rememberEmail'
+const REMEMBER_FLAG_KEY = "bookhive:remember"
+const REMEMBER_EMAIL_KEY = "bookhive:rememberEmail"
 
 function useQuery() {
     const { search } = useLocation()
@@ -49,8 +69,8 @@ function sanitizeRedirect(raw: string | null): string | null {
     if (!raw) return null
     try {
         const url = decodeURIComponent(raw)
-        if (!url.startsWith('/')) return null
-        if (url.startsWith('/auth')) return null
+        if (!url.startsWith("/")) return null
+        if (url.startsWith("/auth")) return null
         return url
     } catch {
         return null
@@ -61,41 +81,41 @@ export default function AuthPage() {
     const navigate = useNavigate()
     const qs = useQuery()
 
-    const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
+    const [activeTab, setActiveTab] = useState<"login" | "register">("login")
 
     // Login state
-    const [email, setEmail] = useState('')
-    const [password, setPassword] = useState('')
+    const [email, setEmail] = useState("")
+    const [password, setPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
     const [rememberMe, setRememberMe] = useState(false)
     const [isLoggingIn, setIsLoggingIn] = useState(false)
-    const [loginError, setLoginError] = useState<string>('')
+    const [loginError, setLoginError] = useState<string>("")
 
     // Register state
-    const [fullName, setFullName] = useState('')
-    const [accountType, setAccountType] = useState<AccountType>('student')
-    const [studentId, setStudentId] = useState('')
-    const [course, setCourse] = useState<CourseName | ''>('')
-    const [yearLevel, setYearLevel] = useState<YearLevel | ''>('')
-    const [regEmail, setRegEmail] = useState('')
-    const [regPassword, setRegPassword] = useState('')
-    const [confirmPassword, setConfirmPassword] = useState('')
-    const [regError, setRegError] = useState<string>('')
+    const [fullName, setFullName] = useState("")
+    const [accountType, setAccountType] = useState<AccountType>("student")
+    const [studentId, setStudentId] = useState("")
+    const [course, setCourse] = useState<CourseName | "">("")
+    const [yearLevel, setYearLevel] = useState<YearLevel | "">("")
+    const [regEmail, setRegEmail] = useState("")
+    const [regPassword, setRegPassword] = useState("")
+    const [confirmPassword, setConfirmPassword] = useState("")
+    const [regError, setRegError] = useState<string>("")
     const [isRegistering, setIsRegistering] = useState(false)
     const [showRegPassword, setShowRegPassword] = useState(false)
     const [showRegConfirm, setShowRegConfirm] = useState(false)
     const [checkingStudentId, setCheckingStudentId] = useState(false)
     const [studentIdAvailable, setStudentIdAvailable] = useState<boolean | null>(null)
 
-    const redirectParam = sanitizeRedirect(qs.get('redirect') || qs.get('next'))
+    const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"))
     const bootRedirectedRef = useRef(false)
 
     // Prefill remembered email
     useEffect(() => {
         try {
-            const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === '1'
+            const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === "1"
             if (remembered) {
-                const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY) || ''
+                const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY) || ""
                 setEmail(savedEmail)
                 setRememberMe(true)
             }
@@ -104,19 +124,19 @@ export default function AuthPage() {
         }
     }, [])
 
-    // (Optional) Check existing session and redirect.
+    // Optional: check session and redirect
     useEffect(() => {
         if (bootRedirectedRef.current) return
-        // You may call your session endpoint here.
-        // If logged in, navigate(redirectParam ?? '/dashboard/student', { replace: true })
+        // e.g. call your session endpoint here
+        // navigate(redirectParam ?? '/dashboard/student', { replace: true })
     }, [redirectParam])
 
-    const handleRememberToggle = (checked: boolean | 'indeterminate') => {
+    const handleRememberToggle = (checked: boolean | "indeterminate") => {
         const value = checked === true
         setRememberMe(value)
         try {
             if (value) {
-                localStorage.setItem(REMEMBER_FLAG_KEY, '1')
+                localStorage.setItem(REMEMBER_FLAG_KEY, "1")
                 localStorage.setItem(REMEMBER_EMAIL_KEY, email)
             } else {
                 localStorage.removeItem(REMEMBER_FLAG_KEY)
@@ -139,9 +159,9 @@ export default function AuthPage() {
         }
     }
 
-    // Debounced student ID availability check
+    // Debounced student ID availability check (register)
     useEffect(() => {
-        if (accountType !== 'student') {
+        if (accountType !== "student") {
             setStudentIdAvailable(null)
             return
         }
@@ -154,7 +174,9 @@ export default function AuthPage() {
         setCheckingStudentId(true)
         const t = setTimeout(async () => {
             try {
-                const res = await fetch(`/api/users/check-student-id?studentId=${encodeURIComponent(trimmed)}`)
+                const res = await fetch(
+                    `/api/users/check-student-id?studentId=${encodeURIComponent(trimmed)}`
+                )
                 if (!cancelled && res.ok) {
                     const data = (await res.json()) as { available: boolean }
                     setStudentIdAvailable(data.available)
@@ -173,26 +195,25 @@ export default function AuthPage() {
         }
     }, [studentId, accountType])
 
-    // Login
-    const handleLogin: React.FormEventHandler<HTMLFormElement> = async (e) => {
-        e.preventDefault()
-        setLoginError('')
+    // LOGIN (no <form/> — handled by button)
+    const triggerLogin = async () => {
+        setLoginError("")
         setIsLoggingIn(true)
         try {
-            const resp = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
+            const resp = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify({ email, password }),
             })
             if (!resp.ok) {
                 const data = await resp.json().catch(() => ({}))
-                throw new Error(data?.message || 'Invalid email or password.')
+                throw new Error(data?.message || "Invalid email or password.")
             }
 
             try {
                 if (rememberMe) {
-                    localStorage.setItem(REMEMBER_FLAG_KEY, '1')
+                    localStorage.setItem(REMEMBER_FLAG_KEY, "1")
                     localStorage.setItem(REMEMBER_EMAIL_KEY, email)
                 } else {
                     localStorage.removeItem(REMEMBER_FLAG_KEY)
@@ -202,48 +223,47 @@ export default function AuthPage() {
                 /* ignore */
             }
 
-            const dest = redirectParam ?? '/dashboard/student'
+            const dest = redirectParam ?? "/dashboard/student"
             navigate(dest, { replace: true })
         } catch (err: any) {
-            setLoginError(err?.message || 'Login failed. Please try again.')
+            setLoginError(err?.message || "Login failed. Please try again.")
         } finally {
             setIsLoggingIn(false)
         }
     }
 
-    // Register
-    const handleRegister: React.FormEventHandler<HTMLFormElement> = async (e) => {
-        e.preventDefault()
-        setRegError('')
+    // REGISTER (no <form/> — handled by button)
+    const triggerRegister = async () => {
+        setRegError("")
 
         if (regPassword !== confirmPassword) {
-            setRegError('Passwords do not match.')
+            setRegError("Passwords do not match.")
             return
         }
         if (regPassword.length < 8) {
-            setRegError('Password must be at least 8 characters.')
+            setRegError("Password must be at least 8 characters.")
             return
         }
         if (!fullName.trim()) {
-            setRegError('Full name is required.')
+            setRegError("Full name is required.")
             return
         }
 
-        if (accountType === 'student') {
+        if (accountType === "student") {
             if (!studentId.trim()) {
-                setRegError('Student ID is required for student accounts.')
+                setRegError("Student ID is required for student accounts.")
                 return
             }
             if (!course) {
-                setRegError('Course is required for student accounts.')
+                setRegError("Course is required for student accounts.")
                 return
             }
             if (!yearLevel) {
-                setRegError('Year level is required for student accounts.')
+                setRegError("Year level is required for student accounts.")
                 return
             }
             if (studentIdAvailable === false) {
-                setRegError('That Student ID is already in use. Please use a different one.')
+                setRegError("That Student ID is already in use. Please use a different one.")
                 return
             }
         }
@@ -256,16 +276,16 @@ export default function AuthPage() {
                 password: regPassword,
                 accountType,
             }
-            if (accountType === 'student') {
+            if (accountType === "student") {
                 payload.studentId = studentId.trim()
                 payload.course = course
                 payload.yearLevel = yearLevel
             }
 
-            const resp = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
+            const resp = await fetch("/api/auth/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify(payload),
             })
             if (!resp.ok) {
@@ -273,30 +293,45 @@ export default function AuthPage() {
                 const msg =
                     data?.message ||
                     (resp.status === 409
-                        ? 'An account with this email or Student ID already exists.'
-                        : 'Registration failed. Please try again.')
+                        ? "An account with this email or Student ID already exists."
+                        : "Registration failed. Please try again.")
                 throw new Error(msg)
             }
 
             // Best-effort email verification
             try {
-                await fetch('/api/auth/verify-email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
+                await fetch("/api/auth/verify-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
                     body: JSON.stringify({ email: regEmail.trim() }),
                 })
             } catch {
                 /* ignore */
             }
 
-            navigate(`/auth/verify-email?email=${encodeURIComponent(regEmail.trim())}&justRegistered=1`, {
-                replace: true,
-            })
+            navigate(
+                `/auth/verify-email?email=${encodeURIComponent(regEmail.trim())}&justRegistered=1`,
+                { replace: true }
+            )
         } catch (err: any) {
-            setRegError(err?.message || 'Failed to register. Please try again.')
+            setRegError(err?.message || "Failed to register. Please try again.")
         } finally {
             setIsRegistering(false)
+        }
+    }
+
+    // Enter key handling without <form>
+    const onLoginKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault()
+            triggerLogin()
+        }
+    }
+    const onRegisterKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault()
+            triggerRegister()
         }
     }
 
@@ -304,21 +339,23 @@ export default function AuthPage() {
         <div className="min-h-screen w-full bg-slate-900 text-white flex flex-col">
             {/* Header */}
             <header className="container mx-auto py-6 px-4 flex items-center justify-between">
+                {/* Back icon + text (text hidden on mobile) */}
                 <Link
                     to="/"
                     className="inline-flex items-center gap-2 text-white/90 hover:text-white transition-colors"
                 >
                     <ArrowLeft className="h-5 w-5" />
-                    <span>Back to Home</span>
+                    <span className="hidden md:inline">Back to Home</span>
                 </Link>
 
+                {/* Logo + title (title hidden on mobile) */}
                 <Link to="/" className="inline-flex items-center gap-2">
                     <img
                         src={logo}
                         alt="JRMSU-TC Book-Hive logo"
                         className="h-8 w-8 rounded-md object-contain"
                     />
-                    <span className="font-semibold">JRMSU-TC Book-Hive</span>
+                    <span className="hidden md:inline font-semibold">JRMSU-TC Book-Hive</span>
                 </Link>
             </header>
 
@@ -336,17 +373,21 @@ export default function AuthPage() {
                         <p className="text-white/70">Library Borrowing & Reservation Platform</p>
                     </div>
 
-                    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'login' | 'register')} className="w-full">
+                    <Tabs
+                        value={activeTab}
+                        onValueChange={(v) => setActiveTab(v as "login" | "register")}
+                        className="w-full"
+                    >
                         <TabsList className="grid w-full grid-cols-2 mb-6">
                             <TabsTrigger
                                 value="login"
-                                className="data-[state=active]:text-white data-[state=active]:bg-linear-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500"
+                                className="cursor-pointer data-[state=active]:text-white data-[state=active]:bg-linear-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500"
                             >
                                 Login
                             </TabsTrigger>
                             <TabsTrigger
                                 value="register"
-                                className="data-[state=active]:text-white data-[state=active]:bg-linear-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500"
+                                className="cursor-pointer data-[state=active]:text-white data-[state=active]:bg-linear-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500"
                             >
                                 Register
                             </TabsTrigger>
@@ -366,54 +407,64 @@ export default function AuthPage() {
                                         </Alert>
                                     )}
 
-                                    <form onSubmit={handleLogin} className="space-y-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="email" className="text-white">Email</Label>
-                                            <div className="relative">
-                                                <Mail className="absolute left-3 top-3 h-4 w-4 text-white/50" />
-                                                <Input
-                                                    id="email"
-                                                    type="email"
-                                                    placeholder="you@example.com"
-                                                    className="pl-10 bg-slate-900/70 border-white/10 text-white"
-                                                    required
-                                                    value={email}
-                                                    onChange={handleEmailChange}
-                                                    autoComplete="username"
-                                                    autoCapitalize="none"
-                                                    autoCorrect="off"
-                                                    spellCheck={false}
-                                                />
-                                            </div>
-                                        </div>
+                                    <div className="space-y-4">
+                                        <Field>
+                                            <FieldLabel className="text-white">Email</FieldLabel>
+                                            <FieldContent>
+                                                <div className="relative">
+                                                    <Mail className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                    <Input
+                                                        id="email"
+                                                        type="email"
+                                                        placeholder="you@example.com"
+                                                        className="pl-10 bg-slate-900/70 border-white/10 text-white"
+                                                        required
+                                                        value={email}
+                                                        onChange={handleEmailChange}
+                                                        onKeyDown={onLoginKeyDown}
+                                                        autoComplete="username"
+                                                        autoCapitalize="none"
+                                                        autoCorrect="off"
+                                                        spellCheck={false}
+                                                    />
+                                                </div>
+                                            </FieldContent>
+                                        </Field>
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="password" className="text-white">Password</Label>
-                                            <div className="relative">
-                                                <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
-                                                <Input
-                                                    id="password"
-                                                    type={showPassword ? 'text' : 'password'}
-                                                    placeholder="••••••••"
-                                                    className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
-                                                    required
-                                                    value={password}
-                                                    onChange={(e) => setPassword(e.target.value)}
-                                                    autoComplete="current-password"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="absolute right-1.5 top-1.5 h-8 w-8 text-white/70 hover:text-white"
-                                                    onClick={() => setShowPassword((s) => !s)}
-                                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                                    aria-pressed={showPassword}
-                                                >
-                                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                </Button>
-                                            </div>
-                                        </div>
+                                        <Field>
+                                            <FieldLabel className="text-white">Password</FieldLabel>
+                                            <FieldContent>
+                                                <div className="relative">
+                                                    <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                    <Input
+                                                        id="password"
+                                                        type={showPassword ? "text" : "password"}
+                                                        placeholder="••••••••"
+                                                        className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
+                                                        required
+                                                        value={password}
+                                                        onChange={(e) => setPassword(e.target.value)}
+                                                        onKeyDown={onLoginKeyDown}
+                                                        autoComplete="current-password"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                        onClick={() => setShowPassword((s) => !s)}
+                                                        aria-label={showPassword ? "Hide password" : "Show password"}
+                                                        aria-pressed={showPassword}
+                                                    >
+                                                        {showPassword ? (
+                                                            <EyeOff className="h-4 w-4" />
+                                                        ) : (
+                                                            <Eye className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </FieldContent>
+                                        </Field>
 
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
@@ -435,18 +486,22 @@ export default function AuthPage() {
                                         </div>
 
                                         <Button
-                                            type="submit"
+                                            type="button"
+                                            onClick={triggerLogin}
                                             className="w-full text-white bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                             disabled={isLoggingIn}
                                         >
-                                            {isLoggingIn ? 'Logging in…' : 'Login'}
+                                            {isLoggingIn ? "Logging in…" : "Login"}
                                         </Button>
-                                    </form>
+                                    </div>
                                 </CardContent>
                                 <CardFooter className="flex justify-center border-t border-white/10">
                                     <p className="text-sm text-gray-300">
-                                        Need help?{' '}
-                                        <Link to="/contact#support" className="text-purple-300 hover:text-purple-200">
+                                        Need help?{" "}
+                                        <Link
+                                            to="/contact#support"
+                                            className="text-purple-300 hover:text-purple-200"
+                                        >
                                             Contact support
                                         </Link>
                                     </p>
@@ -468,206 +523,248 @@ export default function AuthPage() {
                                         </Alert>
                                     )}
 
-                                    <form className="space-y-4" onSubmit={handleRegister}>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="fullname" className="text-white">Full Name</Label>
-                                            <div className="relative">
-                                                <User className="absolute left-3 top-3 h-4 w-4 text-white/50" />
-                                                <Input
-                                                    id="fullname"
-                                                    placeholder="Juan Dela Cruz"
-                                                    className="pl-10 bg-slate-900/70 border-white/10 text-white"
-                                                    value={fullName}
-                                                    onChange={(e) => setFullName(e.target.value)}
-                                                    required
-                                                    autoComplete="name"
-                                                />
-                                            </div>
-                                        </div>
+                                    <div className="space-y-4">
+                                        <Field>
+                                            <FieldLabel className="text-white">Full Name</FieldLabel>
+                                            <FieldContent>
+                                                <div className="relative">
+                                                    <User className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                    <Input
+                                                        id="fullname"
+                                                        placeholder="Juan Dela Cruz"
+                                                        className="pl-10 bg-slate-900/70 border-white/10 text-white"
+                                                        value={fullName}
+                                                        onChange={(e) => setFullName(e.target.value)}
+                                                        onKeyDown={onRegisterKeyDown}
+                                                        required
+                                                        autoComplete="name"
+                                                    />
+                                                </div>
+                                            </FieldContent>
+                                        </Field>
 
-                                        <div className="space-y-2">
-                                            <Label className="text-white">Account Type</Label>
-                                            <Select
-                                                value={accountType}
-                                                onValueChange={(v) => setAccountType(v as AccountType)}
-                                            >
-                                                <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
-                                                    <SelectValue placeholder="Select account type" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                    <SelectItem value="student">Student</SelectItem>
-                                                    <SelectItem value="other">Other (Faculty/Staff/Guest)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        <Field>
+                                            <FieldLabel className="text-white">Account Type</FieldLabel>
+                                            <FieldContent>
+                                                <Select
+                                                    value={accountType}
+                                                    onValueChange={(v) => setAccountType(v as AccountType)}
+                                                >
+                                                    <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
+                                                        <SelectValue placeholder="Select account type" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-slate-900 text-white border-white/10">
+                                                        <SelectItem value="student">Student</SelectItem>
+                                                        <SelectItem value="other">Other (Faculty/Staff/Guest)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FieldContent>
+                                        </Field>
 
-                                        {accountType === 'student' && (
+                                        {accountType === "student" && (
                                             <>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="student-id" className="text-white">
+                                                <Field>
+                                                    <FieldLabel className="text-white">
                                                         Student ID <span className="text-red-300">*</span>
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <IdCard className="absolute left-3 top-3 h-4 w-4 text-white/50" />
-                                                        <Input
-                                                            id="student-id"
-                                                            placeholder="e.g., 2025-00123"
-                                                            className="pl-10 bg-slate-900/70 border-white/10 text-white"
-                                                            value={studentId}
-                                                            onChange={(e) => setStudentId(e.target.value)}
-                                                            required
-                                                            autoComplete="off"
-                                                            spellCheck={false}
-                                                        />
-                                                    </div>
+                                                    </FieldLabel>
+                                                    <FieldContent>
+                                                        <div className="relative">
+                                                            <IdCard className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                            <Input
+                                                                id="student-id"
+                                                                placeholder="e.g., 2025-00123"
+                                                                className="pl-10 bg-slate-900/70 border-white/10 text-white"
+                                                                value={studentId}
+                                                                onChange={(e) => setStudentId(e.target.value)}
+                                                                onKeyDown={onRegisterKeyDown}
+                                                                required
+                                                                autoComplete="off"
+                                                                spellCheck={false}
+                                                            />
+                                                        </div>
+                                                    </FieldContent>
+
                                                     {checkingStudentId ? (
-                                                        <p className="text-xs text-white/60">Checking availability…</p>
+                                                        <span className="text-xs text-white/60">
+                                                            Checking availability…
+                                                        </span>
                                                     ) : studentId && studentIdAvailable !== null ? (
-                                                        <p
-                                                            className={`text-xs ${studentIdAvailable ? 'text-emerald-300' : 'text-red-300'}`}
+                                                        <span
+                                                            className={`text-xs ${studentIdAvailable ? "text-emerald-300" : "text-red-300"
+                                                                }`}
                                                         >
-                                                            {studentIdAvailable ? 'Student ID is available' : 'Student ID is already taken'}
-                                                        </p>
+                                                            {studentIdAvailable
+                                                                ? "Student ID is available"
+                                                                : "Student ID is already taken"}
+                                                        </span>
                                                     ) : null}
-                                                </div>
+                                                </Field>
 
-                                                <div className="space-y-2">
-                                                    <Label className="text-white">
+                                                <Field>
+                                                    <FieldLabel className="text-white">
                                                         Course <span className="text-red-300">*</span>
-                                                    </Label>
-                                                    <Select
-                                                        value={course || undefined}
-                                                        onValueChange={(v) => setCourse(v as CourseName)}
-                                                    >
-                                                        <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
-                                                            <SelectValue placeholder="Select course" />
-                                                        </SelectTrigger>
-                                                        <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                            {COURSES.map((c) => (
-                                                                <SelectItem key={c} value={c}>
-                                                                    <div className="flex w-full items-center justify-between gap-2">
-                                                                        <span>{c}</span>
-                                                                        <span className="text-xs opacity-70">{COURSE_ACRONYM[c]}</span>
-                                                                    </div>
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
+                                                    </FieldLabel>
+                                                    <FieldContent>
+                                                        <Select
+                                                            value={course || undefined}
+                                                            onValueChange={(v) => setCourse(v as CourseName)}
+                                                        >
+                                                            <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
+                                                                <SelectValue placeholder="Select course" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-slate-900 text-white border-white/10">
+                                                                {COURSES.map((c) => (
+                                                                    <SelectItem key={c} value={c}>
+                                                                        <div className="flex w-full items-center justify-between gap-2">
+                                                                            <span>{c}</span>
+                                                                            <span className="text-xs opacity-70">
+                                                                                {COURSE_ACRONYM[c]}
+                                                                            </span>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </FieldContent>
+                                                </Field>
 
-                                                <div className="space-y-2">
-                                                    <Label className="text-white">
+                                                <Field>
+                                                    <FieldLabel className="text-white">
                                                         Year Level <span className="text-red-300">*</span>
-                                                    </Label>
-                                                    <Select
-                                                        value={yearLevel || undefined}
-                                                        onValueChange={(v) => setYearLevel(v as YearLevel)}
-                                                    >
-                                                        <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
-                                                            <SelectValue placeholder="Select year level" />
-                                                        </SelectTrigger>
-                                                        <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                            {YEAR_LEVELS.map((y) => (
-                                                                <SelectItem key={y} value={y}>
-                                                                    {y}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
+                                                    </FieldLabel>
+                                                    <FieldContent>
+                                                        <Select
+                                                            value={yearLevel || undefined}
+                                                            onValueChange={(v) => setYearLevel(v as YearLevel)}
+                                                        >
+                                                            <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
+                                                                <SelectValue placeholder="Select year level" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-slate-900 text-white border-white/10">
+                                                                {YEAR_LEVELS.map((y) => (
+                                                                    <SelectItem key={y} value={y}>
+                                                                        {y}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </FieldContent>
+                                                </Field>
                                             </>
                                         )}
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="reg-email" className="text-white">Email</Label>
-                                            <div className="relative">
-                                                <Mail className="absolute left-3 top-3 h-4 w-4 text-white/50" />
-                                                <Input
-                                                    id="reg-email"
-                                                    type="email"
-                                                    placeholder="you@example.com"
-                                                    className="pl-10 bg-slate-900/70 border-white/10 text-white"
-                                                    value={regEmail}
-                                                    onChange={(e) => setRegEmail(e.target.value)}
-                                                    required
-                                                    autoComplete="email"
-                                                    autoCapitalize="none"
-                                                    autoCorrect="off"
-                                                    spellCheck={false}
-                                                />
-                                            </div>
-                                        </div>
+                                        <Field>
+                                            <FieldLabel className="text-white">Email</FieldLabel>
+                                            <FieldContent>
+                                                <div className="relative">
+                                                    <Mail className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                    <Input
+                                                        id="reg-email"
+                                                        type="email"
+                                                        placeholder="you@example.com"
+                                                        className="pl-10 bg-slate-900/70 border-white/10 text-white"
+                                                        value={regEmail}
+                                                        onChange={(e) => setRegEmail(e.target.value)}
+                                                        onKeyDown={onRegisterKeyDown}
+                                                        required
+                                                        autoComplete="email"
+                                                        autoCapitalize="none"
+                                                        autoCorrect="off"
+                                                        spellCheck={false}
+                                                    />
+                                                </div>
+                                            </FieldContent>
+                                        </Field>
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="reg-password" className="text-white">Password</Label>
-                                            <div className="relative">
-                                                <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
-                                                <Input
-                                                    id="reg-password"
-                                                    type={showRegPassword ? 'text' : 'password'}
-                                                    placeholder="At least 8 characters"
-                                                    className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
-                                                    value={regPassword}
-                                                    onChange={(e) => setRegPassword(e.target.value)}
-                                                    required
-                                                    autoComplete="new-password"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="absolute right-1.5 top-1.5 h-8 w-8 text-white/70 hover:text-white"
-                                                    onClick={() => setShowRegPassword((s) => !s)}
-                                                    aria-label={showRegPassword ? 'Hide password' : 'Show password'}
-                                                    aria-pressed={showRegPassword}
-                                                >
-                                                    {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                </Button>
-                                            </div>
-                                        </div>
+                                        <Field>
+                                            <FieldLabel className="text-white">Password</FieldLabel>
+                                            <FieldContent>
+                                                <div className="relative">
+                                                    <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                    <Input
+                                                        id="reg-password"
+                                                        type={showRegPassword ? "text" : "password"}
+                                                        placeholder="At least 8 characters"
+                                                        className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
+                                                        value={regPassword}
+                                                        onChange={(e) => setRegPassword(e.target.value)}
+                                                        onKeyDown={onRegisterKeyDown}
+                                                        required
+                                                        autoComplete="new-password"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                        onClick={() => setShowRegPassword((s) => !s)}
+                                                        aria-label={showRegPassword ? "Hide password" : "Show password"}
+                                                        aria-pressed={showRegPassword}
+                                                    >
+                                                        {showRegPassword ? (
+                                                            <EyeOff className="h-4 w-4" />
+                                                        ) : (
+                                                            <Eye className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </FieldContent>
+                                        </Field>
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="confirm-password" className="text-white">Confirm Password</Label>
-                                            <div className="relative">
-                                                <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
-                                                <Input
-                                                    id="confirm-password"
-                                                    type={showRegConfirm ? 'text' : 'password'}
-                                                    placeholder="Repeat your password"
-                                                    className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
-                                                    value={confirmPassword}
-                                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                                    required
-                                                    autoComplete="new-password"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="absolute right-1.5 top-1.5 h-8 w-8 text-white/70 hover:text-white"
-                                                    onClick={() => setShowRegConfirm((s) => !s)}
-                                                    aria-label={showRegConfirm ? 'Hide password' : 'Show password'}
-                                                    aria-pressed={showRegConfirm}
-                                                >
-                                                    {showRegConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                </Button>
-                                            </div>
-                                        </div>
+                                        <Field>
+                                            <FieldLabel className="text-white">Confirm Password</FieldLabel>
+                                            <FieldContent>
+                                                <div className="relative">
+                                                    <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                    <Input
+                                                        id="confirm-password"
+                                                        type={showRegConfirm ? "text" : "password"}
+                                                        placeholder="Repeat your password"
+                                                        className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
+                                                        value={confirmPassword}
+                                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                                        onKeyDown={onRegisterKeyDown}
+                                                        required
+                                                        autoComplete="new-password"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                        onClick={() => setShowRegConfirm((s) => !s)}
+                                                        aria-label={showRegConfirm ? "Hide password" : "Show password"}
+                                                        aria-pressed={showRegConfirm}
+                                                    >
+                                                        {showRegConfirm ? (
+                                                            <EyeOff className="h-4 w-4" />
+                                                        ) : (
+                                                            <Eye className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </FieldContent>
+
+                                            {regPassword !== confirmPassword && confirmPassword.length > 0 && (
+                                                <FieldError>Passwords do not match.</FieldError>
+                                            )}
+                                        </Field>
 
                                         <Button
-                                            type="submit"
+                                            type="button"
+                                            onClick={triggerRegister}
                                             className="w-full text-white bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                             disabled={isRegistering}
                                         >
-                                            {isRegistering ? 'Creating account…' : 'Register'}
+                                            {isRegistering ? "Creating account…" : "Register"}
                                         </Button>
-                                    </form>
+                                    </div>
                                 </CardContent>
                                 <CardFooter className="flex justify-center border-t border-white/10">
                                     <p className="text-sm text-gray-300">
-                                        Already have an account?{' '}
+                                        Already have an account?{" "}
                                         <button
-                                            onClick={() => setActiveTab('login')}
+                                            onClick={() => setActiveTab("login")}
                                             className="text-purple-300 hover:text-purple-200 underline bg-transparent border-none cursor-pointer"
                                         >
                                             Login
@@ -680,7 +777,8 @@ export default function AuthPage() {
 
                     {/* Terms */}
                     <p className="mt-6 text-center text-xs text-white/60">
-                        By continuing, you agree to the acceptable use of the JRMSU-TC Book-Hive platform.
+                        By continuing, you agree to the acceptable use of the JRMSU-TC Book-Hive
+                        platform.
                     </p>
                 </div>
             </main>
