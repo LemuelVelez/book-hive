@@ -1,7 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { ArrowLeft, Eye, EyeOff, Lock, Mail, User, IdCard } from "lucide-react"
+import {
+    ArrowLeft,
+    Eye,
+    EyeOff,
+    Lock,
+    Mail,
+    User,
+    IdCard,
+    Loader2,
+    Paperclip,
+    HelpCircle,
+    MessageSquare,
+} from "lucide-react"
+
+// UI primitives
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,48 +37,74 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-
 import {
     Field,
     FieldContent,
     FieldError,
     FieldLabel,
 } from "@/components/ui/field"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter as DialogFooterUI,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 import logo from "@/assets/images/logo.png"
 
+// -------------------------
+// Constants & type helpers
+// -------------------------
 type AccountType = "student" | "other"
-type CourseName =
-    | "BACHELOR OF SCIENCE IN EDUCATION"
-    | "BACHELOR OF SCIENCE IN SOCIAL WORK"
-    | "BACHELOR OF SCIENCE IN COMPUTER SCIENCE"
-    | "BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY"
-
-const COURSES: CourseName[] = [
-    "BACHELOR OF SCIENCE IN EDUCATION",
-    "BACHELOR OF SCIENCE IN SOCIAL WORK",
-    "BACHELOR OF SCIENCE IN COMPUTER SCIENCE",
-    "BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY",
-]
-
-const COURSE_ACRONYM: Record<CourseName, string> = {
-    "BACHELOR OF SCIENCE IN EDUCATION": "BSED",
-    "BACHELOR OF SCIENCE IN SOCIAL WORK": "BSSW",
-    "BACHELOR OF SCIENCE IN COMPUTER SCIENCE": "BSCS",
-    "BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY": "BSIT",
-}
-
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th", "5th"] as const
 type YearLevel = (typeof YEAR_LEVELS)[number]
+type YearLevelOption = YearLevel | "Others"
 
+// Colleges and programs used to drive cascaded selects
+const COLLEGES: Record<string, string[]> = {
+    "College of Business Administration": ["BSBA", "BSAM", "BSHM"],
+    "College of Teacher Education": [
+        "BSED Filipino",
+        "BSED English",
+        "BSED Math",
+        "BSED Social Studies",
+        "Bachelor of Physical Education",
+        "BEED",
+    ],
+    "College of Computing Studies": ["BS Information Systems", "BS Computer Science"],
+    "College of Agriculture and Forestry": ["BS Agriculture", "BS Forestry"],
+    "College of Liberal Arts, Mathematics and Sciences": ["BAELS"],
+    "School of Engineering": ["Agricultural Biosystems Engineering"],
+    "School of Criminal Justice Education": ["BS Criminology"],
+}
+
+const COLLEGE_ACRONYM: Record<string, string> = {
+    "College of Business Administration": "CBA",
+    "College of Teacher Education": "CTED",
+    "College of Computing Studies": "CCS",
+    "College of Agriculture and Forestry": "CAF",
+    "College of Liberal Arts, Mathematics and Sciences": "CLAMS",
+    "School of Engineering": "SOE",
+    "School of Criminal Justice Education": "SCJE",
+}
+
+// LocalStorage keys for "remember me" UX
 const REMEMBER_FLAG_KEY = "bookhive:remember"
 const REMEMBER_EMAIL_KEY = "bookhive:rememberEmail"
 
+// -------------------------
+// Lightweight query helpers
+// -------------------------
 function useQuery() {
     const { search } = useLocation()
     return useMemo(() => new URLSearchParams(search), [search])
 }
 
+/** Guards against open redirects; only allow in-app paths and not /auth itself */
 function sanitizeRedirect(raw: string | null): string | null {
     if (!raw) return null
     try {
@@ -77,10 +117,14 @@ function sanitizeRedirect(raw: string | null): string | null {
     }
 }
 
+// -------------------------
+// Component
+// -------------------------
 export default function AuthPage() {
     const navigate = useNavigate()
     const qs = useQuery()
 
+    // UI state: which tab
     const [activeTab, setActiveTab] = useState<"login" | "register">("login")
 
     // Login state
@@ -91,12 +135,13 @@ export default function AuthPage() {
     const [isLoggingIn, setIsLoggingIn] = useState(false)
     const [loginError, setLoginError] = useState<string>("")
 
-    // Register state
+    // Registration state
     const [fullName, setFullName] = useState("")
     const [accountType, setAccountType] = useState<AccountType>("student")
     const [studentId, setStudentId] = useState("")
-    const [course, setCourse] = useState<CourseName | "">("")
-    const [yearLevel, setYearLevel] = useState<YearLevel | "">("")
+    const [college, setCollege] = useState<string>("")
+    const [program, setProgram] = useState<string>("")
+    const [yearLevel, setYearLevel] = useState<YearLevelOption | "">("")
     const [regEmail, setRegEmail] = useState("")
     const [regPassword, setRegPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
@@ -104,13 +149,37 @@ export default function AuthPage() {
     const [isRegistering, setIsRegistering] = useState(false)
     const [showRegPassword, setShowRegPassword] = useState(false)
     const [showRegConfirm, setShowRegConfirm] = useState(false)
+
+    // Student ID availability (debounced check)
     const [checkingStudentId, setCheckingStudentId] = useState(false)
     const [studentIdAvailable, setStudentIdAvailable] = useState<boolean | null>(null)
 
-    const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"))
-    const bootRedirectedRef = useRef(false)
+    // "Others" free-form fields
+    const [customCollege, setCustomCollege] = useState("")
+    const [customProgram, setCustomProgram] = useState("")
+    const [customYearLevel, setCustomYearLevel] = useState("")
 
-    // Prefill remembered email
+    // Support dialog state
+    const [supportOpen, setSupportOpen] = useState(false)
+    const [supName, setSupName] = useState("")
+    const [supEmail, setSupEmail] = useState("")
+    const [supCategory, setSupCategory] = useState("Login issue")
+    const [supSubject, setSupSubject] = useState("")
+    const [supMessage, setSupMessage] = useState("")
+    const [supFile, setSupFile] = useState<File | null>(null)
+    const [supSubmitting, setSupSubmitting] = useState(false)
+    const [supError, setSupError] = useState<string>("")
+    const [supSuccess, setSupSuccess] = useState<string>("")
+    const [consent, setConsent] = useState(false)
+
+    // Redirect handling
+    const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"))
+    const bootRedirectedRef = useRef(false) // reserved for one-time redirect guard if needed later
+
+    // -------------
+    // Effects
+    // -------------
+    // Load remembered email (if any)
     useEffect(() => {
         try {
             const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === "1"
@@ -120,17 +189,30 @@ export default function AuthPage() {
                 setRememberMe(true)
             }
         } catch {
-            /* ignore */
+            // storage not available (private mode / SSR / etc.)
         }
     }, [])
 
-    // Optional: check session and redirect
+    // Autofill support dialog name from registration full name
+    useEffect(() => {
+        if (!supName && fullName) setSupName(fullName.trim())
+    }, [fullName, supName])
+
+    // Autofill support dialog email from whichever tab is active
+    useEffect(() => {
+        const candidate = (activeTab === "login" ? email : regEmail).trim()
+        if (!supEmail && candidate) setSupEmail(candidate)
+    }, [activeTab, email, regEmail, supEmail])
+
+    // Placeholder: keep for future "redirect once boot" logic
     useEffect(() => {
         if (bootRedirectedRef.current) return
-        // e.g. call your session endpoint here
-        // navigate(redirectParam ?? '/dashboard/student', { replace: true })
     }, [redirectParam])
 
+    // -------------
+    // Handlers
+    // -------------
+    // Persist/forget remembered email immediately on toggle
     const handleRememberToggle = (checked: boolean | "indeterminate") => {
         const value = checked === true
         setRememberMe(value)
@@ -143,10 +225,11 @@ export default function AuthPage() {
                 localStorage.removeItem(REMEMBER_EMAIL_KEY)
             }
         } catch {
-            /* ignore */
+            // ignore persistence errors
         }
     }
 
+    // Keep remembered email up-to-date as user types
     const handleEmailChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
         const value = e.target.value
         setEmail(value)
@@ -154,12 +237,12 @@ export default function AuthPage() {
             try {
                 localStorage.setItem(REMEMBER_EMAIL_KEY, value)
             } catch {
-                /* ignore */
+                // ignore persistence errors
             }
         }
     }
 
-    // Debounced student ID availability check (register)
+    // Debounced studentId availability check (only for student account)
     useEffect(() => {
         if (accountType !== "student") {
             setStudentIdAvailable(null)
@@ -195,7 +278,7 @@ export default function AuthPage() {
         }
     }, [studentId, accountType])
 
-    // LOGIN (no <form/> — handled by button)
+    // POST: /api/auth/login
     const triggerLogin = async () => {
         setLoginError("")
         setIsLoggingIn(true)
@@ -211,6 +294,7 @@ export default function AuthPage() {
                 throw new Error(data?.message || "Invalid email or password.")
             }
 
+            // Persist remember-me choice after a successful login
             try {
                 if (rememberMe) {
                     localStorage.setItem(REMEMBER_FLAG_KEY, "1")
@@ -220,9 +304,10 @@ export default function AuthPage() {
                     localStorage.removeItem(REMEMBER_EMAIL_KEY)
                 }
             } catch {
-                /* ignore */
+                // ignore persistence errors
             }
 
+            // Default student dashboard; accepts sanitized redirect if present
             const dest = redirectParam ?? "/dashboard/student"
             navigate(dest, { replace: true })
         } catch (err: any) {
@@ -232,10 +317,11 @@ export default function AuthPage() {
         }
     }
 
-    // REGISTER (no <form/> — handled by button)
+    // POST: /api/auth/register (+ best-effort email verification)
     const triggerRegister = async () => {
         setRegError("")
 
+        // Quick client validations to reduce round-trips
         if (regPassword !== confirmPassword) {
             setRegError("Passwords do not match.")
             return
@@ -249,16 +335,25 @@ export default function AuthPage() {
             return
         }
 
+        // Student-only required fields
         if (accountType === "student") {
+            const finalCollege = college === "Others" ? customCollege.trim() : college
+            const finalProgram = program === "Others" ? customProgram.trim() : program
+            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel
+
             if (!studentId.trim()) {
                 setRegError("Student ID is required for student accounts.")
                 return
             }
-            if (!course) {
-                setRegError("Course is required for student accounts.")
+            if (!finalCollege) {
+                setRegError("College is required for student accounts.")
                 return
             }
-            if (!yearLevel) {
+            if (!finalProgram) {
+                setRegError("Program is required for student accounts.")
+                return
+            }
+            if (!finalYearLevel) {
                 setRegError("Year level is required for student accounts.")
                 return
             }
@@ -270,16 +365,20 @@ export default function AuthPage() {
 
         setIsRegistering(true)
         try {
+            const finalProgram = program === "Others" ? customProgram.trim() : program
+            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel
+
             const payload: Record<string, unknown> = {
                 fullName: fullName.trim(),
                 email: regEmail.trim(),
                 password: regPassword,
                 accountType,
             }
+
             if (accountType === "student") {
                 payload.studentId = studentId.trim()
-                payload.course = course
-                payload.yearLevel = yearLevel
+                payload.course = finalProgram
+                payload.yearLevel = finalYearLevel
             }
 
             const resp = await fetch("/api/auth/register", {
@@ -298,7 +397,7 @@ export default function AuthPage() {
                 throw new Error(msg)
             }
 
-            // Best-effort email verification
+            // Kick off verification email; best-effort (non-blocking)
             try {
                 await fetch("/api/auth/verify-email", {
                     method: "POST",
@@ -307,9 +406,10 @@ export default function AuthPage() {
                     body: JSON.stringify({ email: regEmail.trim() }),
                 })
             } catch {
-                /* ignore */
+                // ignore background email errors
             }
 
+            // Route to verify page with email pre-filled
             navigate(
                 `/auth/verify-email?email=${encodeURIComponent(regEmail.trim())}&justRegistered=1`,
                 { replace: true }
@@ -321,7 +421,7 @@ export default function AuthPage() {
         }
     }
 
-    // Enter key handling without <form>
+    // Enter-to-submit ergonomics
     const onLoginKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
         if (e.key === "Enter") {
             e.preventDefault()
@@ -335,11 +435,97 @@ export default function AuthPage() {
         }
     }
 
+    // Derived options for "Program" based on selected college
+    const availablePrograms = college && college !== "Others" ? COLLEGES[college] ?? [] : []
+
+    // Reset support dialog fields to defaults
+    const resetSupport = () => {
+        setSupSubject("")
+        setSupMessage("")
+        setSupCategory("Login issue")
+        setSupFile(null)
+        setConsent(false)
+        setSupError("")
+        setSupSuccess("")
+    }
+
+    // POST: /api/support/ticket — with optional file attachment
+    const submitSupport = async () => {
+        setSupError("")
+        setSupSuccess("")
+
+        // Minimal validations
+        if (!supName.trim()) {
+            setSupError("Please enter your name.")
+            return
+        }
+        if (!supEmail.trim() || !supEmail.includes("@")) {
+            setSupError("Please provide a valid email address.")
+            return
+        }
+        if (!supSubject.trim()) {
+            setSupError("Please add a short subject.")
+            return
+        }
+        if (!supMessage.trim()) {
+            setSupError("Please describe your concern.")
+            return
+        }
+        if (!consent) {
+            setSupError("Please allow us to contact you regarding this ticket.")
+            return
+        }
+
+        setSupSubmitting(true)
+        try {
+            // Attach useful context to speed up triage
+            const context: Record<string, unknown> = {
+                page: "auth",
+                activeTab,
+                studentId: studentId || undefined,
+                college: college === "Others" ? customCollege : college || undefined,
+                program: program === "Others" ? customProgram : program || undefined,
+                yearLevel: yearLevel === "Others" ? customYearLevel : yearLevel || undefined,
+            }
+
+            const form = new FormData()
+            form.append("name", supName.trim())
+            form.append("email", supEmail.trim())
+            form.append("category", supCategory)
+            form.append("subject", supSubject.trim())
+            form.append("message", supMessage.trim())
+            form.append("context", JSON.stringify(context))
+            if (supFile) form.append("attachment", supFile, supFile.name)
+
+            const resp = await fetch("/api/support/ticket", {
+                method: "POST",
+                credentials: "include",
+                body: form,
+            })
+
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}))
+                throw new Error(data?.message || "Failed to submit your ticket.")
+            }
+
+            const data = (await resp.json().catch(() => ({}))) as { ticketId?: string }
+            const tid = data?.ticketId ? ` #${data.ticketId}` : ""
+            setSupSuccess(`Thanks! Your support request has been sent${tid}. We’ll get back to you via email.`)
+            resetSupport()
+        } catch (err: any) {
+            setSupError(err?.message || "Something went wrong while sending your request.")
+        } finally {
+            setSupSubmitting(false)
+        }
+    }
+
+    // -------------------------
+    // Render
+    // -------------------------
     return (
-        <div className="min-h-screen w-full bg-slate-900 text-white flex flex-col">
-            {/* Header */}
+        <div className="support-scroll min-h-screen w-full bg-slate-900 text-white flex flex-col">
+            {/* Top bar with back link and brand */}
             <header className="container mx-auto py-6 px-4 flex items-center justify-between">
-                {/* Back icon + text (text hidden on mobile) */}
                 <Link
                     to="/"
                     className="inline-flex items-center gap-2 text-white/90 hover:text-white transition-colors"
@@ -348,7 +534,6 @@ export default function AuthPage() {
                     <span className="hidden md:inline">Back to Home</span>
                 </Link>
 
-                {/* Logo + title (title hidden on mobile) */}
                 <Link to="/" className="inline-flex items-center gap-2">
                     <img
                         src={logo}
@@ -359,10 +544,10 @@ export default function AuthPage() {
                 </Link>
             </header>
 
-            {/* Main */}
+            {/* Centered auth card area */}
             <main className="flex-1 flex items-center justify-center p-4">
                 <div className="w-full max-w-md">
-                    {/* Branding */}
+                    {/* Brand header */}
                     <div className="text-center mb-8">
                         <img
                             src={logo}
@@ -373,6 +558,7 @@ export default function AuthPage() {
                         <p className="text-white/70">Library Borrowing & Reservation Platform</p>
                     </div>
 
+                    {/* Auth Tabs */}
                     <Tabs
                         value={activeTab}
                         onValueChange={(v) => setActiveTab(v as "login" | "register")}
@@ -408,6 +594,7 @@ export default function AuthPage() {
                                     )}
 
                                     <div className="space-y-4">
+                                        {/* Email */}
                                         <Field>
                                             <FieldLabel className="text-white">Email</FieldLabel>
                                             <FieldContent>
@@ -431,6 +618,7 @@ export default function AuthPage() {
                                             </FieldContent>
                                         </Field>
 
+                                        {/* Password with show/hide */}
                                         <Field>
                                             <FieldLabel className="text-white">Password</FieldLabel>
                                             <FieldContent>
@@ -456,35 +644,26 @@ export default function AuthPage() {
                                                         aria-label={showPassword ? "Hide password" : "Show password"}
                                                         aria-pressed={showPassword}
                                                     >
-                                                        {showPassword ? (
-                                                            <EyeOff className="h-4 w-4" />
-                                                        ) : (
-                                                            <Eye className="h-4 w-4" />
-                                                        )}
+                                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                                     </Button>
                                                 </div>
                                             </FieldContent>
                                         </Field>
 
+                                        {/* Remember + Forgot */}
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <Checkbox
-                                                    id="remember"
-                                                    checked={rememberMe}
-                                                    onCheckedChange={handleRememberToggle}
-                                                />
+                                                <Checkbox id="remember" checked={rememberMe} onCheckedChange={handleRememberToggle} />
                                                 <Label htmlFor="remember" className="text-sm text-white/80">
                                                     Remember me
                                                 </Label>
                                             </div>
-                                            <Link
-                                                to="/auth/forgot-password"
-                                                className="text-sm text-purple-300 hover:text-purple-200"
-                                            >
+                                            <Link to="/auth/forgot-password" className="text-sm text-purple-300 hover:text-purple-200">
                                                 Forgot password?
                                             </Link>
                                         </div>
 
+                                        {/* Login CTA */}
                                         <Button
                                             type="button"
                                             onClick={triggerLogin}
@@ -495,16 +674,177 @@ export default function AuthPage() {
                                         </Button>
                                     </div>
                                 </CardContent>
+
+                                {/* Support entry lives in the card footer to keep it near actions */}
                                 <CardFooter className="flex justify-center border-t border-white/10">
-                                    <p className="text-sm text-gray-300">
-                                        Need help?{" "}
-                                        <Link
-                                            to="/contact#support"
-                                            className="text-purple-300 hover:text-purple-200"
-                                        >
-                                            Contact support
-                                        </Link>
-                                    </p>
+                                    <Dialog open={supportOpen} onOpenChange={(o) => { setSupportOpen(o); if (!o) resetSupport() }}>
+                                        <div className="text-sm text-gray-300 flex items-center gap-2">
+                                            <span>Need help?</span>
+                                            <DialogTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    className="text-purple-300 hover:text-purple-200 underline decoration-1 underline-offset-[3px] bg-transparent border-0 cursor-pointer inline-flex items-center gap-1"
+                                                >
+                                                    <HelpCircle className="h-4 w-4" aria-hidden />
+                                                    <span>Contact support</span>
+                                                </button>
+                                            </DialogTrigger>
+                                        </div>
+
+                                        {/* Dialog is kept narrow on mobile with capped height and custom scrollbar */}
+                                        <DialogContent className="support-scroll w-[92vw] sm:w-auto max-h-[80dvh] sm:max-h-[70dvh] overflow-y-auto bg-slate-900 text-white border-white/10 p-4 sm:p-6">
+                                            <DialogHeader>
+                                                <DialogTitle className="text-white flex items-center gap-2">
+                                                    <MessageSquare className="h-5 w-5" />
+                                                    Contact support
+                                                </DialogTitle>
+                                                <DialogDescription className="text-white/70">
+                                                    Tell us what’s going on. We’ll email you once we’ve checked your ticket.
+                                                </DialogDescription>
+                                            </DialogHeader>
+
+                                            {/* Submission status */}
+                                            {supSuccess ? (
+                                                <Alert className="bg-emerald-500/15 border-emerald-500/40 text-emerald-200">
+                                                    <AlertDescription>{supSuccess}</AlertDescription>
+                                                </Alert>
+                                            ) : supError ? (
+                                                <Alert className="bg-red-500/15 border-red-500/40 text-red-200">
+                                                    <AlertDescription>{supError}</AlertDescription>
+                                                </Alert>
+                                            ) : null}
+
+                                            {/* Form body */}
+                                            <div className="grid gap-4 py-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="sup-name">Your name</Label>
+                                                        <Input
+                                                            id="sup-name"
+                                                            value={supName}
+                                                            onChange={(e) => setSupName(e.target.value)}
+                                                            placeholder="Juan Dela Cruz"
+                                                            className="bg-slate-900/70 border-white/10 text-white"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="sup-email">Email</Label>
+                                                        <Input
+                                                            id="sup-email"
+                                                            type="email"
+                                                            value={supEmail}
+                                                            onChange={(e) => setSupEmail(e.target.value)}
+                                                            placeholder="you@example.com"
+                                                            className="bg-slate-900/70 border-white/10 text-white"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="sup-category">Category</Label>
+                                                    <Select value={supCategory} onValueChange={setSupCategory}>
+                                                        <SelectTrigger id="sup-category" className="bg-slate-900/70 border-white/10 text-white">
+                                                            <SelectValue placeholder="Select a category" />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="bg-slate-900 text-white border-white/10">
+                                                            <SelectItem value="Login issue">Login issue</SelectItem>
+                                                            <SelectItem value="Registration issue">Registration issue</SelectItem>
+                                                            <SelectItem value="Borrowing/Reservation">Borrowing / Reservation</SelectItem>
+                                                            <SelectItem value="Account settings">Account settings</SelectItem>
+                                                            <SelectItem value="Bug report">Bug report</SelectItem>
+                                                            <SelectItem value="Feature request">Feature request</SelectItem>
+                                                            <SelectItem value="Other">Other</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="sup-subject">Subject</Label>
+                                                    <Input
+                                                        id="sup-subject"
+                                                        value={supSubject}
+                                                        onChange={(e) => setSupSubject(e.target.value)}
+                                                        placeholder="Short summary (e.g., Can't log in)"
+                                                        className="bg-slate-900/70 border-white/10 text-white"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="sup-message">Details</Label>
+                                                    <Textarea
+                                                        id="sup-message"
+                                                        value={supMessage}
+                                                        onChange={(e) => setSupMessage(e.target.value)}
+                                                        placeholder="Describe the issue and the steps to reproduce it…"
+                                                        className="min-h-[120px] bg-slate-900/70 border-white/10 text-white"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="sup-file" className="inline-flex items-center gap-2">
+                                                        <Paperclip className="h-4 w-4" />
+                                                        Attach screenshot (optional)
+                                                    </Label>
+                                                    <Input
+                                                        id="sup-file"
+                                                        type="file"
+                                                        accept=".png,.jpg,.jpeg,.gif,.pdf"
+                                                        onChange={(e) => setSupFile(e.target.files?.[0] ?? null)}
+                                                        className="bg-slate-900/70 border-white/10 text-white file:text-white"
+                                                    />
+                                                    {supFile && (
+                                                        <p className="text-xs text-white/60">Selected: {supFile.name}</p>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-start gap-2">
+                                                    <Checkbox id="sup-consent" checked={consent} onCheckedChange={(v) => setConsent(v === true)} />
+                                                    <Label htmlFor="sup-consent" className="text-sm text-white/80">
+                                                        You may contact me about this ticket and store the information I provided for support.
+                                                    </Label>
+                                                </div>
+
+                                                <div className="text-xs text-white/50">
+                                                    Tip: Including your Student ID and program helps us resolve account-specific issues faster.
+                                                </div>
+                                            </div>
+
+                                            {/* Footer with secondary help and actions */}
+                                            <DialogFooterUI className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+                                                <div className="text-xs text-white/60">
+                                                    Or email us at{" "}
+                                                    <a className="underline hover:text-white" href="mailto:support@example.com">
+                                                        support@example.com
+                                                    </a>
+                                                </div>
+                                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        onClick={() => { setSupportOpen(false); resetSupport() }}
+                                                        className="border-white/15 text-black/90 hover:text-white hover:bg-black/10 w-full sm:w-auto"
+                                                        disabled={supSubmitting}
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        onClick={submitSupport}
+                                                        disabled={supSubmitting}
+                                                        className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 w-full sm:w-auto"
+                                                    >
+                                                        {supSubmitting ? (
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Loader2 className="h-4 w-4 animate-spin" /> Sending…
+                                                            </span>
+                                                        ) : (
+                                                            "Send ticket"
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </DialogFooterUI>
+                                        </DialogContent>
+                                    </Dialog>
                                 </CardFooter>
                             </Card>
                         </TabsContent>
@@ -524,6 +864,7 @@ export default function AuthPage() {
                                     )}
 
                                     <div className="space-y-4">
+                                        {/* Full name */}
                                         <Field>
                                             <FieldLabel className="text-white">Full Name</FieldLabel>
                                             <FieldContent>
@@ -543,13 +884,11 @@ export default function AuthPage() {
                                             </FieldContent>
                                         </Field>
 
+                                        {/* Account type */}
                                         <Field>
                                             <FieldLabel className="text-white">Account Type</FieldLabel>
                                             <FieldContent>
-                                                <Select
-                                                    value={accountType}
-                                                    onValueChange={(v) => setAccountType(v as AccountType)}
-                                                >
+                                                <Select value={accountType} onValueChange={(v) => setAccountType(v as AccountType)}>
                                                     <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                                                         <SelectValue placeholder="Select account type" />
                                                     </SelectTrigger>
@@ -561,8 +900,10 @@ export default function AuthPage() {
                                             </FieldContent>
                                         </Field>
 
+                                        {/* Student-only fields */}
                                         {accountType === "student" && (
                                             <>
+                                                {/* Student ID */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
                                                         Student ID <span className="text-red-300">*</span>
@@ -584,50 +925,107 @@ export default function AuthPage() {
                                                         </div>
                                                     </FieldContent>
 
+                                                    {/* Debounced availability indicator */}
                                                     {checkingStudentId ? (
-                                                        <span className="text-xs text-white/60">
-                                                            Checking availability…
-                                                        </span>
+                                                        <span className="text-xs text-white/60">Checking availability…</span>
                                                     ) : studentId && studentIdAvailable !== null ? (
-                                                        <span
-                                                            className={`text-xs ${studentIdAvailable ? "text-emerald-300" : "text-red-300"
-                                                                }`}
-                                                        >
-                                                            {studentIdAvailable
-                                                                ? "Student ID is available"
-                                                                : "Student ID is already taken"}
+                                                        <span className={`text-xs ${studentIdAvailable ? "text-emerald-300" : "text-red-300"}`}>
+                                                            {studentIdAvailable ? "Student ID is available" : "Student ID is already taken"}
                                                         </span>
                                                     ) : null}
                                                 </Field>
 
+                                                {/* College (with acronym shortcut on mobile) */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
-                                                        Course <span className="text-red-300">*</span>
+                                                        College <span className="text-red-300">*</span>
                                                     </FieldLabel>
                                                     <FieldContent>
                                                         <Select
-                                                            value={course || undefined}
-                                                            onValueChange={(v) => setCourse(v as CourseName)}
+                                                            value={college || undefined}
+                                                            onValueChange={(v) => {
+                                                                setCollege(v)
+                                                                setProgram("")
+                                                                setCustomCollege("")
+                                                            }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
-                                                                <SelectValue placeholder="Select course" />
+                                                                <SelectValue placeholder="Select college" />
                                                             </SelectTrigger>
-                                                            <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                                {COURSES.map((c) => (
-                                                                    <SelectItem key={c} value={c}>
-                                                                        <div className="flex w-full items-center justify-between gap-2">
-                                                                            <span>{c}</span>
-                                                                            <span className="text-xs opacity-70">
-                                                                                {COURSE_ACRONYM[c]}
-                                                                            </span>
-                                                                        </div>
+                                                            <SelectContent className="bg-slate-900 text-white border-white/10 max-h-80">
+                                                                {Object.keys(COLLEGES).map((c) => (
+                                                                    <SelectItem key={c} value={c} className="whitespace-normal leading-tight py-2">
+                                                                        <span className="md:hidden block text-base">{COLLEGE_ACRONYM[c]}</span>
+                                                                        <span className="hidden md:flex w-full items-center justify-between gap-2">
+                                                                            <span className="block">{c}</span>
+                                                                            <span className="text-xs opacity-70">{COLLEGE_ACRONYM[c]}</span>
+                                                                        </span>
                                                                     </SelectItem>
                                                                 ))}
+                                                                <SelectItem value="Others" className="whitespace-normal leading-tight py-2">
+                                                                    <span className="block">Others (Please specify)</span>
+                                                                </SelectItem>
                                                             </SelectContent>
                                                         </Select>
+                                                        {college === "Others" && (
+                                                            <div className="mt-2">
+                                                                <Input
+                                                                    placeholder="Please specify your college"
+                                                                    value={customCollege}
+                                                                    onChange={(e) => setCustomCollege(e.target.value)}
+                                                                    autoComplete="organization"
+                                                                    className="bg-slate-900/70 border-white/10 text-white"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </FieldContent>
                                                 </Field>
 
+                                                {/* Program depends on College */}
+                                                <Field>
+                                                    <FieldLabel className="text-white">
+                                                        Program <span className="text-red-300">*</span>
+                                                    </FieldLabel>
+                                                    <FieldContent>
+                                                        <Select
+                                                            disabled={!college}
+                                                            value={program || undefined}
+                                                            onValueChange={(v) => {
+                                                                setProgram(v)
+                                                                setCustomProgram("")
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="bg-slate-900/70 border-white/10 text-white disabled:opacity-60">
+                                                                <SelectValue placeholder={college ? "Select program" : "Select college first"} />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-slate-900 text-white border-white/10 max-h-80">
+                                                                {availablePrograms.map((p) => (
+                                                                    <SelectItem key={p} value={p} className="whitespace-normal leading-tight py-2">
+                                                                        {p}
+                                                                    </SelectItem>
+                                                                ))}
+                                                                {!!college && (
+                                                                    <SelectItem value="Others" className="whitespace-normal leading-tight py-2">
+                                                                        <span className="block">Others (Please specify)</span>
+                                                                    </SelectItem>
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {program === "Others" && (
+                                                            <div className="mt-2">
+                                                                <Input
+                                                                    placeholder="Please specify your program"
+                                                                    value={customProgram}
+                                                                    onChange={(e) => setCustomProgram(e.target.value)}
+                                                                    autoComplete="off"
+                                                                    className="bg-slate-900/70 border-white/10 text-white"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </FieldContent>
+                                                </Field>
+
+                                                {/* Year level */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
                                                         Year Level <span className="text-red-300">*</span>
@@ -635,7 +1033,10 @@ export default function AuthPage() {
                                                     <FieldContent>
                                                         <Select
                                                             value={yearLevel || undefined}
-                                                            onValueChange={(v) => setYearLevel(v as YearLevel)}
+                                                            onValueChange={(v) => {
+                                                                setYearLevel(v as YearLevelOption)
+                                                                setCustomYearLevel("")
+                                                            }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                                                                 <SelectValue placeholder="Select year level" />
@@ -646,13 +1047,26 @@ export default function AuthPage() {
                                                                         {y}
                                                                     </SelectItem>
                                                                 ))}
+                                                                <SelectItem value="Others">Others (Please specify)</SelectItem>
                                                             </SelectContent>
                                                         </Select>
+                                                        {yearLevel === "Others" && (
+                                                            <div className="mt-2">
+                                                                <Input
+                                                                    placeholder="Please specify your year level"
+                                                                    value={customYearLevel}
+                                                                    onChange={(e) => setCustomYearLevel(e.target.value)}
+                                                                    autoComplete="off"
+                                                                    className="bg-slate-900/70 border-white/10 text-white"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </FieldContent>
                                                 </Field>
                                             </>
                                         )}
 
+                                        {/* Email */}
                                         <Field>
                                             <FieldLabel className="text-white">Email</FieldLabel>
                                             <FieldContent>
@@ -676,6 +1090,7 @@ export default function AuthPage() {
                                             </FieldContent>
                                         </Field>
 
+                                        {/* Password */}
                                         <Field>
                                             <FieldLabel className="text-white">Password</FieldLabel>
                                             <FieldContent>
@@ -701,16 +1116,13 @@ export default function AuthPage() {
                                                         aria-label={showRegPassword ? "Hide password" : "Show password"}
                                                         aria-pressed={showRegPassword}
                                                     >
-                                                        {showRegPassword ? (
-                                                            <EyeOff className="h-4 w-4" />
-                                                        ) : (
-                                                            <Eye className="h-4 w-4" />
-                                                        )}
+                                                        {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                                     </Button>
                                                 </div>
                                             </FieldContent>
                                         </Field>
 
+                                        {/* Confirm password */}
                                         <Field>
                                             <FieldLabel className="text-white">Confirm Password</FieldLabel>
                                             <FieldContent>
@@ -736,20 +1148,18 @@ export default function AuthPage() {
                                                         aria-label={showRegConfirm ? "Hide password" : "Show password"}
                                                         aria-pressed={showRegConfirm}
                                                     >
-                                                        {showRegConfirm ? (
-                                                            <EyeOff className="h-4 w-4" />
-                                                        ) : (
-                                                            <Eye className="h-4 w-4" />
-                                                        )}
+                                                        {showRegConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                                     </Button>
                                                 </div>
                                             </FieldContent>
 
+                                            {/* Real-time mismatch hint */}
                                             {regPassword !== confirmPassword && confirmPassword.length > 0 && (
                                                 <FieldError>Passwords do not match.</FieldError>
                                             )}
                                         </Field>
 
+                                        {/* Register CTA */}
                                         <Button
                                             type="button"
                                             onClick={triggerRegister}
@@ -760,6 +1170,8 @@ export default function AuthPage() {
                                         </Button>
                                     </div>
                                 </CardContent>
+
+                                {/* Subtle link back to login */}
                                 <CardFooter className="flex justify-center border-t border-white/10">
                                     <p className="text-sm text-gray-300">
                                         Already have an account?{" "}
@@ -775,7 +1187,7 @@ export default function AuthPage() {
                         </TabsContent>
                     </Tabs>
 
-                    {/* Terms */}
+                    {/* Legal / acceptable use hint */}
                     <p className="mt-6 text-center text-xs text-white/60">
                         By continuing, you agree to the acceptable use of the JRMSU-TC Book-Hive
                         platform.
@@ -783,7 +1195,7 @@ export default function AuthPage() {
                 </div>
             </main>
 
-            {/* Footer */}
+            {/* Simple footer with dynamic year */}
             <footer className="py-6 text-center text-white/60 text-sm">
                 <p>© {new Date().getFullYear()} JRMSU-TC — Book-Hive</p>
             </footer>
