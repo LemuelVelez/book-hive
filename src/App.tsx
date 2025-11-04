@@ -1,7 +1,7 @@
 // src/App.tsx
-import { lazy } from 'react'
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-// import Loading from './components/loading'
+import { PageLoadingOverlay } from "./components/loading"
 
 // Lazy-loaded pages for code-splitting
 const LandingPage = lazy(() => import('./pages/landing'))
@@ -12,31 +12,31 @@ const VerifyEmailPage = lazy(() => import('./pages/auth/verify-email'))
 const VerifyEmailCallbackPage = lazy(() => import('./pages/auth/verify-email-callback'))
 
 // const StudentDashboard = lazy(() => import('./pages/dashboard/student/dashboard'))
-// const NotFoundPage = lazy(() => import('./pages/404'))
+const NotFoundPage = lazy(() => import('./pages/404'))
 
 function App() {
   return (
     <BrowserRouter>
-      {/* <Suspense fallback={<Loading />}> */}
-      <Routes>
-        {/* Public / Landing */}
-        <Route path="/" element={<LandingPage />} />
+      <Suspense fallback={<PageLoadingOverlay label="Loading page…" />}>
+        <Routes>
+          {/* Public / Landing */}
+          <Route path="/" element={<LandingPage />} />
 
-        {/* Auth */}
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/auth/verify-email/callback" element={<VerifyEmailCallbackPage />} />
+          {/* Auth */}
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/auth/verify-email/callback" element={<VerifyEmailCallbackPage />} />
 
-        {/* Dashboards */}
-        <Route path="/dashboard" element={<Navigate to="/dashboard/student" replace />} />
-        {/* <Route path="/dashboard/student" element={<StudentDashboard />} /> */}
+          {/* Dashboards */}
+          <Route path="/dashboard" element={<Navigate to="/dashboard/student" replace />} />
+          {/* <Route path="/dashboard/student" element={<StudentDashboard />} /> */}
 
-        {/* 404 */}
-        {/* <Route path="*" element={<NotFoundPage />} /> */}
-      </Routes>
-      {/* </Suspense> */}
+          {/* 404 */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

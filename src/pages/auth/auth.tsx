@@ -531,7 +531,7 @@ export default function AuthPage() {
                     className="inline-flex items-center gap-2 text-white/90 hover:text-white transition-colors"
                 >
                     <ArrowLeft className="h-5 w-5" />
-                    <span className="hidden md:inline">Back to Home</span>
+                    <span className="hidden md:inline">Back</span>
                 </Link>
 
                 <Link to="/" className="inline-flex items-center gap-2">
