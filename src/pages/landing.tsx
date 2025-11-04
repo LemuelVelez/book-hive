@@ -1,4 +1,3 @@
-// src/pages/landing.tsx
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -10,9 +9,12 @@ import {
     Search,
     QrCode,
     ListChecks,
+    Menu,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet'
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 
 import logo from '@/assets/images/logo.png'
 import heroImg from '@/assets/images/hero.png'
@@ -99,8 +101,8 @@ export default function LandingPage() {
     const navigate = useNavigate()
     const [isAuthed, setIsAuthed] = useState(false)
     const [dashboardHref, setDashboardHref] = useState('/dashboard/student')
+    const [sheetOpen, setSheetOpen] = useState(false) // controls Sheet and icon animation
 
-    // Best-effort session check (safe if /api/auth/me is not implemented yet)
     useEffect(() => {
         let cancelled = false
             ; (async () => {
@@ -110,13 +112,13 @@ export default function LandingPage() {
                     const me = (await res.json()) as { role?: string } | null
                     if (!cancelled && me) {
                         setIsAuthed(true)
-                        // Basic role→dashboard mapping; extend as your backend supports more roles
                         const role = (me.role || 'student').toLowerCase()
                         if (role === 'student') setDashboardHref('/dashboard/student')
-                        else setDashboardHref('/dashboard') // fallback
+                        else setDashboardHref('/dashboard')
                     }
-                } catch {
-                    // ignore; remain logged-out UI
+                } catch (e) {
+                    // ignore auth probe errors but mark as used to satisfy eslint
+                    void e
                 }
             })()
         return () => {
@@ -149,13 +151,15 @@ export default function LandingPage() {
                         </span>
                     </Link>
 
+                    {/* Desktop nav (unchanged) */}
                     <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
                         <a href="#features" className="hover:text-white">Features</a>
                         <a href="#how-it-works" className="hover:text-white">How it works</a>
                         <a href="#faq" className="hover:text-white">FAQ</a>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    {/* Desktop CTA (unchanged for desktop; hidden on mobile to use Sheet) */}
+                    <div className="hidden md:flex items-center gap-3">
                         {!isAuthed ? (
                             <Button
                                 className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
@@ -171,6 +175,45 @@ export default function LandingPage() {
                                 Go to Dashboard
                             </Button>
                         )}
+                    </div>
+
+                    {/* Mobile: Sheet menu (slides from TOP, contains ONLY Login/Register) */}
+                    <div className="md:hidden">
+                        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+                            <SheetTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="rounded-xl group"
+                                    aria-expanded={sheetOpen}
+                                >
+                                    <Menu
+                                        className={[
+                                            'h-6 w-6 transform transition-transform duration-300',
+                                            'group-hover:scale-110',
+                                            sheetOpen ? 'rotate-90 scale-110' : 'rotate-0',
+                                        ].join(' ')}
+                                    />
+                                    <span className="sr-only">Open menu</span>
+                                </Button>
+                            </SheetTrigger>
+
+                            <SheetContent
+                                side="top"
+                                className="w-full p-6 sm:p-8 bg-slate-900 border-white/10 text-white rounded-b-2xl"
+                            >
+                                <div className="w-full">
+                                    <SheetClose asChild>
+                                        <Button
+                                            className="w-full cursor-pointer mt-2 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                            onClick={() => navigate('/auth')}
+                                        >
+                                            Login / Register
+                                        </Button>
+                                    </SheetClose>
+                                </div>
+                            </SheetContent>
+                        </Sheet>
                     </div>
                 </nav>
             </header>
@@ -340,32 +383,34 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* Simple FAQ (no extra components; lean markup) */}
+            {/* FAQ — shadcn/ui Accordion */}
             <section id="faq" className="container mx-auto px-4 pb-24">
                 <SectionHeading title="FAQs" className="mb-8" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card className="bg-slate-800/60 border-white/10">
-                        <CardHeader>
-                            <CardTitle className="text-white text-base">
-                                Do I need to visit the library to complete a reservation?
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-0 text-white/70 text-sm">
+                <Accordion type="single" collapsible className="mx-auto max-w-3xl">
+                    <AccordionItem
+                        value="item-1"
+                        className="mb-3 rounded-xl border-white/10 bg-slate-800/60 backdrop-blur"
+                    >
+                        <AccordionTrigger className="px-4 text-left text-white hover:no-underline">
+                            Do I need to visit the library to complete a reservation?
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4 text-white/70">
                             Reserve online; you’ll only visit to pick up or return the item. You’ll receive reminders for due dates.
-                        </CardContent>
-                    </Card>
+                        </AccordionContent>
+                    </AccordionItem>
 
-                    <Card className="bg-slate-800/60 border-white/10">
-                        <CardHeader>
-                            <CardTitle className="text-white text-base">
-                                Can I see if a book is currently borrowed?
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-0 text-white/70 text-sm">
+                    <AccordionItem
+                        value="item-2"
+                        className="mb-3 rounded-xl border-white/10 bg-slate-800/60 backdrop-blur"
+                    >
+                        <AccordionTrigger className="px-4 text-left text-white hover:no-underline">
+                            Can I see if a book is currently borrowed?
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4 text-white/70">
                             Yes. Availability is shown in real time. If a title is out, you can join the waitlist and get notified.
-                        </CardContent>
-                    </Card>
-                </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
             </section>
 
             {/* Footer */}
