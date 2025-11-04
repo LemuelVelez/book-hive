@@ -8,8 +8,8 @@ const LandingPage = lazy(() => import('./pages/landing'))
 const AuthPage = lazy(() => import('./pages/auth/auth'))
 const ForgotPasswordPage = lazy(() => import('./pages/auth/forgot-password'))
 const ResetPasswordPage = lazy(() => import('./pages/auth/reset-password'))
-// const VerifyEmailPage = lazy(() => import('./pages/auth/verify-email'))
-// const VerifyEmailCallbackPage = lazy(() => import('./pages/auth/verify-email-callback'))
+const VerifyEmailPage = lazy(() => import('./pages/auth/verify-email'))
+const VerifyEmailCallbackPage = lazy(() => import('./pages/auth/verify-email-callback'))
 
 // const StudentDashboard = lazy(() => import('./pages/dashboard/student/dashboard'))
 // const NotFoundPage = lazy(() => import('./pages/404'))
@@ -26,8 +26,8 @@ function App() {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-        {/* <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/auth/verify-email/callback" element={<VerifyEmailCallbackPage />} /> */}
+        <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/auth/verify-email/callback" element={<VerifyEmailCallbackPage />} />
 
         {/* Dashboards */}
         <Route path="/dashboard" element={<Navigate to="/dashboard/student" replace />} />
