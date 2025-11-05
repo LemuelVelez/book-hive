@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field"
+import { toast } from "sonner"
 
 import logo from "@/assets/images/logo.png"
 
@@ -48,15 +49,21 @@ export default function ResetPasswordPage() {
         setSuccess("")
 
         if (!hasToken) {
-            setError("This reset link is invalid or missing the token.")
+            const msg = "This reset link is invalid or missing the token."
+            setError(msg)
+            toast.error("Invalid link", { description: msg })
             return
         }
         if (password.length < 8) {
-            setError("Password must be at least 8 characters.")
+            const msg = "Password must be at least 8 characters."
+            setError(msg)
+            toast.error("Weak password", { description: msg })
             return
         }
         if (password !== confirm) {
-            setError("Passwords do not match.")
+            const msg = "Passwords do not match."
+            setError(msg)
+            toast.error("Passwords do not match")
             return
         }
 
@@ -75,11 +82,21 @@ export default function ResetPasswordPage() {
                     "We couldn't reset your password. The link may have expired."
                 )
             }
-            setSuccess("Your password has been updated successfully.")
+            const msg = "Your password has been updated successfully."
+            setSuccess(msg)
             setPassword("")
             setConfirm("")
+            toast.success("Password updated", {
+                description: "You can now log in with your new password.",
+                action: {
+                    label: "Go to login",
+                    onClick: () => navigate("/auth"),
+                },
+            })
         } catch (err: any) {
-            setError(err?.message || "Something went wrong. Please try again.")
+            const msg = err?.message || "Something went wrong. Please try again."
+            setError(msg)
+            toast.error("Reset failed", { description: msg })
         } finally {
             setLoading(false)
         }

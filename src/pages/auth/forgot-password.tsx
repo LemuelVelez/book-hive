@@ -28,6 +28,7 @@ import {
     FieldError,
     FieldLabel,
 } from "@/components/ui/field"
+import { toast } from "sonner"
 
 import logo from "@/assets/images/logo.png"
 
@@ -65,7 +66,9 @@ export default function ForgotPasswordPage() {
         setError("")
         setSuccess("")
         if (!email.trim() || !email.includes("@")) {
-            setError("Please enter a valid email address.")
+            const msg = "Please enter a valid email address."
+            setError(msg)
+            toast.error("Invalid email", { description: msg })
             return
         }
 
@@ -84,11 +87,14 @@ export default function ForgotPasswordPage() {
                     "We couldn't start the reset process. Please try again."
                 )
             }
-            setSuccess(
+            const msg =
                 "If that email exists in our system, a password reset link has been sent. Please check your inbox (and spam)."
-            )
+            setSuccess(msg)
+            toast.success("Reset link sent (if the email exists)", { description: "Check your inbox and spam folder." })
         } catch (err: any) {
-            setError(err?.message || "Something went wrong. Please try again.")
+            const msg = err?.message || "Something went wrong. Please try again."
+            setError(msg)
+            toast.error("Request failed", { description: msg })
         } finally {
             setLoading(false)
         }
@@ -99,15 +105,21 @@ export default function ForgotPasswordPage() {
         setSuccess("")
 
         if (password.length < 8) {
-            setError("Password must be at least 8 characters.")
+            const msg = "Password must be at least 8 characters."
+            setError(msg)
+            toast.error("Weak password", { description: msg })
             return
         }
         if (password !== confirm) {
-            setError("Passwords do not match.")
+            const msg = "Passwords do not match."
+            setError(msg)
+            toast.error("Passwords do not match")
             return
         }
         if (!token) {
-            setError("This reset link is invalid or missing the token.")
+            const msg = "This reset link is invalid or missing the token."
+            setError(msg)
+            toast.error("Invalid link", { description: msg })
             return
         }
 
@@ -126,9 +138,19 @@ export default function ForgotPasswordPage() {
                     "We couldn't reset your password. The link may have expired."
                 )
             }
-            setSuccess("Your password has been updated successfully.")
+            const msg = "Your password has been updated successfully."
+            setSuccess(msg)
+            toast.success("Password updated", {
+                description: "You can now log in with your new password.",
+                action: {
+                    label: "Go to login",
+                    onClick: () => navigate("/auth"),
+                },
+            })
         } catch (err: any) {
-            setError(err?.message || "Something went wrong. Please try again.")
+            const msg = err?.message || "Something went wrong. Please try again."
+            setError(msg)
+            toast.error("Reset failed", { description: msg })
         } finally {
             setLoading(false)
         }
