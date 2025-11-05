@@ -53,6 +53,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
 
 import logo from "@/assets/images/logo.png"
 
@@ -307,11 +308,16 @@ export default function AuthPage() {
                 // ignore persistence errors
             }
 
-            // Default student dashboard; accepts sanitized redirect if present
+            // Toast + redirect
+            toast.success("Welcome back!", {
+                description: redirectParam ? "Redirecting to your previous page…" : "Redirecting to your dashboard…",
+            })
             const dest = redirectParam ?? "/dashboard/student"
             navigate(dest, { replace: true })
         } catch (err: any) {
-            setLoginError(err?.message || "Login failed. Please try again.")
+            const msg = err?.message || "Login failed. Please try again."
+            setLoginError(msg)
+            toast.error("Login failed", { description: msg })
         } finally {
             setIsLoggingIn(false)
         }
@@ -323,15 +329,21 @@ export default function AuthPage() {
 
         // Quick client validations to reduce round-trips
         if (regPassword !== confirmPassword) {
-            setRegError("Passwords do not match.")
+            const msg = "Passwords do not match."
+            setRegError(msg)
+            toast.error("Validation error", { description: msg })
             return
         }
         if (regPassword.length < 8) {
-            setRegError("Password must be at least 8 characters.")
+            const msg = "Password must be at least 8 characters."
+            setRegError(msg)
+            toast.error("Validation error", { description: msg })
             return
         }
         if (!fullName.trim()) {
-            setRegError("Full name is required.")
+            const msg = "Full name is required."
+            setRegError(msg)
+            toast.error("Validation error", { description: msg })
             return
         }
 
@@ -342,23 +354,33 @@ export default function AuthPage() {
             const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel
 
             if (!studentId.trim()) {
-                setRegError("Student ID is required for student accounts.")
+                const msg = "Student ID is required for student accounts."
+                setRegError(msg)
+                toast.error("Validation error", { description: msg })
                 return
             }
             if (!finalCollege) {
-                setRegError("College is required for student accounts.")
+                const msg = "College is required for student accounts."
+                setRegError(msg)
+                toast.error("Validation error", { description: msg })
                 return
             }
             if (!finalProgram) {
-                setRegError("Program is required for student accounts.")
+                const msg = "Program is required for student accounts."
+                setRegError(msg)
+                toast.error("Validation error", { description: msg })
                 return
             }
             if (!finalYearLevel) {
-                setRegError("Year level is required for student accounts.")
+                const msg = "Year level is required for student accounts."
+                setRegError(msg)
+                toast.error("Validation error", { description: msg })
                 return
             }
             if (studentIdAvailable === false) {
-                setRegError("That Student ID is already in use. Please use a different one.")
+                const msg = "That Student ID is already in use. Please use a different one."
+                setRegError(msg)
+                toast.error("Student ID unavailable", { description: msg })
                 return
             }
         }
@@ -409,13 +431,19 @@ export default function AuthPage() {
                 // ignore background email errors
             }
 
+            toast.success("Account created", {
+                description: "We sent a verification link to your email.",
+            })
+
             // Route to verify page with email pre-filled
             navigate(
                 `/auth/verify-email?email=${encodeURIComponent(regEmail.trim())}&justRegistered=1`,
                 { replace: true }
             )
         } catch (err: any) {
-            setRegError(err?.message || "Failed to register. Please try again.")
+            const msg = err?.message || "Failed to register. Please try again."
+            setRegError(msg)
+            toast.error("Registration failed", { description: msg })
         } finally {
             setIsRegistering(false)
         }
@@ -456,23 +484,33 @@ export default function AuthPage() {
 
         // Minimal validations
         if (!supName.trim()) {
-            setSupError("Please enter your name.")
+            const msg = "Please enter your name."
+            setSupError(msg)
+            toast.error("Support ticket error", { description: msg })
             return
         }
         if (!supEmail.trim() || !supEmail.includes("@")) {
-            setSupError("Please provide a valid email address.")
+            const msg = "Please provide a valid email address."
+            setSupError(msg)
+            toast.error("Support ticket error", { description: msg })
             return
         }
         if (!supSubject.trim()) {
-            setSupError("Please add a short subject.")
+            const msg = "Please add a short subject."
+            setSupError(msg)
+            toast.error("Support ticket error", { description: msg })
             return
         }
         if (!supMessage.trim()) {
-            setSupError("Please describe your concern.")
+            const msg = "Please describe your concern."
+            setSupError(msg)
+            toast.error("Support ticket error", { description: msg })
             return
         }
         if (!consent) {
-            setSupError("Please allow us to contact you regarding this ticket.")
+            const msg = "Please allow us to contact you regarding this ticket."
+            setSupError(msg)
+            toast.error("Support ticket error", { description: msg })
             return
         }
 
@@ -510,10 +548,14 @@ export default function AuthPage() {
 
             const data = (await resp.json().catch(() => ({}))) as { ticketId?: string }
             const tid = data?.ticketId ? ` #${data.ticketId}` : ""
-            setSupSuccess(`Thanks! Your support request has been sent${tid}. We’ll get back to you via email.`)
+            const successMsg = `Thanks! Your support request has been sent${tid}. We’ll get back to you via email.`
+            setSupSuccess(successMsg)
+            toast.success("Support ticket sent", { description: successMsg })
             resetSupport()
         } catch (err: any) {
-            setSupError(err?.message || "Something went wrong while sending your request.")
+            const msg = err?.message || "Something went wrong while sending your request."
+            setSupError(msg)
+            toast.error("Support ticket failed", { description: msg })
         } finally {
             setSupSubmitting(false)
         }
@@ -776,7 +818,7 @@ export default function AuthPage() {
                                                         value={supMessage}
                                                         onChange={(e) => setSupMessage(e.target.value)}
                                                         placeholder="Describe the issue and the steps to reproduce it…"
-                                                        className="min-h-[120px] bg-slate-900/70 border-white/10 text-white"
+                                                        className="min-h[120px] min-h-[120px] bg-slate-900/70 border-white/10 text-white"
                                                     />
                                                 </div>
 

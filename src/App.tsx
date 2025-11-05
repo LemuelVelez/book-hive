@@ -1,7 +1,7 @@
-// src/App.tsx
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { PageLoadingOverlay } from "./components/loading"
+import { Toaster } from "@/components/ui/sonner"
 
 // Lazy-loaded pages for code-splitting
 const LandingPage = lazy(() => import('./pages/landing'))
@@ -17,6 +17,9 @@ const NotFoundPage = lazy(() => import('./pages/404'))
 function App() {
   return (
     <BrowserRouter>
+      {/* Global toast portal (Sonner) */}
+      <Toaster position="top-center" richColors closeButton theme="dark" />
+
       <Suspense fallback={<PageLoadingOverlay label="Loading page…" />}>
         <Routes>
           {/* Public / Landing */}
