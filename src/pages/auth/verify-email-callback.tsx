@@ -13,6 +13,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "sonner"
 
 import logo from "@/assets/images/logo.png"
 
@@ -41,12 +42,14 @@ export default function VerifyEmailCallbackPage() {
             setSuccess("")
 
             if (!token) {
-                setError("This verification link is invalid or missing the token.")
+                const msg = "This verification link is invalid or missing the token."
+                setError(msg)
+                toast.error("Invalid link", { description: msg })
                 return
             }
 
             setLoading(true)
-            try {
+            const verify = async () => {
                 const resp = await fetch("/api/auth/verify-email/confirm", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -60,15 +63,42 @@ export default function VerifyEmailCallbackPage() {
                         "We couldn't verify your email. The link may have expired."
                     )
                 }
-                setSuccess("Your email has been verified successfully.")
-            } catch (err: any) {
-                setError(err?.message || "Something went wrong. Please try again.")
+                return true
+            }
+
+            toast.promise(verify(), {
+                loading: "Verifying email…",
+                success: () => {
+                    const msg = "Your email has been verified successfully."
+                    setSuccess(msg)
+                    return "Email verified"
+                },
+                error: (err: any) => {
+                    const msg = err?.message || "Something went wrong. Please try again."
+                    setError(msg)
+                    return msg
+                },
+            })
+
+            try {
+                await verify()
+                // optional follow-up toast action
+                toast.success("You can now log in.", {
+                    action: {
+                        label: "Go to login",
+                        onClick: () => navigate("/auth"),
+                    },
+                })
+            } catch {
+                // state + toast already handled above
             } finally {
                 setLoading(false)
             }
         }
 
+        // fire and forget
         run()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token])
 
     return (

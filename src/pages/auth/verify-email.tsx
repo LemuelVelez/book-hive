@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field"
+import { toast } from "sonner"
 
 import logo from "@/assets/images/logo.png"
 
@@ -42,7 +43,9 @@ export default function VerifyEmailPage() {
         setSuccess("")
 
         if (!email || !email.includes("@")) {
-            setError("Please enter a valid email address.")
+            const msg = "Please enter a valid email address."
+            setError(msg)
+            toast.error("Invalid email", { description: msg })
             return
         }
 
@@ -60,11 +63,20 @@ export default function VerifyEmailPage() {
                     data?.message || "We couldn't send the verification email. Please try again."
                 )
             }
-            setSuccess(
+            const msg =
                 "Verification link sent. Please check your inbox (and Spam/Promotions folder)."
-            )
+            setSuccess(msg)
+            toast.success("Verification email sent", {
+                description: "Check your inbox and spam folder.",
+                action: {
+                    label: "Open Gmail",
+                    onClick: () => window.open("https://mail.google.com/", "_blank", "noopener"),
+                },
+            })
         } catch (err: any) {
-            setError(err?.message || "Something went wrong. Please try again.")
+            const msg = err?.message || "Something went wrong. Please try again."
+            setError(msg)
+            toast.error("Send failed", { description: msg })
         } finally {
             setLoading(false)
         }
