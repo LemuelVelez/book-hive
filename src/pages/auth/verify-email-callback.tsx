@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useState } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
-import { ArrowLeft, CheckCircle, Loader2 } from "lucide-react"
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
     Card,
     CardContent,
@@ -11,95 +11,133 @@ import {
     CardFooter,
     CardHeader,
     CardTitle,
-} from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { toast } from "sonner"
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
-import logo from "@/assets/images/logo.png"
+import logo from "@/assets/images/logo.png";
 
 // -------------------------
 // Lightweight query helper
 // -------------------------
 function useQuery() {
-    const { search } = useLocation()
-    return useMemo(() => new URLSearchParams(search), [search])
+    const { search } = useLocation();
+    return useMemo(() => new URLSearchParams(search), [search]);
 }
 
 export default function VerifyEmailCallbackPage() {
-    const qs = useQuery()
-    const navigate = useNavigate()
+    const qs = useQuery();
+    const navigate = useNavigate();
 
-    // token from /auth/verify-email-callback?token=...
-    const token = (qs.get("token") || "").trim()
+    // Supports both flows:
+    // A) Server redirect: /auth/verify-email/callback?status=success|error&reason=...
+    // B) Client token:    /auth/verify-email/callback?token=...
+    const token = (qs.get("token") || "").trim();
+    const status = (qs.get("status") || "").trim();
+    const reason = (qs.get("reason") || "").trim();
 
-    const [loading, setLoading] = useState(false)
-    const [success, setSuccess] = useState<string>("")
-    const [error, setError] = useState<string>("")
+    const [loading, setLoading] = useState(false);
+    const [success, setSuccess] = useState<string>("");
+    const [error, setError] = useState<string>("");
 
     useEffect(() => {
-        const run = async () => {
-            setError("")
-            setSuccess("")
+        const explainReason = (r: string) => {
+            switch (r) {
+                case "expired":
+                    return "This verification link has expired. Please request a new one.";
+                case "used":
+                    return "This verification link has already been used.";
+                case "invalid":
+                    return "This verification link is invalid.";
+                case "missing":
+                    return "Missing token in the verification link.";
+                default:
+                    return "We couldn't verify your email. Please try again.";
+            }
+        };
 
+        const handleRedirectStatus = () => {
+            if (status === "success") {
+                const msg = "Your email has been verified successfully.";
+                setSuccess(msg);
+                toast.success("Email verified", {
+                    action: {
+                        label: "Go to login",
+                        onClick: () => navigate("/auth"),
+                    },
+                });
+                return true;
+            }
+            if (status === "error") {
+                const msg = explainReason(reason);
+                setError(msg);
+                toast.error("Verification failed", { description: msg });
+                return true;
+            }
+            return false;
+        };
+
+        const run = async () => {
+            setError("");
+            setSuccess("");
+
+            // If the server already verified (status=...), just show it.
+            if (!token && handleRedirectStatus()) return;
+
+            // Otherwise try client-side verification using token
             if (!token) {
-                const msg = "This verification link is invalid or missing the token."
-                setError(msg)
-                toast.error("Invalid link", { description: msg })
-                return
+                const msg =
+                    "This verification link is invalid or missing the token. You can request a new one.";
+                setError(msg);
+                toast.error("Invalid link", { description: msg });
+                return;
             }
 
-            setLoading(true)
+            setLoading(true);
+
             const verify = async () => {
                 const resp = await fetch("/api/auth/verify-email/confirm", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
                     body: JSON.stringify({ token }),
-                })
+                });
                 if (!resp.ok) {
-                    const data = await resp.json().catch(() => ({}))
+                    const data = await resp.json().catch(() => ({}));
                     throw new Error(
                         data?.message ||
                         "We couldn't verify your email. The link may have expired."
-                    )
+                    );
                 }
-                return true
-            }
+                return true;
+            };
 
             toast.promise(verify(), {
                 loading: "Verifying email…",
-                success: () => {
-                    const msg = "Your email has been verified successfully."
-                    setSuccess(msg)
-                    return "Email verified"
-                },
-                error: (err: any) => {
-                    const msg = err?.message || "Something went wrong. Please try again."
-                    setError(msg)
-                    return msg
-                },
-            })
+                success: "Email verified",
+                error: (err: any) => err?.message || "Verification failed",
+            });
 
             try {
-                await verify()
-                // optional follow-up toast action
+                await verify();
+                const msg = "Your email has been verified successfully.";
+                setSuccess(msg);
                 toast.success("You can now log in.", {
                     action: {
                         label: "Go to login",
                         onClick: () => navigate("/auth"),
                     },
-                })
-            } catch {
-                // state + toast already handled above
+                });
+            } catch (e: any) {
+                setError(e?.message || "Something went wrong. Please try again.");
             } finally {
-                setLoading(false)
+                setLoading(false);
             }
-        }
+        };
 
-        // fire and forget
-        run()
+        run();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token])
+    }, [token, status, reason]);
 
     return (
         <div className="support-scroll min-h-screen w-full bg-slate-900 text-white flex flex-col">
@@ -141,7 +179,9 @@ export default function VerifyEmailCallbackPage() {
                         <CardHeader>
                             <CardTitle className="text-white">Verifying your email…</CardTitle>
                             <CardDescription>
-                                Please wait while we confirm your email address.
+                                {success
+                                    ? "Your address is verified."
+                                    : "Please wait while we confirm your email address."}
                             </CardDescription>
                         </CardHeader>
 
@@ -179,7 +219,7 @@ export default function VerifyEmailCallbackPage() {
                                 </Button>
                             ) : (
                                 <div className="text-sm text-gray-300 text-center">
-                                    If this link doesn’t work,{" "}
+                                    If this link doesn’t work,&nbsp;
                                     <Link
                                         to="/auth/verify-email"
                                         className="text-purple-300 hover:text-purple-200 underline"
@@ -199,5 +239,5 @@ export default function VerifyEmailCallbackPage() {
                 <p>© {new Date().getFullYear()} JRMSU-TC — Book-Hive</p>
             </footer>
         </div>
-    )
+    );
 }

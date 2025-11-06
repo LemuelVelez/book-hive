@@ -34,7 +34,6 @@ const api = (p: string) => `${API_BASE}/api${p}`;
 
 if (import.meta.env.DEV) {
   // Helpful during dev to ensure we're talking to the right server
-
   console.info("[Book-Hive] API_BASE ->", API_BASE);
 }
 
@@ -43,8 +42,9 @@ export const ROUTES = {
   auth: {
     login: api("/auth/login"),
     register: api("/auth/register"),
-    verifyEmail: api("/verify-email"), // POST (re-send)
-    verifyConfirm: api("/verify-email/confirm"), // GET with ?token=...
+    // FIX: these must include `/auth`
+    verifyEmail: api("/auth/verify-email"), // POST (re-send)
+    verifyConfirm: api("/auth/verify-email/confirm"), // GET/POST with ?token=...
   },
   users: {
     checkStudentId: (studentId: string) =>
