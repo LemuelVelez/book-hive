@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ROUTES, API_BASE } from "@/api/auth/route";
 
-type AccountType = "student" | "other";
+export type Role = "student" | "librarian" | "faculty" | "admin" | "other";
 
 export type UserDTO = {
   id: string;
   email: string;
   fullName: string;
-  accountType: AccountType;
+  accountType: Role;
   isEmailVerified: boolean;
 };
 
@@ -104,6 +104,16 @@ async function requestJSON<T = unknown>(
 
 // -------- Public API --------
 
+export async function me() {
+  type Resp = JsonOk<{ user: UserDTO }>;
+  try {
+    const r = await requestJSON<Resp>(ROUTES.auth.me, { method: "GET" });
+    return r.user;
+  } catch {
+    return null;
+  }
+}
+
 export async function login(email: string, password: string) {
   type Resp = JsonOk<{ user: UserDTO }>;
   return requestJSON<Resp>(ROUTES.auth.login, {
@@ -112,11 +122,20 @@ export async function login(email: string, password: string) {
   });
 }
 
+export async function logout() {
+  type Resp = JsonOk<{ message?: string }>;
+  try {
+    await requestJSON<Resp>(ROUTES.auth.logout, { method: "POST" });
+  } catch {
+    // ignore
+  }
+}
+
 export async function register(payload: {
   fullName: string;
   email: string;
   password: string;
-  accountType: AccountType;
+  accountType: "student" | "other";
   studentId?: string;
   course?: string; // program
   yearLevel?: string;

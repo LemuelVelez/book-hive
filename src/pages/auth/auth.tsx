@@ -69,6 +69,8 @@ import logo from "@/assets/images/logo.png";
 // Constants & type helpers
 // -------------------------
 type AccountType = "student" | "other";
+type AnyRole = "student" | "librarian" | "faculty" | "admin" | "other";
+
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th", "5th"] as const;
 type YearLevel = (typeof YEAR_LEVELS)[number];
 type YearLevelOption = YearLevel | "Others";
@@ -105,6 +107,9 @@ const COLLEGE_ACRONYM: Record<string, string> = {
 const REMEMBER_FLAG_KEY = "bookhive:remember";
 const REMEMBER_EMAIL_KEY = "bookhive:rememberEmail";
 
+// No-op: reference args to satisfy no-unused-vars and keep a non-empty body for no-empty
+const noop = (...args: unknown[]) => { void args; };
+
 // -------------------------
 // Lightweight query helpers
 // -------------------------
@@ -123,6 +128,22 @@ function sanitizeRedirect(raw: string | null): string | null {
         return url;
     } catch {
         return null;
+    }
+}
+
+/** Role → dashboard path */
+function dashboardForRole(role: AnyRole) {
+    switch (role) {
+        case "student":
+            return "/dashboard/student";
+        case "librarian":
+            return "/dashboard/librarian";
+        case "faculty":
+            return "/dashboard/faculty";
+        case "admin":
+            return "/dashboard/admin";
+        default:
+            return "/dashboard/student";
     }
 }
 
@@ -197,8 +218,9 @@ export default function AuthPage() {
                 setEmail(savedEmail);
                 setRememberMe(true);
             }
-        } catch {
+        } catch (err) {
             // storage not available (private mode / SSR / etc.)
+            noop(err);
         }
     }, []);
 
@@ -233,8 +255,9 @@ export default function AuthPage() {
                 localStorage.removeItem(REMEMBER_FLAG_KEY);
                 localStorage.removeItem(REMEMBER_EMAIL_KEY);
             }
-        } catch {
+        } catch (err) {
             // ignore persistence errors
+            noop(err);
         }
     };
 
@@ -245,8 +268,9 @@ export default function AuthPage() {
         if (rememberMe) {
             try {
                 localStorage.setItem(REMEMBER_EMAIL_KEY, value);
-            } catch {
+            } catch (err) {
                 // ignore persistence errors
+                noop(err);
             }
         }
     };
@@ -285,7 +309,8 @@ export default function AuthPage() {
         setLoginError("");
         setIsLoggingIn(true);
         try {
-            await apiLogin(email, password);
+            const resp = await apiLogin(email, password);
+            const user = resp.user;
 
             // Persist remember-me choice after a successful login
             try {
@@ -296,18 +321,37 @@ export default function AuthPage() {
                     localStorage.removeItem(REMEMBER_FLAG_KEY);
                     localStorage.removeItem(REMEMBER_EMAIL_KEY);
                 }
-            } catch {
-                /* ignore */
+            } catch (err) {
+                noop(err);
             }
 
-            // Toast + redirect
+            // Toast + redirect (role aware)
             toast.success("Welcome back!", {
                 description: redirectParam ? "Redirecting to your previous page…" : "Redirecting to your dashboard…",
             });
-            const dest = redirectParam ?? "/dashboard/student";
+
+            const dest = redirectParam ?? dashboardForRole((user.accountType as AnyRole) ?? "student");
             navigate(dest, { replace: true });
         } catch (err: any) {
-            const msg = err?.message || "Login failed. Please try again.";
+            const msg = String(err?.message || "Login failed. Please try again.");
+
+            // Handle "email not verified" specifically — route to verify page
+            const looksUnverified = /verify/i.test(msg) || /not\s*verified/i.test(msg);
+            if (looksUnverified) {
+                toast.warning("Email not verified", {
+                    description: "We’ve sent a verification link. Please verify to continue.",
+                });
+                // best-effort re-send (non-blocking)
+                try {
+                    await apiResendVerifyEmail(email.trim());
+                } catch (e) {
+                    noop(e);
+                }
+                navigate(`/auth/verify-email?email=${encodeURIComponent(email.trim())}`, { replace: true });
+                setIsLoggingIn(false);
+                return;
+            }
+
             setLoginError(msg);
             toast.error("Login failed", { description: msg });
         } finally {
@@ -400,8 +444,9 @@ export default function AuthPage() {
             // Kick off verification email; best-effort (non-blocking)
             try {
                 await apiResendVerifyEmail(regEmail.trim());
-            } catch {
-                /* ignore background email errors */
+            } catch (e) {
+                // ignore background email errors
+                noop(e);
             }
 
             toast.success("Account created", {
@@ -781,7 +826,7 @@ export default function AuthPage() {
                                                         value={supMessage}
                                                         onChange={(e) => setSupMessage(e.target.value)}
                                                         placeholder="Describe the issue and the steps to reproduce it…"
-                                                        className="min-h[120px] min-h-[120px] bg-slate-900/70 border-white/10 text-white"
+                                                        className="min-h-[120px] bg-slate-900/70 border-white/10 text-white"
                                                     />
                                                 </div>
 
@@ -940,7 +985,7 @@ export default function AuthPage() {
                                                     ) : null}
                                                 </Field>
 
-                                                {/* College (with acronym shortcut on mobile) */}
+                                                {/* College */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
                                                         College <span className="text-red-300">*</span>

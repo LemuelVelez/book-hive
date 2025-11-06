@@ -40,9 +40,10 @@ if (import.meta.env.DEV) {
 export const ROUTES = {
   health: api("/health"),
   auth: {
+    me: api("/auth/me"),
     login: api("/auth/login"),
+    logout: api("/auth/logout"),
     register: api("/auth/register"),
-    // FIX: these must include `/auth`
     verifyEmail: api("/auth/verify-email"), // POST (re-send)
     verifyConfirm: api("/auth/verify-email/confirm"), // GET/POST with ?token=...
   },
