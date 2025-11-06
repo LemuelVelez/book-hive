@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field"
 import { toast } from "sonner"
 
+import { resendVerifyEmail } from "@/lib/authentication" // ✅ use shared API helper
 import logo from "@/assets/images/logo.png"
 
 // -------------------------
@@ -51,18 +52,9 @@ export default function VerifyEmailPage() {
 
         setLoading(true)
         try {
-            const resp = await fetch("/api/auth/verify-email", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ email: email.trim() }),
-            })
-            if (!resp.ok) {
-                const data = await resp.json().catch(() => ({}))
-                throw new Error(
-                    data?.message || "We couldn't send the verification email. Please try again."
-                )
-            }
+            // ✅ Use our API wrapper so the request goes to the Express server (5000) in dev
+            await resendVerifyEmail(email.trim())
+
             const msg =
                 "Verification link sent. Please check your inbox (and Spam/Promotions folder)."
             setSuccess(msg)

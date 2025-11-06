@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
     ArrowLeft,
     Eye,
@@ -13,12 +13,12 @@ import {
     Paperclip,
     HelpCircle,
     MessageSquare,
-} from "lucide-react"
+} from "lucide-react";
 
 // UI primitives
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
     Card,
     CardContent,
@@ -26,23 +26,23 @@ import {
     CardFooter,
     CardHeader,
     CardTitle,
-} from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Checkbox } from "@/components/ui/checkbox"
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
     Field,
     FieldContent,
     FieldError,
     FieldLabel,
-} from "@/components/ui/field"
+} from "@/components/ui/field";
 import {
     Dialog,
     DialogContent,
@@ -51,19 +51,27 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
-import { toast } from "sonner"
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
-import logo from "@/assets/images/logo.png"
+import {
+    login as apiLogin,
+    register as apiRegister,
+    resendVerifyEmail as apiResendVerifyEmail,
+    checkStudentIdAvailability,
+    submitSupportTicket,
+} from "@/lib/authentication";
+
+import logo from "@/assets/images/logo.png";
 
 // -------------------------
 // Constants & type helpers
 // -------------------------
-type AccountType = "student" | "other"
-const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th", "5th"] as const
-type YearLevel = (typeof YEAR_LEVELS)[number]
-type YearLevelOption = YearLevel | "Others"
+type AccountType = "student" | "other";
+const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th", "5th"] as const;
+type YearLevel = (typeof YEAR_LEVELS)[number];
+type YearLevelOption = YearLevel | "Others";
 
 // Colleges and programs used to drive cascaded selects
 const COLLEGES: Record<string, string[]> = {
@@ -81,7 +89,7 @@ const COLLEGES: Record<string, string[]> = {
     "College of Liberal Arts, Mathematics and Sciences": ["BAELS"],
     "School of Engineering": ["Agricultural Biosystems Engineering"],
     "School of Criminal Justice Education": ["BS Criminology"],
-}
+};
 
 const COLLEGE_ACRONYM: Record<string, string> = {
     "College of Business Administration": "CBA",
@@ -91,30 +99,30 @@ const COLLEGE_ACRONYM: Record<string, string> = {
     "College of Liberal Arts, Mathematics and Sciences": "CLAMS",
     "School of Engineering": "SOE",
     "School of Criminal Justice Education": "SCJE",
-}
+};
 
 // LocalStorage keys for "remember me" UX
-const REMEMBER_FLAG_KEY = "bookhive:remember"
-const REMEMBER_EMAIL_KEY = "bookhive:rememberEmail"
+const REMEMBER_FLAG_KEY = "bookhive:remember";
+const REMEMBER_EMAIL_KEY = "bookhive:rememberEmail";
 
 // -------------------------
 // Lightweight query helpers
 // -------------------------
 function useQuery() {
-    const { search } = useLocation()
-    return useMemo(() => new URLSearchParams(search), [search])
+    const { search } = useLocation();
+    return useMemo(() => new URLSearchParams(search), [search]);
 }
 
 /** Guards against open redirects; only allow in-app paths and not /auth itself */
 function sanitizeRedirect(raw: string | null): string | null {
-    if (!raw) return null
+    if (!raw) return null;
     try {
-        const url = decodeURIComponent(raw)
-        if (!url.startsWith("/")) return null
-        if (url.startsWith("/auth")) return null
-        return url
+        const url = decodeURIComponent(raw);
+        if (!url.startsWith("/")) return null;
+        if (url.startsWith("/auth")) return null;
+        return url;
     } catch {
-        return null
+        return null;
     }
 }
 
@@ -122,60 +130,60 @@ function sanitizeRedirect(raw: string | null): string | null {
 // Component
 // -------------------------
 export default function AuthPage() {
-    const navigate = useNavigate()
-    const qs = useQuery()
+    const navigate = useNavigate();
+    const qs = useQuery();
 
     // UI state: which tab
-    const [activeTab, setActiveTab] = useState<"login" | "register">("login")
+    const [activeTab, setActiveTab] = useState<"login" | "register">("login");
 
     // Login state
-    const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("")
-    const [showPassword, setShowPassword] = useState(false)
-    const [rememberMe, setRememberMe] = useState(false)
-    const [isLoggingIn, setIsLoggingIn] = useState(false)
-    const [loginError, setLoginError] = useState<string>("")
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [rememberMe, setRememberMe] = useState(false);
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [loginError, setLoginError] = useState<string>("");
 
     // Registration state
-    const [fullName, setFullName] = useState("")
-    const [accountType, setAccountType] = useState<AccountType>("student")
-    const [studentId, setStudentId] = useState("")
-    const [college, setCollege] = useState<string>("")
-    const [program, setProgram] = useState<string>("")
-    const [yearLevel, setYearLevel] = useState<YearLevelOption | "">("")
-    const [regEmail, setRegEmail] = useState("")
-    const [regPassword, setRegPassword] = useState("")
-    const [confirmPassword, setConfirmPassword] = useState("")
-    const [regError, setRegError] = useState<string>("")
-    const [isRegistering, setIsRegistering] = useState(false)
-    const [showRegPassword, setShowRegPassword] = useState(false)
-    const [showRegConfirm, setShowRegConfirm] = useState(false)
+    const [fullName, setFullName] = useState("");
+    const [accountType, setAccountType] = useState<AccountType>("student");
+    const [studentId, setStudentId] = useState("");
+    const [college, setCollege] = useState<string>("");
+    const [program, setProgram] = useState<string>("");
+    const [yearLevel, setYearLevel] = useState<YearLevelOption | "">("");
+    const [regEmail, setRegEmail] = useState("");
+    const [regPassword, setRegPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [regError, setRegError] = useState<string>("");
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [showRegPassword, setShowRegPassword] = useState(false);
+    const [showRegConfirm, setShowRegConfirm] = useState(false);
 
     // Student ID availability (debounced check)
-    const [checkingStudentId, setCheckingStudentId] = useState(false)
-    const [studentIdAvailable, setStudentIdAvailable] = useState<boolean | null>(null)
+    const [checkingStudentId, setCheckingStudentId] = useState(false);
+    const [studentIdAvailable, setStudentIdAvailable] = useState<boolean | null>(null);
 
     // "Others" free-form fields
-    const [customCollege, setCustomCollege] = useState("")
-    const [customProgram, setCustomProgram] = useState("")
-    const [customYearLevel, setCustomYearLevel] = useState("")
+    const [customCollege, setCustomCollege] = useState("");
+    const [customProgram, setCustomProgram] = useState("");
+    const [customYearLevel, setCustomYearLevel] = useState("");
 
     // Support dialog state
-    const [supportOpen, setSupportOpen] = useState(false)
-    const [supName, setSupName] = useState("")
-    const [supEmail, setSupEmail] = useState("")
-    const [supCategory, setSupCategory] = useState("Login issue")
-    const [supSubject, setSupSubject] = useState("")
-    const [supMessage, setSupMessage] = useState("")
-    const [supFile, setSupFile] = useState<File | null>(null)
-    const [supSubmitting, setSupSubmitting] = useState(false)
-    const [supError, setSupError] = useState<string>("")
-    const [supSuccess, setSupSuccess] = useState<string>("")
-    const [consent, setConsent] = useState(false)
+    const [supportOpen, setSupportOpen] = useState(false);
+    const [supName, setSupName] = useState("");
+    const [supEmail, setSupEmail] = useState("");
+    const [supCategory, setSupCategory] = useState("Login issue");
+    const [supSubject, setSupSubject] = useState("");
+    const [supMessage, setSupMessage] = useState("");
+    const [supFile, setSupFile] = useState<File | null>(null);
+    const [supSubmitting, setSupSubmitting] = useState(false);
+    const [supError, setSupError] = useState<string>("");
+    const [supSuccess, setSupSuccess] = useState<string>("");
+    const [consent, setConsent] = useState(false);
 
     // Redirect handling
-    const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"))
-    const bootRedirectedRef = useRef(false) // reserved for one-time redirect guard if needed later
+    const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"));
+    const bootRedirectedRef = useRef(false); // reserved for one-time redirect guard if needed later
 
     // -------------
     // Effects
@@ -183,338 +191,304 @@ export default function AuthPage() {
     // Load remembered email (if any)
     useEffect(() => {
         try {
-            const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === "1"
+            const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === "1";
             if (remembered) {
-                const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY) || ""
-                setEmail(savedEmail)
-                setRememberMe(true)
+                const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY) || "";
+                setEmail(savedEmail);
+                setRememberMe(true);
             }
         } catch {
             // storage not available (private mode / SSR / etc.)
         }
-    }, [])
+    }, []);
 
     // Autofill support dialog name from registration full name
     useEffect(() => {
-        if (!supName && fullName) setSupName(fullName.trim())
-    }, [fullName, supName])
+        if (!supName && fullName) setSupName(fullName.trim());
+    }, [fullName, supName]);
 
     // Autofill support dialog email from whichever tab is active
     useEffect(() => {
-        const candidate = (activeTab === "login" ? email : regEmail).trim()
-        if (!supEmail && candidate) setSupEmail(candidate)
-    }, [activeTab, email, regEmail, supEmail])
+        const candidate = (activeTab === "login" ? email : regEmail).trim();
+        if (!supEmail && candidate) setSupEmail(candidate);
+    }, [activeTab, email, regEmail, supEmail]);
 
     // Placeholder: keep for future "redirect once boot" logic
     useEffect(() => {
-        if (bootRedirectedRef.current) return
-    }, [redirectParam])
+        if (bootRedirectedRef.current) return;
+    }, [redirectParam]);
 
     // -------------
     // Handlers
     // -------------
     // Persist/forget remembered email immediately on toggle
     const handleRememberToggle = (checked: boolean | "indeterminate") => {
-        const value = checked === true
-        setRememberMe(value)
+        const value = checked === true;
+        setRememberMe(value);
         try {
             if (value) {
-                localStorage.setItem(REMEMBER_FLAG_KEY, "1")
-                localStorage.setItem(REMEMBER_EMAIL_KEY, email)
+                localStorage.setItem(REMEMBER_FLAG_KEY, "1");
+                localStorage.setItem(REMEMBER_EMAIL_KEY, email);
             } else {
-                localStorage.removeItem(REMEMBER_FLAG_KEY)
-                localStorage.removeItem(REMEMBER_EMAIL_KEY)
+                localStorage.removeItem(REMEMBER_FLAG_KEY);
+                localStorage.removeItem(REMEMBER_EMAIL_KEY);
             }
         } catch {
             // ignore persistence errors
         }
-    }
+    };
 
     // Keep remembered email up-to-date as user types
     const handleEmailChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-        const value = e.target.value
-        setEmail(value)
+        const value = e.target.value;
+        setEmail(value);
         if (rememberMe) {
             try {
-                localStorage.setItem(REMEMBER_EMAIL_KEY, value)
+                localStorage.setItem(REMEMBER_EMAIL_KEY, value);
             } catch {
                 // ignore persistence errors
             }
         }
-    }
+    };
 
     // Debounced studentId availability check (only for student account)
     useEffect(() => {
         if (accountType !== "student") {
-            setStudentIdAvailable(null)
-            return
+            setStudentIdAvailable(null);
+            return;
         }
-        const trimmed = studentId.trim()
+        const trimmed = studentId.trim();
         if (!trimmed) {
-            setStudentIdAvailable(null)
-            return
+            setStudentIdAvailable(null);
+            return;
         }
-        let cancelled = false
-        setCheckingStudentId(true)
+        let cancelled = false;
+        setCheckingStudentId(true);
         const t = setTimeout(async () => {
             try {
-                const res = await fetch(
-                    `/api/users/check-student-id?studentId=${encodeURIComponent(trimmed)}`
-                )
-                if (!cancelled && res.ok) {
-                    const data = (await res.json()) as { available: boolean }
-                    setStudentIdAvailable(data.available)
-                } else if (!cancelled) {
-                    setStudentIdAvailable(null)
-                }
+                const data = await checkStudentIdAvailability(trimmed);
+                if (!cancelled) setStudentIdAvailable(!!data.available);
             } catch {
-                if (!cancelled) setStudentIdAvailable(null)
+                if (!cancelled) setStudentIdAvailable(null);
             } finally {
-                if (!cancelled) setCheckingStudentId(false)
+                if (!cancelled) setCheckingStudentId(false);
             }
-        }, 400)
+        }, 400);
         return () => {
-            cancelled = true
-            clearTimeout(t)
-        }
-    }, [studentId, accountType])
+            cancelled = true;
+            clearTimeout(t);
+        };
+    }, [studentId, accountType]);
 
     // POST: /api/auth/login
     const triggerLogin = async () => {
-        setLoginError("")
-        setIsLoggingIn(true)
+        setLoginError("");
+        setIsLoggingIn(true);
         try {
-            const resp = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ email, password }),
-            })
-            if (!resp.ok) {
-                const data = await resp.json().catch(() => ({}))
-                throw new Error(data?.message || "Invalid email or password.")
-            }
+            await apiLogin(email, password);
 
             // Persist remember-me choice after a successful login
             try {
                 if (rememberMe) {
-                    localStorage.setItem(REMEMBER_FLAG_KEY, "1")
-                    localStorage.setItem(REMEMBER_EMAIL_KEY, email)
+                    localStorage.setItem(REMEMBER_FLAG_KEY, "1");
+                    localStorage.setItem(REMEMBER_EMAIL_KEY, email);
                 } else {
-                    localStorage.removeItem(REMEMBER_FLAG_KEY)
-                    localStorage.removeItem(REMEMBER_EMAIL_KEY)
+                    localStorage.removeItem(REMEMBER_FLAG_KEY);
+                    localStorage.removeItem(REMEMBER_EMAIL_KEY);
                 }
             } catch {
-                // ignore persistence errors
+                /* ignore */
             }
 
             // Toast + redirect
             toast.success("Welcome back!", {
                 description: redirectParam ? "Redirecting to your previous page…" : "Redirecting to your dashboard…",
-            })
-            const dest = redirectParam ?? "/dashboard/student"
-            navigate(dest, { replace: true })
+            });
+            const dest = redirectParam ?? "/dashboard/student";
+            navigate(dest, { replace: true });
         } catch (err: any) {
-            const msg = err?.message || "Login failed. Please try again."
-            setLoginError(msg)
-            toast.error("Login failed", { description: msg })
+            const msg = err?.message || "Login failed. Please try again.";
+            setLoginError(msg);
+            toast.error("Login failed", { description: msg });
         } finally {
-            setIsLoggingIn(false)
+            setIsLoggingIn(false);
         }
-    }
+    };
 
     // POST: /api/auth/register (+ best-effort email verification)
     const triggerRegister = async () => {
-        setRegError("")
+        setRegError("");
 
         // Quick client validations to reduce round-trips
         if (regPassword !== confirmPassword) {
-            const msg = "Passwords do not match."
-            setRegError(msg)
-            toast.error("Validation error", { description: msg })
-            return
+            const msg = "Passwords do not match.";
+            setRegError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
         }
         if (regPassword.length < 8) {
-            const msg = "Password must be at least 8 characters."
-            setRegError(msg)
-            toast.error("Validation error", { description: msg })
-            return
+            const msg = "Password must be at least 8 characters.";
+            setRegError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
         }
         if (!fullName.trim()) {
-            const msg = "Full name is required."
-            setRegError(msg)
-            toast.error("Validation error", { description: msg })
-            return
+            const msg = "Full name is required.";
+            setRegError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
         }
 
         // Student-only required fields
         if (accountType === "student") {
-            const finalCollege = college === "Others" ? customCollege.trim() : college
-            const finalProgram = program === "Others" ? customProgram.trim() : program
-            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel
+            const finalCollege = college === "Others" ? customCollege.trim() : college;
+            const finalProgram = program === "Others" ? customProgram.trim() : program;
+            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
 
             if (!studentId.trim()) {
-                const msg = "Student ID is required for student accounts."
-                setRegError(msg)
-                toast.error("Validation error", { description: msg })
-                return
+                const msg = "Student ID is required for student accounts.";
+                setRegError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
             }
             if (!finalCollege) {
-                const msg = "College is required for student accounts."
-                setRegError(msg)
-                toast.error("Validation error", { description: msg })
-                return
+                const msg = "College is required for student accounts.";
+                setRegError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
             }
             if (!finalProgram) {
-                const msg = "Program is required for student accounts."
-                setRegError(msg)
-                toast.error("Validation error", { description: msg })
-                return
+                const msg = "Program is required for student accounts.";
+                setRegError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
             }
             if (!finalYearLevel) {
-                const msg = "Year level is required for student accounts."
-                setRegError(msg)
-                toast.error("Validation error", { description: msg })
-                return
+                const msg = "Year level is required for student accounts.";
+                setRegError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
             }
             if (studentIdAvailable === false) {
-                const msg = "That Student ID is already in use. Please use a different one."
-                setRegError(msg)
-                toast.error("Student ID unavailable", { description: msg })
-                return
+                const msg = "That Student ID is already in use. Please use a different one.";
+                setRegError(msg);
+                toast.error("Student ID unavailable", { description: msg });
+                return;
             }
         }
 
-        setIsRegistering(true)
+        setIsRegistering(true);
         try {
-            const finalProgram = program === "Others" ? customProgram.trim() : program
-            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel
+            const finalProgram = program === "Others" ? customProgram.trim() : program;
+            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
 
             const payload: Record<string, unknown> = {
                 fullName: fullName.trim(),
                 email: regEmail.trim(),
                 password: regPassword,
                 accountType,
-            }
+            };
 
             if (accountType === "student") {
-                payload.studentId = studentId.trim()
-                payload.course = finalProgram
-                payload.yearLevel = finalYearLevel
+                payload.studentId = studentId.trim();
+                payload.course = finalProgram;
+                payload.yearLevel = finalYearLevel;
             }
 
-            const resp = await fetch("/api/auth/register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify(payload),
-            })
-            if (!resp.ok) {
-                const data = await resp.json().catch(() => ({}))
-                const msg =
-                    data?.message ||
-                    (resp.status === 409
-                        ? "An account with this email or Student ID already exists."
-                        : "Registration failed. Please try again.")
-                throw new Error(msg)
-            }
+            await apiRegister(payload as any);
 
             // Kick off verification email; best-effort (non-blocking)
             try {
-                await fetch("/api/auth/verify-email", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({ email: regEmail.trim() }),
-                })
+                await apiResendVerifyEmail(regEmail.trim());
             } catch {
-                // ignore background email errors
+                /* ignore background email errors */
             }
 
             toast.success("Account created", {
                 description: "We sent a verification link to your email.",
-            })
+            });
 
             // Route to verify page with email pre-filled
             navigate(
                 `/auth/verify-email?email=${encodeURIComponent(regEmail.trim())}&justRegistered=1`,
                 { replace: true }
-            )
+            );
         } catch (err: any) {
-            const msg = err?.message || "Failed to register. Please try again."
-            setRegError(msg)
-            toast.error("Registration failed", { description: msg })
+            const msg = err?.message || "Failed to register. Please try again.";
+            setRegError(msg);
+            toast.error("Registration failed", { description: msg });
         } finally {
-            setIsRegistering(false)
+            setIsRegistering(false);
         }
-    }
+    };
 
     // Enter-to-submit ergonomics
     const onLoginKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
         if (e.key === "Enter") {
-            e.preventDefault()
-            triggerLogin()
+            e.preventDefault();
+            triggerLogin();
         }
-    }
+    };
     const onRegisterKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
         if (e.key === "Enter") {
-            e.preventDefault()
-            triggerRegister()
+            e.preventDefault();
+            triggerRegister();
         }
-    }
+    };
 
     // Derived options for "Program" based on selected college
-    const availablePrograms = college && college !== "Others" ? COLLEGES[college] ?? [] : []
+    const availablePrograms =
+        college && college !== "Others" ? COLLEGES[college] ?? [] : [];
 
     // Reset support dialog fields to defaults
     const resetSupport = () => {
-        setSupSubject("")
-        setSupMessage("")
-        setSupCategory("Login issue")
-        setSupFile(null)
-        setConsent(false)
-        setSupError("")
-        setSupSuccess("")
-    }
+        setSupSubject("");
+        setSupMessage("");
+        setSupCategory("Login issue");
+        setSupFile(null);
+        setConsent(false);
+        setSupError("");
+        setSupSuccess("");
+    };
 
     // POST: /api/support/ticket — with optional file attachment
     const submitSupport = async () => {
-        setSupError("")
-        setSupSuccess("")
+        setSupError("");
+        setSupSuccess("");
 
         // Minimal validations
         if (!supName.trim()) {
-            const msg = "Please enter your name."
-            setSupError(msg)
-            toast.error("Support ticket error", { description: msg })
-            return
+            const msg = "Please enter your name.";
+            setSupError(msg);
+            toast.error("Support ticket error", { description: msg });
+            return;
         }
         if (!supEmail.trim() || !supEmail.includes("@")) {
-            const msg = "Please provide a valid email address."
-            setSupError(msg)
-            toast.error("Support ticket error", { description: msg })
-            return
+            const msg = "Please provide a valid email address.";
+            setSupError(msg);
+            toast.error("Support ticket error", { description: msg });
+            return;
         }
         if (!supSubject.trim()) {
-            const msg = "Please add a short subject."
-            setSupError(msg)
-            toast.error("Support ticket error", { description: msg })
-            return
+            const msg = "Please add a short subject.";
+            setSupError(msg);
+            toast.error("Support ticket error", { description: msg });
+            return;
         }
         if (!supMessage.trim()) {
-            const msg = "Please describe your concern."
-            setSupError(msg)
-            toast.error("Support ticket error", { description: msg })
-            return
+            const msg = "Please describe your concern.";
+            setSupError(msg);
+            toast.error("Support ticket error", { description: msg });
+            return;
         }
         if (!consent) {
-            const msg = "Please allow us to contact you regarding this ticket."
-            setSupError(msg)
-            toast.error("Support ticket error", { description: msg })
-            return
+            const msg = "Please allow us to contact you regarding this ticket.";
+            setSupError(msg);
+            toast.error("Support ticket error", { description: msg });
+            return;
         }
 
-        setSupSubmitting(true)
+        setSupSubmitting(true);
         try {
             // Attach useful context to speed up triage
             const context: Record<string, unknown> = {
@@ -524,42 +498,31 @@ export default function AuthPage() {
                 college: college === "Others" ? customCollege : college || undefined,
                 program: program === "Others" ? customProgram : program || undefined,
                 yearLevel: yearLevel === "Others" ? customYearLevel : yearLevel || undefined,
-            }
+            };
 
-            const form = new FormData()
-            form.append("name", supName.trim())
-            form.append("email", supEmail.trim())
-            form.append("category", supCategory)
-            form.append("subject", supSubject.trim())
-            form.append("message", supMessage.trim())
-            form.append("context", JSON.stringify(context))
-            if (supFile) form.append("attachment", supFile, supFile.name)
+            const form = new FormData();
+            form.append("name", supName.trim());
+            form.append("email", supEmail.trim());
+            form.append("category", supCategory);
+            form.append("subject", supSubject.trim());
+            form.append("message", supMessage.trim());
+            form.append("context", JSON.stringify(context));
+            if (supFile) form.append("attachment", supFile, supFile.name);
 
-            const resp = await fetch("/api/support/ticket", {
-                method: "POST",
-                credentials: "include",
-                body: form,
-            })
-
-            if (!resp.ok) {
-                const data = await resp.json().catch(() => ({}))
-                throw new Error(data?.message || "Failed to submit your ticket.")
-            }
-
-            const data = (await resp.json().catch(() => ({}))) as { ticketId?: string }
-            const tid = data?.ticketId ? ` #${data.ticketId}` : ""
-            const successMsg = `Thanks! Your support request has been sent${tid}. We’ll get back to you via email.`
-            setSupSuccess(successMsg)
-            toast.success("Support ticket sent", { description: successMsg })
-            resetSupport()
+            const resp = await submitSupportTicket(form);
+            const tid = (resp as any)?.ticketId ? ` #${(resp as any).ticketId}` : "";
+            const successMsg = `Thanks! Your support request has been sent${tid}. We’ll get back to you via email.`;
+            setSupSuccess(successMsg);
+            toast.success("Support ticket sent", { description: successMsg });
+            resetSupport();
         } catch (err: any) {
-            const msg = err?.message || "Something went wrong while sending your request."
-            setSupError(msg)
-            toast.error("Support ticket failed", { description: msg })
+            const msg = err?.message || "Something went wrong while sending your request.";
+            setSupError(msg);
+            toast.error("Support ticket failed", { description: msg });
         } finally {
-            setSupSubmitting(false)
+            setSupSubmitting(false);
         }
-    }
+    };
 
     // -------------------------
     // Render
@@ -719,7 +682,7 @@ export default function AuthPage() {
 
                                 {/* Support entry lives in the card footer to keep it near actions */}
                                 <CardFooter className="flex justify-center border-t border-white/10">
-                                    <Dialog open={supportOpen} onOpenChange={(o) => { setSupportOpen(o); if (!o) resetSupport() }}>
+                                    <Dialog open={supportOpen} onOpenChange={(o) => { setSupportOpen(o); if (!o) resetSupport(); }}>
                                         <div className="text-sm text-gray-300 flex items-center gap-2">
                                             <span>Need help?</span>
                                             <DialogTrigger asChild>
@@ -863,7 +826,7 @@ export default function AuthPage() {
                                                     <Button
                                                         type="button"
                                                         variant="outline"
-                                                        onClick={() => { setSupportOpen(false); resetSupport() }}
+                                                        onClick={() => { setSupportOpen(false); resetSupport(); }}
                                                         className="border-white/15 text-black/90 hover:text-white hover:bg-black/10 w-full sm:w-auto"
                                                         disabled={supSubmitting}
                                                     >
@@ -955,7 +918,7 @@ export default function AuthPage() {
                                                             <IdCard className="absolute left-3 top-3 h-4 w-4 text-white/50" />
                                                             <Input
                                                                 id="student-id"
-                                                                placeholder="e.g., 2025-00123"
+                                                                placeholder="e.g., TC-20-A-00001"
                                                                 className="pl-10 bg-slate-900/70 border-white/10 text-white"
                                                                 value={studentId}
                                                                 onChange={(e) => setStudentId(e.target.value)}
@@ -986,9 +949,9 @@ export default function AuthPage() {
                                                         <Select
                                                             value={college || undefined}
                                                             onValueChange={(v) => {
-                                                                setCollege(v)
-                                                                setProgram("")
-                                                                setCustomCollege("")
+                                                                setCollege(v);
+                                                                setProgram("");
+                                                                setCustomCollege("");
                                                             }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
@@ -1033,8 +996,8 @@ export default function AuthPage() {
                                                             disabled={!college}
                                                             value={program || undefined}
                                                             onValueChange={(v) => {
-                                                                setProgram(v)
-                                                                setCustomProgram("")
+                                                                setProgram(v);
+                                                                setCustomProgram("");
                                                             }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white disabled:opacity-60">
@@ -1076,8 +1039,8 @@ export default function AuthPage() {
                                                         <Select
                                                             value={yearLevel || undefined}
                                                             onValueChange={(v) => {
-                                                                setYearLevel(v as YearLevelOption)
-                                                                setCustomYearLevel("")
+                                                                setYearLevel(v as YearLevelOption);
+                                                                setCustomYearLevel("");
                                                             }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
@@ -1242,5 +1205,5 @@ export default function AuthPage() {
                 <p>© {new Date().getFullYear()} JRMSU-TC — Book-Hive</p>
             </footer>
         </div>
-    )
+    );
 }
