@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useNavigate } from "react-router-dom"
 import {
     SidebarMenu,
@@ -14,20 +15,28 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
+import { logout as apiLogout } from "@/lib/authentication"
 
 // Mock identity (replace when wiring to session)
 const ME = {
-    name: "Lemuel Velez",
-    email: "lemuel@jrmsu.edu.ph",
+    name: "User Name",
+    email: "user@jrmsu.edu.ph",
     avatarUrl: "",
 }
 
 export function NavUser() {
     const navigate = useNavigate()
 
-    function onLogout() {
-        toast.success("Logged out (mock)")
-        navigate("/auth", { replace: true })
+    async function onLogout() {
+        try {
+            await apiLogout() // calls POST /api/auth/logout and clears cookie
+            toast.success("You’ve been logged out.")
+            navigate("/", { replace: true })
+        } catch (err: any) {
+            // apiLogout already swallows errors, but just in case:
+            const msg = String(err?.message || "Failed to log out. Please try again.")
+            toast.error("Logout failed", { description: msg })
+        }
     }
 
     const initials = ME.name

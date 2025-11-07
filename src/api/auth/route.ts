@@ -46,6 +46,9 @@ export const ROUTES = {
     register: api("/auth/register"),
     verifyEmail: api("/auth/verify-email"), // POST (re-send)
     verifyConfirm: api("/auth/verify-email/confirm"), // GET/POST with ?token=...
+    // Added for password reset flow
+    forgotPassword: api("/auth/forgot-password"),
+    resetPassword: api("/auth/reset-password"),
   },
   users: {
     checkStudentId: (studentId: string) =>

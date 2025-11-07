@@ -18,6 +18,7 @@ import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/fie
 import { toast } from "sonner"
 
 import logo from "@/assets/images/logo.png"
+import { ROUTES } from "@/api/auth/route" // ✅ use API base
 
 // -------------------------
 // Lightweight query helper
@@ -69,7 +70,7 @@ export default function ResetPasswordPage() {
 
         setLoading(true)
         try {
-            const resp = await fetch("/api/auth/reset-password", {
+            const resp = await fetch(ROUTES.auth.resetPassword, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
@@ -78,7 +79,7 @@ export default function ResetPasswordPage() {
             if (!resp.ok) {
                 const data = await resp.json().catch(() => ({}))
                 throw new Error(
-                    data?.message ||
+                    (data as any)?.message ||
                     "We couldn't reset your password. The link may have expired."
                 )
             }
