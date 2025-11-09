@@ -16,8 +16,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet'
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 
-import logo from '@/assets/images/logo.png'
-import heroImg from '@/assets/images/hero.png'
+import logo from '@/assets/images/logo.svg'
+import heroImg from '@/assets/images/hero.svg'
 
 // --- Small presentational helpers (kept local to avoid extra files) ---
 function SectionHeading({
@@ -144,7 +144,7 @@ export default function LandingPage() {
                         <img
                             src={logo}
                             alt="JRMSU-TC Book-Hive logo"
-                            className="h-8 w-8 rounded-md object-contain"
+                            className="h-10 w-10 rounded-md object-contain"
                         />
                         <span className="font-semibold tracking-tight group-hover:text-white/90">
                             JRMSU-TC Book-Hive

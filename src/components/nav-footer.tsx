@@ -20,7 +20,7 @@ export function NavFooter() {
                     <Button
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 border-white/20 text-white/90 hover:bg-white/10"
+                        className="h-10 w-10 border-white/20 text-white/90 hover:bg-white/10"
                         onClick={onSupport}
                         aria-label="Contact Support"
                         title="Contact Support"

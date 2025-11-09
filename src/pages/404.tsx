@@ -9,7 +9,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 
-import logo from "@/assets/images/logo.png"
+import logo from "@/assets/images/logo.svg"
 
 export default function NotFoundPage() {
     const navigate = useNavigate()
@@ -51,7 +51,7 @@ Thanks!`
                     <img
                         src={logo}
                         alt="JRMSU-TC Book-Hive logo"
-                        className="h-8 w-8 rounded-md object-contain"
+                        className="h-10 w-10 rounded-md object-contain"
                     />
                     <span className="hidden md:inline font-semibold">JRMSU-TC Book-Hive</span>
                 </Link>

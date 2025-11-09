@@ -15,7 +15,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 
-import logo from "@/assets/images/logo.png";
+import logo from "@/assets/images/logo.svg";
 
 // -------------------------
 // Lightweight query helper
@@ -155,7 +155,7 @@ export default function VerifyEmailCallbackPage() {
                     <img
                         src={logo}
                         alt="JRMSU-TC Book-Hive logo"
-                        className="h-8 w-8 rounded-md object-contain"
+                        className="h-10 w-10 rounded-md object-contain"
                     />
                     <span className="hidden md:inline font-semibold">JRMSU-TC Book-Hive</span>
                 </Link>
@@ -169,7 +169,7 @@ export default function VerifyEmailCallbackPage() {
                         <img
                             src={logo}
                             alt="Book-Hive logo"
-                            className="h-16 w-16 mx-auto mb-4 rounded-xl object-contain"
+                            className="h-32 w-32 mx-auto mb-4 rounded-xl object-contain"
                         />
                         <h1 className="text-2xl font-bold">JRMSU-TC Book-Hive</h1>
                         <p className="text-white/70">Library Borrowing & Reservation Platform</p>

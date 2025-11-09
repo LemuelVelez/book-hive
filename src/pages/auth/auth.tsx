@@ -63,7 +63,7 @@ import {
     submitSupportTicket,
 } from "@/lib/authentication";
 
-import logo from "@/assets/images/logo.png";
+import logo from "@/assets/images/logo.svg";
 
 // -------------------------
 // Constants & type helpers
@@ -588,7 +588,7 @@ export default function AuthPage() {
                     <img
                         src={logo}
                         alt="JRMSU-TC Book-Hive logo"
-                        className="h-8 w-8 rounded-md object-contain"
+                        className="h-10 w-10 rounded-md object-contain"
                     />
                     <span className="hidden md:inline font-semibold">JRMSU-TC Book-Hive</span>
                 </Link>
@@ -602,7 +602,7 @@ export default function AuthPage() {
                         <img
                             src={logo}
                             alt="Book-Hive logo"
-                            className="h-16 w-16 mx-auto mb-4 rounded-xl object-contain"
+                            className="h-32 w-32 mx-auto mb-4 rounded-xl object-contain"
                         />
                         <h1 className="text-2xl font-bold">JRMSU-TC Book-Hive</h1>
                         <p className="text-white/70">Library Borrowing & Reservation Platform</p>
@@ -689,7 +689,7 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                        className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
                                                         onClick={() => setShowPassword((s) => !s)}
                                                         aria-label={showPassword ? "Hide password" : "Show password"}
                                                         aria-pressed={showPassword}
@@ -1161,7 +1161,7 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                        className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
                                                         onClick={() => setShowRegPassword((s) => !s)}
                                                         aria-label={showRegPassword ? "Hide password" : "Show password"}
                                                         aria-pressed={showRegPassword}
@@ -1193,7 +1193,7 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                        className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
                                                         onClick={() => setShowRegConfirm((s) => !s)}
                                                         aria-label={showRegConfirm ? "Hide password" : "Show password"}
                                                         aria-pressed={showRegConfirm}

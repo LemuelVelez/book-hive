@@ -1,5 +1,5 @@
 import { SidebarHeader, useSidebar } from "@/components/ui/sidebar"
-import logo from "@/assets/images/logo.png"
+import logo from "@/assets/images/logo.svg"
 
 export function NavHeader() {
     const { state } = useSidebar()

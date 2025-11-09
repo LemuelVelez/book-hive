@@ -17,7 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field"
 import { toast } from "sonner"
 
-import logo from "@/assets/images/logo.png"
+import logo from "@/assets/images/logo.svg"
 import { ROUTES } from "@/api/auth/route" // ✅ use API base
 
 // -------------------------
@@ -126,7 +126,7 @@ export default function ResetPasswordPage() {
                     <img
                         src={logo}
                         alt="JRMSU-TC Book-Hive logo"
-                        className="h-8 w-8 rounded-md object-contain"
+                        className="h-10 w-10 rounded-md object-contain"
                     />
                     <span className="hidden md:inline font-semibold">JRMSU-TC Book-Hive</span>
                 </Link>
@@ -140,7 +140,7 @@ export default function ResetPasswordPage() {
                         <img
                             src={logo}
                             alt="Book-Hive logo"
-                            className="h-16 w-16 mx-auto mb-4 rounded-xl object-contain"
+                            className="h-32 w-32 mx-auto mb-4 rounded-xl object-contain"
                         />
                         <h1 className="text-2xl font-bold">JRMSU-TC Book-Hive</h1>
                         <p className="text-white/70">Library Borrowing & Reservation Platform</p>
@@ -199,7 +199,7 @@ export default function ResetPasswordPage() {
                                                 type="button"
                                                 variant="ghost"
                                                 size="icon"
-                                                className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
                                                 onClick={() => setShowPass((s) => !s)}
                                                 aria-label={showPass ? "Hide password" : "Show password"}
                                                 aria-pressed={showPass}
@@ -229,7 +229,7 @@ export default function ResetPasswordPage() {
                                                 type="button"
                                                 variant="ghost"
                                                 size="icon"
-                                                className="absolute right-1.5 top-0.5 h-8 w-8 text-white/70 hover:text-black"
+                                                className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
                                                 onClick={() => setShowConfirm((s) => !s)}
                                                 aria-label={showConfirm ? "Hide password" : "Show password"}
                                                 aria-pressed={showConfirm}

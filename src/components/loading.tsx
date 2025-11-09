@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { Loader2 } from "lucide-react"
-import logo from "@/assets/images/logo.png"
+import logo from "@/assets/images/logo.svg"
 
 /** Tiny classnames helper */
 function cx(...classes: Array<string | false | null | undefined>) {
