@@ -34,8 +34,8 @@ export default function DashboardLayout({
                         <NavMain />
                     </SidebarContent>
                     <SidebarFooter>
-                        <NavUser />
                         <NavFooter />
+                        <NavUser />
                     </SidebarFooter>
                 </Sidebar>
 

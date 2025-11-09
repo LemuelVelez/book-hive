@@ -16,7 +16,7 @@ const VerifyEmailCallbackPage = lazy(() => import('./pages/auth/verify-email-cal
 
 // Dashboards
 const StudentDashboard = lazy(() => import('./pages/dashboard/student/dashboard'))
-// const LibrarianDashboard = lazy(() => import('./pages/dashboard/librarian'))
+const LibrarianDashboard = lazy(() => import('./pages/dashboard/librarian/dashboard'))
 // const FacultyDashboard = lazy(() => import('./pages/dashboard/faculty'))
 // const AdminDashboard = lazy(() => import('./pages/dashboard/admin'))
 
@@ -160,12 +160,12 @@ function App() {
               </RequireRole>
             }
           />
-          {/* <Route path="/dashboard/librarian" element={
+          <Route path="/dashboard/librarian" element={
             <RequireRole allow={["librarian"]}>
               <LibrarianDashboard />
             </RequireRole>
           } />
-          <Route path="/dashboard/faculty" element={
+          {/* <Route path="/dashboard/faculty" element={
             <RequireRole allow={["faculty"]}>
               <FacultyDashboard />
             </RequireRole>
