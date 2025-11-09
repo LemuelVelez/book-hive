@@ -1,13 +1,62 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Bell, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
+import { me as apiMe } from "@/lib/authentication"
 
 /** Top header shown inside the dashboard content area */
 export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const [q, setQ] = React.useState("")
+    const [user, setUser] = React.useState<any | null>(null)
+    const [userLoading, setUserLoading] = React.useState(true)
+
+    React.useEffect(() => {
+        let cancelled = false
+
+            ; (async () => {
+                try {
+                    const u = await apiMe()
+                    if (!cancelled) {
+                        setUser(u)
+                    }
+                } catch {
+                    // silently ignore – header will just not show the welcome line
+                } finally {
+                    if (!cancelled) {
+                        setUserLoading(false)
+                    }
+                }
+            })()
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    function formatRole(raw: string | undefined): string {
+        if (!raw) return ""
+        const map: Record<string, string> = {
+            student: "Student",
+            librarian: "Librarian",
+            faculty: "Faculty",
+            admin: "Admin",
+        }
+        return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
+    }
+
+    const roleLabel = formatRole(user?.accountType)
+    const displayName =
+        user?.fullName ||
+        user?.name ||
+        user?.full_name ||
+        user?.student_name ||
+        user?.email ||
+        ""
+
+    const showWelcome = !userLoading && user && (roleLabel || displayName)
 
     return (
         <header className="sticky top-0 z-10 bg-slate-800/60 backdrop-blur supports-backdrop-filter:bg-slate-800/60 border-b border-white/10">
@@ -18,6 +67,17 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                     <h1 className="text-base md:text-lg font-semibold tracking-tight truncate">
                         {title}
                     </h1>
+                    {showWelcome && (
+                        <p className="mt-0.5 text-xs md:text-sm text-white/70 truncate">
+                            Welcome,{" "}
+                            {roleLabel && (
+                                <span className="font-medium">{roleLabel}</span>
+                            )}{" "}
+                            {displayName && (
+                                <span className="font-medium">{displayName}</span>
+                            )}
+                        </p>
+                    )}
                 </div>
 
                 {/* Search (compact) */}
@@ -31,7 +91,9 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                             className="pl-8 h-8 bg-slate-900/70 border-white/10 text-white placeholder:text-white/60"
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") {
-                                    toast.message("Search (mock)", { description: `You searched: ${q || "—"}` })
+                                    toast.message("Search (mock)", {
+                                        description: `You searched: ${q || "—"}`,
+                                    })
                                 }
                             }}
                         />

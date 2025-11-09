@@ -4,6 +4,7 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    useSidebar,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -26,6 +27,8 @@ const ME = {
 
 export function NavUser() {
     const navigate = useNavigate()
+    const { state } = useSidebar()
+    const collapsed = state === "collapsed"
 
     async function onLogout() {
         try {
@@ -45,6 +48,68 @@ export function NavUser() {
         .join("")
         .slice(0, 2)
 
+    // Collapsed: show only a centered circular avatar
+    if (collapsed) {
+        return (
+            <SidebarMenu>
+                <SidebarMenuItem className="flex justify-center">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                aria-label={`${ME.name} account menu`}
+                            >
+                                <Avatar className="h-8 w-8">
+                                    <AvatarImage src={ME.avatarUrl} alt={ME.name} />
+                                    <AvatarFallback>{initials}</AvatarFallback>
+                                </Avatar>
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                            align="start"
+                            side="top"
+                            className="w-[220px] bg-slate-900 text-white border-white/10"
+                        >
+                            <DropdownMenuLabel className="font-normal">
+                                <div className="flex items-center gap-2">
+                                    <Avatar className="h-7 w-7">
+                                        <AvatarImage src={ME.avatarUrl} alt={ME.name} />
+                                        <AvatarFallback>{initials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="text-xs">
+                                        <div className="font-medium">{ME.name}</div>
+                                        <div className="opacity-70">{ME.email}</div>
+                                    </div>
+                                </div>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem
+                                onClick={() => toast.info("Profile (mock)")}
+                                className="focus:bg-white/10"
+                            >
+                                Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => toast.info("Settings (mock)")}
+                                className="focus:bg-white/10"
+                            >
+                                Settings
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem
+                                onClick={onLogout}
+                                className="text-red-400 focus:bg-red-500/10"
+                            >
+                                Log out
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </SidebarMenuItem>
+            </SidebarMenu>
+        )
+    }
+
+    // Expanded: original layout with avatar + name + email
     return (
         <SidebarMenu>
             <SidebarMenuItem>
@@ -79,14 +144,23 @@ export function NavUser() {
                             </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator className="bg-white/10" />
-                        <DropdownMenuItem onClick={() => toast.info("Profile (mock)")} className="focus:bg-white/10">
+                        <DropdownMenuItem
+                            onClick={() => toast.info("Profile (mock)")}
+                            className="focus:bg-white/10"
+                        >
                             Profile
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toast.info("Settings (mock)")} className="focus:bg-white/10">
+                        <DropdownMenuItem
+                            onClick={() => toast.info("Settings (mock)")}
+                            className="focus:bg-white/10"
+                        >
                             Settings
                         </DropdownMenuItem>
                         <DropdownMenuSeparator className="bg-white/10" />
-                        <DropdownMenuItem onClick={onLogout} className="text-red-400 focus:bg-red-500/10">
+                        <DropdownMenuItem
+                            onClick={onLogout}
+                            className="text-red-400 focus:bg-red-500/10"
+                        >
                             Log out
                         </DropdownMenuItem>
                     </DropdownMenuContent>

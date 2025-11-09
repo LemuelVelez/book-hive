@@ -9,7 +9,7 @@ export function NavHeader() {
         <SidebarHeader>
             {collapsed ? (
                 // Collapsed: centered logo only (prevents overflow)
-                <div className="flex items-center justify-center px-2 py-2">
+                <div className="flex items-center justify-center px-0.5 py-2">
                     <img
                         src={logo}
                         alt="Book-Hive"
