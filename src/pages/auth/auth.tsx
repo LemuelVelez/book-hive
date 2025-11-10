@@ -872,7 +872,7 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="outline"
                                                         onClick={() => { setSupportOpen(false); resetSupport(); }}
-                                                        className="border-white/15 text-black/90 hover:text-white hover:bg-black/10 w-full sm:w-auto"
+                                                        className="border-white/15 bg-black/50 text-white hover:text-white hover:bg-black/10 w-full sm:w-auto"
                                                         disabled={supSubmitting}
                                                     >
                                                         Cancel

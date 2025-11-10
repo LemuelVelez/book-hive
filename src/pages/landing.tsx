@@ -12,12 +12,24 @@ import {
     Menu,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card'
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet'
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
+import {
+    Accordion,
+    AccordionItem,
+    AccordionTrigger,
+    AccordionContent,
+} from '@/components/ui/accordion'
 
 import logo from '@/assets/images/logo.svg'
 import heroImg from '@/assets/images/hero.svg'
+import { me as apiMe } from '@/lib/authentication'
 
 // --- Small presentational helpers (kept local to avoid extra files) ---
 function SectionHeading({
@@ -105,22 +117,33 @@ export default function LandingPage() {
 
     useEffect(() => {
         let cancelled = false
+
             ; (async () => {
-                try {
-                    const res = await fetch('/api/auth/me', { credentials: 'include' })
-                    if (!res.ok) return
-                    const me = (await res.json()) as { role?: string } | null
-                    if (!cancelled && me) {
-                        setIsAuthed(true)
-                        const role = (me.role || 'student').toLowerCase()
-                        if (role === 'student') setDashboardHref('/dashboard/student')
-                        else setDashboardHref('/dashboard')
-                    }
-                } catch (e) {
-                    // ignore auth probe errors but mark as used to satisfy eslint
-                    void e
+                const user = await apiMe()
+                if (cancelled || !user) return
+
+                setIsAuthed(true)
+
+                // Route user to their own dashboard based on accountType
+                switch (user.accountType) {
+                    case 'student':
+                        setDashboardHref('/dashboard/student')
+                        break
+                    case 'librarian':
+                        setDashboardHref('/dashboard/librarian')
+                        break
+                    case 'faculty':
+                        setDashboardHref('/dashboard/faculty')
+                        break
+                    case 'admin':
+                        setDashboardHref('/dashboard/admin')
+                        break
+                    default:
+                        // Fallback (in case of "other" or unknown types)
+                        setDashboardHref('/dashboard')
                 }
             })()
+
         return () => {
             cancelled = true
         }
@@ -151,25 +174,31 @@ export default function LandingPage() {
                         </span>
                     </Link>
 
-                    {/* Desktop nav (unchanged) */}
+                    {/* Desktop nav */}
                     <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
-                        <a href="#features" className="hover:text-white">Features</a>
-                        <a href="#how-it-works" className="hover:text-white">How it works</a>
-                        <a href="#faq" className="hover:text-white">FAQ</a>
+                        <a href="#features" className="hover:text-white">
+                            Features
+                        </a>
+                        <a href="#how-it-works" className="hover:text-white">
+                            How it works
+                        </a>
+                        <a href="#faq" className="hover:text-white">
+                            FAQ
+                        </a>
                     </div>
 
-                    {/* Desktop CTA (unchanged for desktop; hidden on mobile to use Sheet) */}
+                    {/* Desktop CTA */}
                     <div className="hidden md:flex items-center gap-3">
                         {!isAuthed ? (
                             <Button
-                                className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                 onClick={() => navigate('/auth')}
                             >
                                 Login / Register
                             </Button>
                         ) : (
                             <Button
-                                className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                 onClick={() => navigate(dashboardHref)}
                             >
                                 Go to Dashboard
@@ -177,7 +206,7 @@ export default function LandingPage() {
                         )}
                     </div>
 
-                    {/* Mobile: Sheet menu (slides from TOP, contains ONLY Login/Register) */}
+                    {/* Mobile: Sheet menu (slides from TOP, contains Login/Register or Dashboard) */}
                     <div className="md:hidden">
                         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
                             <SheetTrigger asChild>
@@ -203,12 +232,26 @@ export default function LandingPage() {
                                 className="w-full p-6 sm:p-8 bg-slate-900 border-white/10 text-white rounded-b-2xl"
                             >
                                 <div className="w-full">
+                                    <div className="mb-4 space-y-2 text-sm text-white/80">
+                                        <a href="#features" className="block hover:text-white">
+                                            Features
+                                        </a>
+                                        <a href="#how-it-works" className="block hover:text-white">
+                                            How it works
+                                        </a>
+                                        <a href="#faq" className="block hover:text-white">
+                                            FAQ
+                                        </a>
+                                    </div>
+
                                     <SheetClose asChild>
                                         <Button
-                                            className="w-full cursor-pointer mt-2 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                                            onClick={() => navigate('/auth')}
+                                            className="text-white w-full cursor-pointer mt-2 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                            onClick={() =>
+                                                navigate(isAuthed ? dashboardHref : '/auth')
+                                            }
                                         >
-                                            Login / Register
+                                            {isAuthed ? 'Go to Dashboard' : 'Login / Register'}
                                         </Button>
                                     </SheetClose>
                                 </div>
@@ -231,15 +274,19 @@ export default function LandingPage() {
                         </h1>
                         <p className="mt-4 text-white/80 text-lg">
                             Book-Hive is JRMSU-TC’s web-based library platform for{' '}
-                            <span className="font-semibold">real-time availability, reservations, smart queuing</span>, and{' '}
-                            <span className="font-semibold">notifications</span>. Find, reserve, and pick up your books with ease.
+                            <span className="font-semibold">
+                                real-time availability, reservations, smart queuing
+                            </span>
+                            , and{' '}
+                            <span className="font-semibold">notifications</span>. Find, reserve,
+                            and pick up your books with ease.
                         </p>
 
                         <div className="mt-8 flex flex-wrap gap-3">
                             {!isAuthed ? (
                                 <Button
                                     size="lg"
-                                    className="cursor-pointer px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                    className="text-white cursor-pointer px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                     onClick={() => navigate('/auth')}
                                 >
                                     Get Started
@@ -248,7 +295,7 @@ export default function LandingPage() {
                             ) : (
                                 <Button
                                     size="lg"
-                                    className="px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                    className=" text-white cursor-pointer px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                     onClick={() => navigate(dashboardHref)}
                                 >
                                     Go to Dashboard
@@ -280,7 +327,7 @@ export default function LandingPage() {
 
                     {/* Illustration / hero image */}
                     <div className="relative">
-                        <div className="absolute -inset-1 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 opacity-70 blur"></div>
+                        <div className="absolute -inset-1 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 opacity-70 blur" />
                         <div className="relative rounded-xl bg-slate-900/80 border border-white/10 p-4">
                             <img
                                 src={heroImg}
@@ -374,7 +421,7 @@ export default function LandingPage() {
                     />
                     <Button
                         size="lg"
-                        className="cursor-pointer px-8 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                        className="text-white cursor-pointer px-8 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                         onClick={() => navigate(isAuthed ? dashboardHref : '/auth')}
                     >
                         {isAuthed ? 'Go to Dashboard' : 'Login / Register'}
@@ -395,7 +442,8 @@ export default function LandingPage() {
                             Do I need to visit the library to complete a reservation?
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-4 text-white/70">
-                            Reserve online; you’ll only visit to pick up or return the item. You’ll receive reminders for due dates.
+                            Reserve online; you’ll only visit to pick up or return the item. You’ll
+                            receive reminders for due dates.
                         </AccordionContent>
                     </AccordionItem>
 
@@ -407,7 +455,8 @@ export default function LandingPage() {
                             Can I see if a book is currently borrowed?
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-4 text-white/70">
-                            Yes. Availability is shown in real time. If a title is out, you can join the waitlist and get notified.
+                            Yes. Availability is shown in real time. If a title is out, you can join
+                            the waitlist and get notified.
                         </AccordionContent>
                     </AccordionItem>
                 </Accordion>
@@ -418,9 +467,21 @@ export default function LandingPage() {
                 <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-white/70 text-sm">
                     <p>© {new Date().getFullYear()} JRMSU-TC — Book-Hive</p>
                     <div className="flex items-center gap-6">
-                        <a href="#features" className="hover:text-white">Features</a>
-                        <a href="#how-it-works" className="hover:text-white">How it works</a>
-                        <Link to="/auth" className="hover:text-white">Login</Link>
+                        <a href="#features" className="hover:text-white">
+                            Features
+                        </a>
+                        <a href="#how-it-works" className="hover:text-white">
+                            How it works
+                        </a>
+                        {isAuthed ? (
+                            <Link to={dashboardHref} className="hover:text-white">
+                                Dashboard
+                            </Link>
+                        ) : (
+                            <Link to="/auth" className="hover:text-white">
+                                Login
+                            </Link>
+                        )}
                     </div>
                 </div>
             </footer>
