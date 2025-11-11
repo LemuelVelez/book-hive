@@ -1,4 +1,3 @@
-/* src/App.tsx */
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { PageLoadingOverlay } from './components/loading'
@@ -23,6 +22,9 @@ const StudentDashboard = lazy(
 )
 const LibrarianDashboard = lazy(
   () => import('./pages/dashboard/librarian/dashboard')
+)
+const LibrarianBooksPage = lazy(
+  () => import('./pages/dashboard/librarian/books')
 )
 const FacultyDashboard = lazy(
   () => import('./pages/dashboard/faculty/dashboard')
@@ -102,6 +104,15 @@ function App() {
             element={
               <RequireRole allow={['librarian']}>
                 <LibrarianDashboard />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/dashboard/librarian/books"
+            element={
+              <RequireRole allow={['librarian']}>
+                <LibrarianBooksPage />
               </RequireRole>
             }
           />

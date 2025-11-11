@@ -8,29 +8,91 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Home } from "lucide-react"
+import { Home, BookOpen } from "lucide-react"
 
 type Item = {
     label: string
     icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
     to: string
+    /** If true, active only when pathname === to */
+    exact?: boolean
 }
 
 export function NavMain() {
     const location = useLocation()
+    const pathname = location.pathname
 
-    const items: Item[] = [
-        { label: "Overview", icon: Home, to: "/dashboard/student" },
+    let groupLabel = "Dashboard"
+    let items: Item[] = [
+        // Fallback for /dashboard root or unknown
+        { label: "Overview", icon: Home, to: "/dashboard", exact: true },
     ]
+
+    // Derive section from URL instead of calling /api/auth/me
+    if (pathname.startsWith("/dashboard/student")) {
+        groupLabel = "Student"
+        items = [
+            {
+                label: "Overview",
+                icon: Home,
+                to: "/dashboard/student",
+                exact: true,
+            },
+        ]
+    } else if (pathname.startsWith("/dashboard/librarian")) {
+        groupLabel = "Librarian"
+        items = [
+            {
+                label: "Overview",
+                icon: Home,
+                to: "/dashboard/librarian",
+                exact: true,
+            },
+            {
+                label: "Books",
+                icon: BookOpen,
+                to: "/dashboard/librarian/books",
+                // exact: false by default – stays active for nested routes
+            },
+        ]
+    } else if (pathname.startsWith("/dashboard/faculty")) {
+        groupLabel = "Faculty"
+        items = [
+            {
+                label: "Overview",
+                icon: Home,
+                to: "/dashboard/faculty",
+                exact: true,
+            },
+        ]
+    } else if (pathname.startsWith("/dashboard/admin")) {
+        groupLabel = "Admin"
+        items = [
+            {
+                label: "Overview",
+                icon: Home,
+                to: "/dashboard/admin",
+                exact: true,
+            },
+        ]
+    }
 
     return (
         <SidebarGroup>
-            <SidebarGroupLabel className="text-white/70">Student</SidebarGroupLabel>
+            <SidebarGroupLabel className="text-white/70">
+                {groupLabel}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
                 <SidebarMenu>
                     {items.map((item) => {
                         const Icon = item.icon
-                        const isActive = location.pathname.startsWith(item.to)
+
+                        // Exact items (Overview) only active on exact route
+                        // Non-exact items (Books, etc.) are active on /to or /to/...
+                        const isActive = item.exact
+                            ? pathname === item.to
+                            : pathname === item.to ||
+                            pathname.startsWith(item.to + "/")
 
                         return (
                             <SidebarMenuItem key={item.label}>

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react"
+import { useLocation } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -7,26 +8,36 @@ import { Bell, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import { me as apiMe } from "@/lib/authentication"
 
+// Simple module-level cache so we only call /api/auth/me once per page load
+let cachedUser: any | null = null
+let cachedUserLoaded = false
+
 /** Top header shown inside the dashboard content area */
 export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
+    const location = useLocation()
+    const pathname = location.pathname
+
     const [q, setQ] = React.useState("")
-    const [user, setUser] = React.useState<any | null>(null)
-    const [userLoading, setUserLoading] = React.useState(true)
+    const [user, setUser] = React.useState<any | null>(cachedUser)
 
     React.useEffect(() => {
+        // If we've already loaded user once, reuse it (no flicker on route changes)
+        if (cachedUserLoaded) return
+
         let cancelled = false
 
             ; (async () => {
                 try {
                     const u = await apiMe()
                     if (!cancelled) {
+                        cachedUser = u
+                        cachedUserLoaded = true
                         setUser(u)
                     }
                 } catch {
-                    // silently ignore – header will just not show the welcome line
-                } finally {
+                    // silently ignore – header will just not show the name
                     if (!cancelled) {
-                        setUserLoading(false)
+                        cachedUserLoaded = true
                     }
                 }
             })()
@@ -35,6 +46,14 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             cancelled = true
         }
     }, [])
+
+    function inferRoleFromPath(path: string): string | undefined {
+        if (path.startsWith("/dashboard/student")) return "student"
+        if (path.startsWith("/dashboard/librarian")) return "librarian"
+        if (path.startsWith("/dashboard/faculty")) return "faculty"
+        if (path.startsWith("/dashboard/admin")) return "admin"
+        return undefined
+    }
 
     function formatRole(raw: string | undefined): string {
         if (!raw) return ""
@@ -47,7 +66,9 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
     }
 
-    const roleLabel = formatRole(user?.accountType)
+    const rawRole = (user?.accountType as string | undefined) ?? inferRoleFromPath(pathname)
+    const roleLabel = formatRole(rawRole)
+
     const displayName =
         user?.fullName ||
         user?.name ||
@@ -56,7 +77,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         user?.email ||
         ""
 
-    const showWelcome = !userLoading && user && (roleLabel || displayName)
+    const showWelcome = !!roleLabel || !!displayName
 
     return (
         <header className="sticky top-0 z-10 bg-slate-800/60 backdrop-blur supports-backdrop-filter:bg-slate-800/60 border-b border-white/10">
@@ -69,12 +90,22 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                     </h1>
                     {showWelcome && (
                         <p className="mt-0.5 text-xs md:text-sm text-white/70 truncate">
-                            Welcome,{" "}
+                            Welcome
                             {roleLabel && (
-                                <span className="font-medium">{roleLabel}</span>
-                            )}{" "}
+                                <>
+                                    ,{" "}
+                                    <span className="font-medium">
+                                        {roleLabel}
+                                    </span>
+                                </>
+                            )}
                             {displayName && (
-                                <span className="font-medium">{displayName}</span>
+                                <>
+                                    {" "}
+                                    <span className="font-medium">
+                                        {displayName}
+                                    </span>
+                                </>
                             )}
                         </p>
                     )}

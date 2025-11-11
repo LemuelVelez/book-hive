@@ -271,14 +271,24 @@ export default function LibrarianBooksPage() {
                         <DialogTrigger asChild>
                             <Button
                                 type="button"
-                                className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                                className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
                             >
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add book
                             </Button>
                         </DialogTrigger>
 
-                        <DialogContent className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10">
+                        {/* Scrollable dialog with thin, dark scrollbar */}
+                        <DialogContent
+                            className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10
+                                       max-h-[85vh] overflow-y-auto
+                                       [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+                                       [&::-webkit-scrollbar]:w-1.5
+                                       [&::-webkit-scrollbar-track]:bg-slate-900/70
+                                       [&::-webkit-scrollbar-thumb]:bg-slate-700
+                                       [&::-webkit-scrollbar-thumb]:rounded-full
+                                       [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+                        >
                             <DialogHeader>
                                 <DialogTitle>Add a new book</DialogTitle>
                                 <DialogDescription className="text-white/70">
@@ -373,7 +383,7 @@ export default function LibrarianBooksPage() {
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    className="border-white/20 text-black/90 hover:text-white hover:bg-black/10 w-full sm:w-auto"
+                                    className="border-white/20 text-white hover:text-white hover:bg-black/10 w-full sm:w-auto"
                                     onClick={() => {
                                         setAddOpen(false);
                                         resetForm();
@@ -384,7 +394,7 @@ export default function LibrarianBooksPage() {
                                 </Button>
                                 <Button
                                     type="button"
-                                    className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white w-full sm:w-auto"
+                                    className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white w-full sm:w-auto"
                                     onClick={handleCreateBook}
                                     disabled={saving}
                                 >
