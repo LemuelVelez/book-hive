@@ -62,6 +62,7 @@ import {
     checkStudentIdAvailability,
     submitSupportTicket,
 } from "@/lib/authentication";
+import { dashboardForRole, type Role } from "@/hooks/use-session";
 
 import logo from "@/assets/images/logo.svg";
 
@@ -69,7 +70,6 @@ import logo from "@/assets/images/logo.svg";
 // Constants & type helpers
 // -------------------------
 type AccountType = "student" | "other";
-type AnyRole = "student" | "librarian" | "faculty" | "admin" | "other";
 
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th", "5th"] as const;
 type YearLevel = (typeof YEAR_LEVELS)[number];
@@ -128,22 +128,6 @@ function sanitizeRedirect(raw: string | null): string | null {
         return url;
     } catch {
         return null;
-    }
-}
-
-/** Role → dashboard path */
-function dashboardForRole(role: AnyRole) {
-    switch (role) {
-        case "student":
-            return "/dashboard/student";
-        case "librarian":
-            return "/dashboard/librarian";
-        case "faculty":
-            return "/dashboard/faculty";
-        case "admin":
-            return "/dashboard/admin";
-        default:
-            return "/dashboard/student";
     }
 }
 
@@ -330,7 +314,7 @@ export default function AuthPage() {
                 description: redirectParam ? "Redirecting to your previous page…" : "Redirecting to your dashboard…",
             });
 
-            const dest = redirectParam ?? dashboardForRole((user.accountType as AnyRole) ?? "student");
+            const dest = redirectParam ?? dashboardForRole((user.accountType as Role) ?? "student");
             navigate(dest, { replace: true });
         } catch (err: any) {
             const msg = String(err?.message || "Login failed. Please try again.");
@@ -872,7 +856,7 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="outline"
                                                         onClick={() => { setSupportOpen(false); resetSupport(); }}
-                                                        className="border-white/15 bg-black/50 text-white hover:text-white hover:bg-black/10 w-full sm:w-auto"
+                                                        className="border-white/15 bg-black/50 text:white hover:text-white hover:bg:black/10 w-full sm:w-auto"
                                                         disabled={supSubmitting}
                                                     >
                                                         Cancel
@@ -1068,7 +1052,7 @@ export default function AuthPage() {
                                                                     value={customProgram}
                                                                     onChange={(e) => setCustomProgram(e.target.value)}
                                                                     autoComplete="off"
-                                                                    className="bg-slate-900/70 border-white/10 text-white"
+                                                                    className="bg-slate-900/70 border-white/10 text:white"
                                                                 />
                                                             </div>
                                                         )}
