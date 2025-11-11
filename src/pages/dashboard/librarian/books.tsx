@@ -51,6 +51,19 @@ import {
     type BookDTO,
 } from "@/lib/books";
 
+// ✅ shadcn AlertDialog for delete confirmation
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 export default function LibrarianBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -193,12 +206,8 @@ export default function LibrarianBooksPage() {
         }
     };
 
+    // ✅ Now only does the actual delete work (no confirm here)
     const handleDelete = async (book: BookDTO) => {
-        const ok = window.confirm(
-            `Are you sure you want to delete "${book.title}" from the catalog?`
-        );
-        if (!ok) return;
-
         // Optimistic remove
         const previous = books;
         setBooks((prev) => prev.filter((b) => b.id !== book.id));
@@ -281,13 +290,13 @@ export default function LibrarianBooksPage() {
                         {/* Scrollable dialog with thin, dark scrollbar */}
                         <DialogContent
                             className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10
-                                       max-h-[85vh] overflow-y-auto
-                                       [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
-                                       [&::-webkit-scrollbar]:w-1.5
-                                       [&::-webkit-scrollbar-track]:bg-slate-900/70
-                                       [&::-webkit-scrollbar-thumb]:bg-slate-700
-                                       [&::-webkit-scrollbar-thumb]:rounded-full
-                                       [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+                         max-h-[85vh] overflow-y-auto
+                         [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+                         [&::-webkit-scrollbar]:w-1.5
+                         [&::-webkit-scrollbar-track]:bg-slate-900/70
+                         [&::-webkit-scrollbar-thumb]:bg-slate-700
+                         [&::-webkit-scrollbar-thumb]:rounded-full
+                         [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
                         >
                             <DialogHeader>
                                 <DialogTitle>Add a new book</DialogTitle>
@@ -371,7 +380,10 @@ export default function LibrarianBooksPage() {
                                         checked={available}
                                         onCheckedChange={(v) => setAvailable(v === true)}
                                     />
-                                    <Label htmlFor="available" className="text-sm text-white/80">
+                                    <Label
+                                        htmlFor="available"
+                                        className="text-sm text-white/80"
+                                    >
                                         Mark as available in the catalog
                                     </Label>
                                 </div>
@@ -539,16 +551,42 @@ export default function LibrarianBooksPage() {
                                             </button>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button
-                                                type="button"
-                                                size="icon"
-                                                variant="ghost"
-                                                className="text-red-300 hover:text-red-100 hover:bg-red-500/15"
-                                                onClick={() => handleDelete(book)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                                <span className="sr-only">Delete</span>
-                                            </Button>
+                                            {/* ✅ AlertDialog for delete confirmation */}
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="text-red-300 hover:text-red-100 hover:bg-red-500/15"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                        <span className="sr-only">Delete</span>
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>
+                                                            Delete “{book.title}”?
+                                                        </AlertDialogTitle>
+                                                        <AlertDialogDescription className="text-white/70">
+                                                            This action cannot be undone. This will permanently
+                                                            remove the book from the catalog.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel className="border-white/20 text-white hover:bg-black/20">
+                                                            Cancel
+                                                        </AlertDialogCancel>
+                                                        <AlertDialogAction
+                                                            className="bg-red-600 hover:bg-red-700 text-white"
+                                                            onClick={() => handleDelete(book)}
+                                                        >
+                                                            Delete book
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                         </TableCell>
                                     </TableRow>
                                 ))}
