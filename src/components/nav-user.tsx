@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import {
     SidebarMenu,
     SidebarMenuButton,
@@ -30,6 +30,7 @@ import { toast } from "sonner"
 import { me as apiMe, logout as apiLogout, type UserDTO } from "@/lib/authentication"
 import { Loader2 } from "lucide-react"
 
+/** ---------- small helpers ---------- */
 function initialsFrom(fullName?: string | null, email?: string | null) {
     const src = (fullName && fullName.trim()) || (email && email.trim()) || ""
     if (!src) return "U"
@@ -40,42 +41,64 @@ function initialsFrom(fullName?: string | null, email?: string | null) {
             : (src[0] || "") + (src[1] || "")
     return raw.toUpperCase()
 }
-
 function displayName(user: UserDTO | null) {
     if (!user) return "Guest"
     return user.fullName?.trim() || user.email?.split("@")[0] || "User"
 }
-
 function displayEmail(user: UserDTO | null) {
     if (!user) return "Not signed in"
     return user.email
 }
 
+/** ---------- module-level cache to avoid refetch flicker across routes ---------- */
+let cachedUser: UserDTO | null = null
+let cachedUserLoaded = false
+
 export function NavUser() {
     const navigate = useNavigate()
+    const location = useLocation()
     const { state } = useSidebar()
     const collapsed = state === "collapsed"
 
-    const [user, setUser] = React.useState<UserDTO | null>(null)
-    const [loading, setLoading] = React.useState(true)
+    const [user, setUser] = React.useState<UserDTO | null>(cachedUser)
+    const [loading, setLoading] = React.useState<boolean>(() => !cachedUserLoaded)
 
-    // Dropdown and confirmation dialog state
+    // Close any open menus/dialogs when navigating to a new route to prevent UI “stuck open” glitches
     const [menuOpen, setMenuOpen] = React.useState(false)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [loggingOut, setLoggingOut] = React.useState(false)
 
     React.useEffect(() => {
+        setMenuOpen(false)
+        setConfirmOpen(false)
+    }, [location.pathname])
+
+    // Fetch user only once per page load; reuse cached value to prevent flicker
+    React.useEffect(() => {
+        if (cachedUserLoaded) {
+            // nothing to do; already cached
+            setLoading(false)
+            return
+        }
+
         let cancelled = false
             ; (async () => {
                 try {
                     const u = await apiMe()
-                    if (!cancelled) setUser(u)
+                    if (!cancelled) {
+                        cachedUser = u
+                        cachedUserLoaded = true
+                        setUser(u)
+                    }
                 } catch {
-                    // ignore
+                    if (!cancelled) {
+                        cachedUserLoaded = true // avoid retry-loop flicker
+                    }
                 } finally {
                     if (!cancelled) setLoading(false)
                 }
             })()
+
         return () => {
             cancelled = true
         }
@@ -84,28 +107,30 @@ export function NavUser() {
     async function onLogoutConfirmed() {
         try {
             setLoggingOut(true)
-            await apiLogout() // POST /api/auth/logout and clear cookie
+            await apiLogout() // server clears session/cookie
             toast.success("You’ve been logged out.")
+            // Hard-close any open UI before navigating
+            setMenuOpen(false)
+            setConfirmOpen(false)
             navigate("/", { replace: true })
         } catch (err: any) {
             const msg = String(err?.message || "Failed to log out. Please try again.")
             toast.error("Logout failed", { description: msg })
         } finally {
             setLoggingOut(false)
-            setConfirmOpen(false)
         }
     }
 
     function openLogoutConfirm() {
-        setMenuOpen(false)       // close dropdown first
-        setConfirmOpen(true)     // then open the alert dialog
+        setMenuOpen(false) // close dropdown first
+        setConfirmOpen(true)
     }
 
     const name = displayName(user)
     const email = displayEmail(user)
     const initials = initialsFrom(user?.fullName, user?.email)
 
-    // Collapsed: show only a centered avatar
+    /** -------- collapsed: avatar only -------- */
     if (collapsed) {
         return (
             <SidebarMenu>
@@ -210,7 +235,7 @@ export function NavUser() {
         )
     }
 
-    // Expanded: avatar + name + email
+    /** -------- expanded: avatar + name + email -------- */
     return (
         <SidebarMenu>
             <SidebarMenuItem>
@@ -236,7 +261,7 @@ export function NavUser() {
                     <DropdownMenuContent
                         align="start"
                         side="top"
-                        className="w-[220px] bg-slate-900 text-white border-white/10"
+                        className="w=[220px] bg-slate-900 text-white border-white/10"
                     >
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex items-center gap-2">
