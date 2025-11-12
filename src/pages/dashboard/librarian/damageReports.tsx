@@ -39,25 +39,89 @@ export type DamageReportDTO = {
     studentName?: string | null;
     bookId: string | number;
     bookTitle: string | null;
-    damageType: string; // e.g., Torn Pages, Water Damage
-    severity: Severity; // minor | moderate | major
-    fee: number; // pesos
-    status: DamageStatus; // pending | assessed | paid
-    reportedAt: string; // ISO string
-    notes?: string | null;
+
+    // Core damage info
+    damageType: string;      // e.g., Torn Pages, Water Damage
+    severity: Severity;      // minor | moderate | major
+    status: DamageStatus;    // pending | assessed | paid
+    fee?: number;            // optional display
+    notes?: string | null;   // optional display
+    reportedAt?: string;     // optional display
+
+    // New: uploaded picture
+    photoUrl?: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
 
 /* ------------------------ Helpers (local) ------------------------ */
 
-function peso(n: number | string) {
+function peso(n: number | string | undefined) {
+    if (n === undefined) return "—";
     const num = Number(n) || 0;
     return new Intl.NumberFormat("en-PH", {
         style: "currency",
         currency: "PHP",
         maximumFractionDigits: 2,
     }).format(num);
+}
+
+function StatusBadge({ status }: { status: DamageStatus }) {
+    const map: Record<DamageStatus, string> = {
+        pending: "bg-yellow-500/15 text-yellow-300 border-yellow-500/20",
+        assessed: "bg-blue-500/15 text-blue-300 border-blue-500/20",
+        paid: "bg-emerald-500/15 text-emerald-300 border-emerald-500/20",
+    };
+    const label = status[0].toUpperCase() + status.slice(1);
+    return (
+        <Badge variant="outline" className={map[status]}>
+            {label}
+        </Badge>
+    );
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+    const map: Record<Severity, string> = {
+        minor: "bg-sky-500/15 text-sky-300 border-sky-500/20",
+        moderate: "bg-orange-500/15 text-orange-300 border-orange-500/20",
+        major: "bg-red-500/15 text-red-300 border-red-500/20",
+    };
+    const label = severity[0].toUpperCase() + severity.slice(1);
+    return (
+        <Badge variant="outline" className={map[severity]}>
+            {label}
+        </Badge>
+    );
+}
+
+function formatDamageInfo(r: DamageReportDTO) {
+    return (
+        <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{r.damageType}</span>
+                <SeverityBadge severity={r.severity} />
+                <StatusBadge status={r.status} />
+            </div>
+            <div className="text-xs text-white/70">
+                {r.fee !== undefined && (
+                    <span className="mr-3">Fee: {peso(r.fee)}</span>
+                )}
+                {r.reportedAt && (
+                    <span className="mr-3">
+                        Reported: {new Date(r.reportedAt).toLocaleString()}
+                    </span>
+                )}
+                {r.notes && <span className="block truncate">Notes: {r.notes}</span>}
+            </div>
+        </div>
+    );
+}
+
+function toAbsoluteUrl(url?: string | null) {
+    if (!url) return "";
+    if (/^https?:\/\//i.test(url)) return url;
+    // Assume backend exposes /uploads statically
+    return `${API_BASE}${url}`;
 }
 
 // Light client-side fetcher (kept local so we don't add new lib files)
@@ -104,36 +168,6 @@ async function fetchDamageReports(): Promise<DamageReportDTO[]> {
     return data.reports ?? [];
 }
 
-/* ----------------------------- UI bits ----------------------------- */
-
-function StatusBadge({ status }: { status: DamageStatus }) {
-    const map: Record<DamageStatus, string> = {
-        pending: "bg-yellow-500/15 text-yellow-300 border-yellow-500/20",
-        assessed: "bg-blue-500/15 text-blue-300 border-blue-500/20",
-        paid: "bg-emerald-500/15 text-emerald-300 border-emerald-500/20",
-    };
-    const label = status[0].toUpperCase() + status.slice(1);
-    return (
-        <Badge variant="outline" className={map[status]}>
-            {label}
-        </Badge>
-    );
-}
-
-function SeverityBadge({ severity }: { severity: Severity }) {
-    const map: Record<Severity, string> = {
-        minor: "bg-sky-500/15 text-sky-300 border-sky-500/20",
-        moderate: "bg-orange-500/15 text-orange-300 border-orange-500/20",
-        major: "bg-red-500/15 text-red-300 border-red-500/20",
-    };
-    const label = severity[0].toUpperCase() + severity.slice(1);
-    return (
-        <Badge variant="outline" className={map[severity]}>
-            {label}
-        </Badge>
-    );
-}
-
 /* --------------------------- Page Component --------------------------- */
 
 export default function LibrarianDamageReportsPage() {
@@ -143,9 +177,7 @@ export default function LibrarianDamageReportsPage() {
 
     const [rows, setRows] = React.useState<DamageReportDTO[]>([]);
     const [search, setSearch] = React.useState("");
-    const [statusFilter, setStatusFilter] = React.useState<
-        "all" | DamageStatus
-    >("all");
+    const [statusFilter, setStatusFilter] = React.useState<"all" | DamageStatus>("all");
 
     const load = React.useCallback(async () => {
         setError(null);
@@ -182,7 +214,6 @@ export default function LibrarianDamageReportsPage() {
         if (statusFilter !== "all") {
             list = list.filter((r) => r.status === statusFilter);
         }
-
         if (!q) return list;
 
         return list.filter((r) => {
@@ -195,16 +226,14 @@ export default function LibrarianDamageReportsPage() {
                 " " +
                 String(r.userId || "");
             const book = (r.bookTitle || "") + " " + String(r.bookId || "");
+            const damage = (r.damageType || "") + " " + (r.severity || "") + " " + (r.status || "");
             const notes = r.notes || "";
-            const damage = (r.damageType || "") + " " + (r.severity || "");
-            const status = r.status || "";
             return (
                 String(r.id).includes(q) ||
                 student.toLowerCase().includes(q) ||
                 book.toLowerCase().includes(q) ||
-                notes.toLowerCase().includes(q) ||
                 damage.toLowerCase().includes(q) ||
-                status.toLowerCase().includes(q)
+                notes.toLowerCase().includes(q)
             );
         });
     }, [rows, statusFilter, search]);
@@ -217,13 +246,38 @@ export default function LibrarianDamageReportsPage() {
                     <ShieldAlert className="h-5 w-5 mt-0.5 text-white/70" />
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Book Damage Reports</h2>
-                        <p className="text-xs text-white/70">
-                            Track reported damages, assessment status, and fees.
-                        </p>
+                        <p className="text-xs text-white/70">Track reported damages with photos.</p>
                     </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
+                        <Input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search by ID, user, book, info…"
+                            className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                        />
+                    </div>
+
+                    <div className="w-full sm:w-44">
+                        <Select
+                            value={statusFilter}
+                            onValueChange={(v) => setStatusFilter(v as "all" | DamageStatus)}
+                        >
+                            <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-900 text-white border-white/10">
+                                <SelectItem value="all">All statuses</SelectItem>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="assessed">Assessed</SelectItem>
+                                <SelectItem value="paid">Paid</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     <Button
                         type="button"
                         variant="outline"
@@ -244,42 +298,8 @@ export default function LibrarianDamageReportsPage() {
 
             <Card className="bg-slate-800/60 border-white/10">
                 <CardHeader className="pb-2">
-                    {/* Controls: vertical on mobile, horizontal on desktop */}
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <CardTitle>Damage reports list</CardTitle>
-
-                        <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
-                            {/* Search (full width on mobile) */}
-                            <div className="relative w-full md:w-80">
-                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
-                                <Input
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search by ID, user, book, damage, status…"
-                                    className="pl-9 bg-slate-900/70 border-white/20 text-white"
-                                />
-                            </div>
-
-                            {/* Status filter (full width on mobile) */}
-                            <div className="w-full md:w-44">
-                                <Select
-                                    value={statusFilter}
-                                    onValueChange={(v) =>
-                                        setStatusFilter(v as "all" | DamageStatus)
-                                    }
-                                >
-                                    <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
-                                        <SelectValue placeholder="Status" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-slate-900 text-white border-white/10">
-                                        <SelectItem value="all">All statuses</SelectItem>
-                                        <SelectItem value="pending">Pending</SelectItem>
-                                        <SelectItem value="assessed">Assessed</SelectItem>
-                                        <SelectItem value="paid">Paid</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
+                        <CardTitle>Damage reports</CardTitle>
                     </div>
                 </CardHeader>
 
@@ -302,13 +322,12 @@ export default function LibrarianDamageReportsPage() {
                             <div className="hidden md:block">
                                 <Table>
                                     <TableCaption className="text-xs text-white/60">
-                                        Showing {filtered.length}{" "}
-                                        {filtered.length === 1 ? "entry" : "entries"}.
+                                        Showing {filtered.length} {filtered.length === 1 ? "entry" : "entries"}.
                                     </TableCaption>
                                     <TableHeader>
                                         <TableRow className="border-white/10">
                                             <TableHead className="w-[90px] text-xs font-semibold text-white/70">
-                                                Report ID
+                                                Damage Report ID
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
                                                 Student Email (or ID)
@@ -317,63 +336,46 @@ export default function LibrarianDamageReportsPage() {
                                                 Book Title (or ID)
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                Damage
+                                                Damage Information
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                Severity
-                                            </TableHead>
-                                            <TableHead className="text-xs font-semibold text-white/70">
-                                                ₱ Fee
-                                            </TableHead>
-                                            <TableHead className="text-xs font-semibold text-white/70">
-                                                Status
-                                            </TableHead>
-                                            <TableHead className="text-xs font-semibold text-white/70">
-                                                Reported
-                                            </TableHead>
-                                            <TableHead className="text-xs font-semibold text-white/70">
-                                                Notes
+                                                Uploaded Picture
                                             </TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {filtered.map((r) => {
                                             const student =
-                                                r.studentEmail ||
-                                                r.studentId ||
-                                                r.studentName ||
-                                                `User #${r.userId}`;
+                                                r.studentEmail || r.studentId || r.studentName || `User #${r.userId}`;
                                             const book = r.bookTitle || `Book #${r.bookId}`;
-                                            const notes = r.notes || "—";
-                                            const date =
-                                                (r.reportedAt &&
-                                                    new Date(r.reportedAt).toLocaleString()) ||
-                                                "—";
+                                            const abs = toAbsoluteUrl(r.photoUrl);
                                             return (
                                                 <TableRow
                                                     key={r.id}
                                                     className="border-white/5 hover:bg-white/5 transition-colors"
                                                 >
-                                                    <TableCell className="text-xs opacity-80">
-                                                        {r.id}
-                                                    </TableCell>
+                                                    <TableCell className="text-xs opacity-80">{r.id}</TableCell>
                                                     <TableCell className="text-sm">{student}</TableCell>
                                                     <TableCell className="text-sm">{book}</TableCell>
-                                                    <TableCell className="text-sm">{r.damageType}</TableCell>
+                                                    <TableCell className="text-sm align-top">{formatDamageInfo(r)}</TableCell>
                                                     <TableCell className="text-sm">
-                                                        <SeverityBadge severity={r.severity} />
-                                                    </TableCell>
-                                                    <TableCell className="text-sm">
-                                                        {peso(r.fee)}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm">
-                                                        <StatusBadge status={r.status} />
-                                                    </TableCell>
-                                                    <TableCell className="text-xs whitespace-nowrap">
-                                                        {date}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm max-w-[360px] truncate" title={notes}>
-                                                        {notes}
+                                                        {abs ? (
+                                                            <a
+                                                                href={abs}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="inline-block"
+                                                            >
+                                                                <img
+                                                                    src={abs}
+                                                                    alt={`Damage proof #${r.id}`}
+                                                                    className="h-14 w-14 object-cover rounded-md border border-white/10"
+                                                                    loading="lazy"
+                                                                />
+                                                            </a>
+                                                        ) : (
+                                                            <span className="opacity-60">—</span>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -386,70 +388,48 @@ export default function LibrarianDamageReportsPage() {
                             <div className="md:hidden space-y-3">
                                 {filtered.map((r) => {
                                     const student =
-                                        r.studentEmail ||
-                                        r.studentId ||
-                                        r.studentName ||
-                                        `User #${r.userId}`;
+                                        r.studentEmail || r.studentId || r.studentName || `User #${r.userId}`;
                                     const book = r.bookTitle || `Book #${r.bookId}`;
-                                    const notes = r.notes || "—";
-                                    const date =
-                                        (r.reportedAt &&
-                                            new Date(r.reportedAt).toLocaleString()) ||
-                                        "—";
+                                    const abs = toAbsoluteUrl(r.photoUrl);
                                     return (
                                         <div
                                             key={r.id}
                                             className="rounded-xl border border-white/10 bg-slate-900/60 p-3"
                                         >
                                             <div className="flex items-center justify-between">
-                                                <div className="text-xs text-white/60">Report ID</div>
+                                                <div className="text-xs text-white/60">Damage Report ID</div>
                                                 <div className="text-xs font-semibold">{r.id}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Student</div>
+                                                <div className="text-[11px] text-white/60">Student Email (or ID)</div>
                                                 <div className="text-sm">{student}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Book</div>
+                                                <div className="text-[11px] text-white/60">Book Title (or ID)</div>
                                                 <div className="text-sm">{book}</div>
                                             </div>
 
-                                            <div className="mt-2 grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <div className="text-[11px] text-white/60">Damage</div>
-                                                    <div className="text-sm">{r.damageType}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-[11px] text-white/60">Severity</div>
-                                                    <div className="text-sm">
-                                                        <SeverityBadge severity={r.severity} />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="mt-2 grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <div className="text-[11px] text-white/60">Fee</div>
-                                                    <div className="text-sm">{peso(r.fee)}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-[11px] text-white/60">Status</div>
-                                                    <div className="text-sm">
-                                                        <StatusBadge status={r.status} />
-                                                    </div>
-                                                </div>
+                                            <div className="mt-2">
+                                                <div className="text-[11px] text-white/60">Damage Information</div>
+                                                <div className="text-sm">{formatDamageInfo(r)}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Reported</div>
-                                                <div className="text-xs">{date}</div>
-                                            </div>
-
-                                            <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Notes</div>
-                                                <div className="text-sm">{notes}</div>
+                                                <div className="text-[11px] text-white/60">Uploaded Picture</div>
+                                                {abs ? (
+                                                    <a href={abs} target="_blank" rel="noreferrer" className="inline-block">
+                                                        <img
+                                                            src={abs}
+                                                            alt={`Damage proof #${r.id}`}
+                                                            className="h-24 w-24 object-cover rounded-md border border-white/10"
+                                                            loading="lazy"
+                                                        />
+                                                    </a>
+                                                ) : (
+                                                    <div className="text-sm opacity-60">—</div>
+                                                )}
                                             </div>
                                         </div>
                                     );

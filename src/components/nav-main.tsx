@@ -101,32 +101,39 @@ export function NavMain() {
             <SidebarGroupLabel className="text-white/70">
                 {groupLabel}
             </SidebarGroupLabel>
+
             <SidebarGroupContent>
-                <SidebarMenu>
-                    {items.map((item) => {
-                        const Icon = item.icon
+                {/*
+          Wrap the menu so that long labels or tight layouts can scroll horizontally.
+          The scrollbar is styled via the global `.support-scroll` class from src/index.css.
+        */}
+                <div className="support-scroll overflow-x-auto overflow-y-visible whitespace-nowrap pr-1">
+                    <SidebarMenu className="min-w-full">
+                        {items.map((item) => {
+                            const Icon = item.icon
 
-                        const isActive = item.exact
-                            ? pathname === item.to
-                            : pathname === item.to || pathname.startsWith(item.to + "/")
+                            const isActive = item.exact
+                                ? pathname === item.to
+                                : pathname === item.to || pathname.startsWith(item.to + "/")
 
-                        return (
-                            <SidebarMenuItem key={item.label}>
-                                <SidebarMenuButton
-                                    asChild
-                                    isActive={isActive}
-                                    tooltip={item.label}
-                                    className="data-[active=true]:bg-white/10"
-                                >
-                                    <Link to={item.to}>
-                                        <Icon />
-                                        <span>{item.label}</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        )
-                    })}
-                </SidebarMenu>
+                            return (
+                                <SidebarMenuItem key={item.label} className="whitespace-nowrap">
+                                    <SidebarMenuButton
+                                        asChild
+                                        isActive={isActive}
+                                        tooltip={item.label}
+                                        className="data-[active=true]:bg-white/10"
+                                    >
+                                        <Link to={item.to}>
+                                            <Icon />
+                                            <span>{item.label}</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            )
+                        })}
+                    </SidebarMenu>
+                </div>
             </SidebarGroupContent>
         </SidebarGroup>
     )

@@ -32,7 +32,7 @@ const LibrarianUsersPage = lazy(
 )
 // ✅ Librarian Borrow Records page
 const LibrarianBorrowRecordsPage = lazy(
-  () => import('./pages/dashboard/librarian/borrowrecords')
+  () => import('./pages/dashboard/librarian/borrowRecords')
 )
 // ✅ Librarian Feedbacks page
 const LibrarianFeedbacksPage = lazy(
@@ -40,7 +40,7 @@ const LibrarianFeedbacksPage = lazy(
 )
 // ✅ NEW: Librarian Damage Reports page
 const LibrarianDamageReportsPage = lazy(
-  () => import('./pages/dashboard/librarian/damagereports')
+  () => import('./pages/dashboard/librarian/damageReports')
 )
 
 const FacultyDashboard = lazy(
