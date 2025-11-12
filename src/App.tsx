@@ -26,9 +26,13 @@ const LibrarianDashboard = lazy(
 const LibrarianBooksPage = lazy(
   () => import('./pages/dashboard/librarian/books')
 )
-// ✅ New: Librarian Users page
+// ✅ Librarian Users page
 const LibrarianUsersPage = lazy(
   () => import('./pages/dashboard/librarian/users')
+)
+// ✅ New: Librarian Borrow Records page
+const LibrarianBorrowRecordsPage = lazy(
+  () => import('./pages/dashboard/librarian/borrowrecords')
 )
 
 const FacultyDashboard = lazy(
@@ -122,12 +126,22 @@ function App() {
             }
           />
 
-          {/* ✅ New route: Librarian Users (read-only) */}
+          {/* ✅ Librarian Users (read-only) */}
           <Route
             path="/dashboard/librarian/users"
             element={
               <RequireRole allow={['librarian']}>
                 <LibrarianUsersPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ New: Librarian Borrow Records */}
+          <Route
+            path="/dashboard/librarian/borrow-records"
+            element={
+              <RequireRole allow={['librarian']}>
+                <LibrarianBorrowRecordsPage />
               </RequireRole>
             }
           />

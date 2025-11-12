@@ -8,7 +8,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Home, BookOpen, Users2 } from "lucide-react"
+import { Home, BookOpen, Users2, ListChecks } from "lucide-react"
 
 type Item = {
     label: string
@@ -52,9 +52,12 @@ export function NavMain() {
                 label: "Books",
                 icon: BookOpen,
                 to: "/dashboard/librarian/books",
-                // exact: false by default – stays active for nested routes
             },
-            // ✅ New: Users (read-only)
+            {
+                label: "Borrow Records",
+                icon: ListChecks,
+                to: "/dashboard/librarian/borrow-records",
+            },
             {
                 label: "Users",
                 icon: Users2,
@@ -93,12 +96,9 @@ export function NavMain() {
                     {items.map((item) => {
                         const Icon = item.icon
 
-                        // Exact items (Overview) only active on exact route
-                        // Non-exact items (Books, Users, etc.) are active on /to or /to/...
                         const isActive = item.exact
                             ? pathname === item.to
-                            : pathname === item.to ||
-                            pathname.startsWith(item.to + "/")
+                            : pathname === item.to || pathname.startsWith(item.to + "/")
 
                         return (
                             <SidebarMenuItem key={item.label}>
