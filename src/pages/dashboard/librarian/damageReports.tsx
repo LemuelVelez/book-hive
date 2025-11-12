@@ -49,7 +49,7 @@ export type DamageReportDTO = {
     reportedAt?: string;     // optional display
 
     // New: uploaded picture
-    photoUrl?: string | null;
+    photoUrl?: string | null; // may be absolute S3 URL now
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -117,10 +117,13 @@ function formatDamageInfo(r: DamageReportDTO) {
     );
 }
 
+/** Resolves image URL.
+ * - If backend stores absolute S3 URL -> return as-is
+ * - If legacy relative path (/uploads/..) -> prefix API_BASE
+ */
 function toAbsoluteUrl(url?: string | null) {
     if (!url) return "";
-    if (/^https?:\/\//i.test(url)) return url;
-    // Assume backend exposes /uploads statically
+    if (/^https?:\/\//i.test(url)) return url; // S3/CloudFront/etc.
     return `${API_BASE}${url}`;
 }
 
