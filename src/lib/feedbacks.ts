@@ -1,22 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { BORROW_ROUTES } from "@/api/borrows/route";
+import { FEEDBACK_ROUTES } from "@/api/feedbacks/route";
 import { API_BASE } from "@/api/auth/route";
 
-export type BorrowStatus = "borrowed" | "returned";
-
-export type BorrowRecordDTO = {
+export type FeedbackDTO = {
     id: string;
-    userId: string;
+    userId: string | number;
     studentEmail: string | null;
     studentId: string | null;
-    studentName: string | null;
-    bookId: string;
+    bookId: string | number;
     bookTitle: string | null;
-    borrowDate: string; // ISO date (YYYY-MM-DD)
-    dueDate: string;    // ISO date
-    returnDate: string | null; // ISO date or null
-    status: BorrowStatus;
-    fine: number; // pesos
+    rating: number; // 1..5
+    comment: string | null;
+    createdAt?: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -26,6 +21,7 @@ type FetchInit = Omit<RequestInit, "body" | "credentials"> & {
     asFormData?: boolean;
 };
 
+/** Safely pull a readable message out of an unknown error value */
 function getErrorMessage(e: unknown): string {
     if (!e) return "";
     if (typeof e === "string") return e;
@@ -47,7 +43,7 @@ async function requestJSON<T = unknown>(
     const { asFormData, body, headers, ...rest } = init;
 
     const finalInit: RequestInit = {
-        credentials: "include",
+        credentials: "include", // use cookies for auth session if any
         method: "GET",
         ...rest,
         headers: new Headers(headers || {}),
@@ -95,48 +91,10 @@ async function requestJSON<T = unknown>(
     return (isJson ? resp.json() : (null as any)) as Promise<T>;
 }
 
-/* ----------------------- Public Borrow Records API ----------------------- */
-
-export type CreateBorrowPayload = {
-    userId: string | number;
-    bookId: string | number;
-    borrowDate?: string; // YYYY-MM-DD (defaults server-side to today)
-    dueDate: string;     // YYYY-MM-DD
-};
-
-export type UpdateBorrowPayload = Partial<{
-    returnDate: string | null; // YYYY-MM-DD or null
-    status: BorrowStatus;
-}>;
-
-export async function fetchBorrowRecords(): Promise<BorrowRecordDTO[]> {
-    type Resp = JsonOk<{ records: BorrowRecordDTO[] }>;
-    const res = await requestJSON<Resp>(BORROW_ROUTES.list, { method: "GET" });
-    return res.records;
-}
-
-export async function createBorrowRecord(
-    payload: CreateBorrowPayload
-): Promise<BorrowRecordDTO> {
-    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
-    const res = await requestJSON<Resp>(BORROW_ROUTES.create, {
-        method: "POST",
-        body: payload,
-    });
-    return res.record;
-}
-
-export async function markBorrowReturned(
-    id: string | number,
-    returnDate?: string
-): Promise<BorrowRecordDTO> {
-    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
-    const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {
-        method: "PATCH",
-        body: {
-            status: "returned",
-            returnDate: returnDate ?? new Date().toISOString().slice(0, 10),
-        },
-    });
-    return res.record;
+/* ----------------------- Public Feedbacks API ----------------------- */
+/** GET /api/feedbacks -> { ok: true, feedbacks: FeedbackDTO[] } */
+export async function fetchFeedbacks(): Promise<FeedbackDTO[]> {
+    type Resp = JsonOk<{ feedbacks: FeedbackDTO[] }>;
+    const res = await requestJSON<Resp>(FEEDBACK_ROUTES.list, { method: "GET" });
+    return res.feedbacks;
 }

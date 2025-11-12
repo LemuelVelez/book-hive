@@ -8,7 +8,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Home, BookOpen, Users2, ListChecks } from "lucide-react"
+import { Home, BookOpen, Users2, ListChecks, MessageSquare } from "lucide-react"
 
 type Item = {
     label: string
@@ -57,6 +57,11 @@ export function NavMain() {
                 label: "Borrow Records",
                 icon: ListChecks,
                 to: "/dashboard/librarian/borrow-records",
+            },
+            {
+                label: "Feedbacks",
+                icon: MessageSquare,
+                to: "/dashboard/librarian/feedbacks",
             },
             {
                 label: "Users",
