@@ -144,7 +144,7 @@ export default function LibrarianUsersPage() {
     }, [users, search]);
 
     return (
-        <DashboardLayout title="Users (Read-only)">
+        <DashboardLayout title="Users">
             <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                     <Users2 className="h-5 w-5" />
