@@ -8,7 +8,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Home, BookOpen } from "lucide-react"
+import { Home, BookOpen, Users2 } from "lucide-react"
 
 type Item = {
     label: string
@@ -54,6 +54,12 @@ export function NavMain() {
                 to: "/dashboard/librarian/books",
                 // exact: false by default – stays active for nested routes
             },
+            // ✅ New: Users (read-only)
+            {
+                label: "Users",
+                icon: Users2,
+                to: "/dashboard/librarian/users",
+            },
         ]
     } else if (pathname.startsWith("/dashboard/faculty")) {
         groupLabel = "Faculty"
@@ -88,7 +94,7 @@ export function NavMain() {
                         const Icon = item.icon
 
                         // Exact items (Overview) only active on exact route
-                        // Non-exact items (Books, etc.) are active on /to or /to/...
+                        // Non-exact items (Books, Users, etc.) are active on /to or /to/...
                         const isActive = item.exact
                             ? pathname === item.to
                             : pathname === item.to ||
