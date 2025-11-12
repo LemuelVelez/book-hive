@@ -1,322 +1,466 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  BookOpen,
-  Users,
-  AlertTriangle,
-  ClipboardList,
-  CalendarDays,
-  Clock,
-  ChevronRight,
-} from "lucide-react";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
+import {
+  BookOpen,
+  ListChecks,
+  MessageSquare,
+  RefreshCcw,
+  Loader2,
+  AlertTriangle,
+  ShieldAlert,
+  Star,
+} from "lucide-react";
 
-// ---- Mock data ----
-const STATS = [
-  { label: "Books in catalog", value: 1240, icon: BookOpen },
-  { label: "Active borrowers", value: 312, icon: Users },
-  { label: "Overdue items", value: 18, icon: AlertTriangle },
-  { label: "Reservations today", value: 27, icon: ClipboardList },
-];
+import { fetchBooks, type BookDTO } from "@/lib/books";
+import { fetchBorrowRecords, type BorrowRecordDTO } from "@/lib/borrows";
+import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
+import { API_BASE } from "@/api/auth/route";
 
-const DUE_TODAY = [
-  {
-    id: "loan-1001",
-    title: "Clean Code",
-    borrower: "Juan Dela Cruz",
-    due: "Today • 5:00 PM",
-    hoursLeft: 6,
-  },
-  {
-    id: "loan-1002",
-    title: "Designing Data-Intensive Applications",
-    borrower: "Maria Santos",
-    due: "Today • 4:30 PM",
-    hoursLeft: 5,
-  },
-  {
-    id: "loan-1003",
-    title: "Introduction to Algorithms",
-    borrower: "John Cena",
-    due: "Today • 7:00 PM",
-    hoursLeft: 8,
-  },
-];
+async function fetchDamageReportsCount(): Promise<number> {
+  try {
+    const resp = await fetch(`${API_BASE}/api/damage-reports`, {
+      method: "GET",
+      credentials: "include",
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-const PENDING_RESERVATIONS = [
-  {
-    id: "res-2001",
-    title: "Refactoring UI",
-    borrower: "Ana Dizon",
-    requestedAt: "Today, 8:10 AM",
-  },
-  {
-    id: "res-2002",
-    title: "You Don’t Know JS Yet",
-    borrower: "Mark Reyes",
-    requestedAt: "Today, 7:42 AM",
-  },
-  {
-    id: "res-2003",
-    title: "Database System Concepts",
-    borrower: "Kyla Lim",
-    requestedAt: "Yesterday, 4:18 PM",
-  },
-];
+    const data = await resp.json();
+    const list =
+      (Array.isArray(data.damageReports) && data.damageReports) ||
+      (Array.isArray(data.reports) && data.reports) ||
+      (Array.isArray(data.items) && data.items) ||
+      [];
 
-const RECENT_ACTIVITY = [
-  {
-    id: "act-1",
-    when: "Today, 9:15 AM",
-    text: "Marked 5 books as returned.",
-  },
-  {
-    id: "act-2",
-    when: "Today, 8:30 AM",
-    text: "Approved reservation: Clean Architecture (for BSCS-3A).",
-  },
-  {
-    id: "act-3",
-    when: "Yesterday, 3:45 PM",
-    text: "Added 12 new titles to the CCS collection.",
-  },
-];
-
-// Simple stat block
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: number | string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-}) {
-  return (
-    <Card className="bg-slate-800/60 border-white/10">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium opacity-80">{label}</CardTitle>
-          <Icon className="h-4 w-4 opacity-70" />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-semibold">{value}</div>
-      </CardContent>
-    </Card>
-  );
+    return list.length;
+  } catch (err) {
+    console.warn("[LibrarianDashboard] Failed to fetch damage reports count", err);
+    return 0;
+  }
 }
 
-export default function LibrarianDashboardPage() {
-  const [loadingQuickActions, setLoadingQuickActions] = React.useState(true);
+export default function LibrarianDashboard() {
+  const [books, setBooks] = React.useState<BookDTO[]>([]);
+  const [borrows, setBorrows] = React.useState<BorrowRecordDTO[]>([]);
+  const [feedbacks, setFeedbacks] = React.useState<FeedbackDTO[]>([]);
+  const [damageCount, setDamageCount] = React.useState<number | null>(null);
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setLoadingQuickActions(false), 900); // mock load
-    return () => clearTimeout(t);
+  const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadOverview = React.useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const booksData = await fetchBooks();
+      const borrowsData = await fetchBorrowRecords();
+      const feedbackData = await fetchFeedbacks();
+      const damageTotal = await fetchDamageReportsCount();
+
+      setBooks(booksData);
+      setBorrows(borrowsData);
+      setFeedbacks(feedbackData);
+      setDamageCount(damageTotal);
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        "Failed to load overview data. Please try again in a moment.";
+      setError(msg);
+      toast.error("Failed to load librarian overview", { description: msg });
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  React.useEffect(() => {
+    void loadOverview();
+  }, [loadOverview]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadOverview();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const metrics = React.useMemo(() => {
+    const totalBooks = books.length;
+    const availableBooks = books.filter((b) => b.available).length;
+
+    const activeBorrows = borrows.filter((r) => r.status === "borrowed").length;
+    const returnedBorrows = borrows.filter((r) => r.status === "returned").length;
+
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const overdueBorrows = borrows.filter(
+      (r) => r.status === "borrowed" && r.dueDate < today
+    ).length;
+
+    const feedbackCount = feedbacks.length;
+    const avgRating =
+      feedbackCount > 0
+        ? feedbacks.reduce((sum, f) => sum + (f.rating || 0), 0) / feedbackCount
+        : null;
+
+    return {
+      totalBooks,
+      availableBooks,
+      activeBorrows,
+      returnedBorrows,
+      overdueBorrows,
+      feedbackCount,
+      avgRating,
+      damageReports: damageCount ?? 0,
+    };
+  }, [books, borrows, feedbacks, damageCount]);
+
+  const recentBorrowRecords = React.useMemo(() => {
+    const sorted = [...borrows].sort((a, b) =>
+      b.borrowDate.localeCompare(a.borrowDate)
+    );
+    return sorted.slice(0, 5);
+  }, [borrows]);
+
+  const latestFeedbacks = React.useMemo(() => {
+    const sorted = [...feedbacks].sort((a, b) => {
+      const da = a.createdAt ?? "";
+      const db = b.createdAt ?? "";
+      return db.localeCompare(da);
+    });
+    return sorted.slice(0, 5);
+  }, [feedbacks]);
+
   return (
-    <DashboardLayout title="Librarian Dashboard">
-      {/* KPIs */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {STATS.map((s) => (
-          <StatCard key={s.label} label={s.label} value={s.value} icon={s.icon} />
-        ))}
-      </section>
+    <DashboardLayout title="Librarian Overview">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-purple-600/20 text-purple-300">
+              <BookOpen className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold leading-tight">
+                Library operations overview
+              </h2>
+              <p className="text-xs text-white/70">
+                Quick snapshot of books, borrow activity, feedback, and damage reports.
+              </p>
+            </div>
+          </div>
 
-      {/* Main grid */}
-      <section className="mt-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Due today */}
-        <Card className="lg:col-span-3 bg-slate-800/60 border-white/10">
-          <CardHeader className="pb-2 flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5" />
-              Due today
-            </CardTitle>
+          <div className="flex items-center gap-2">
             <Button
-              size="sm"
+              type="button"
               variant="outline"
+              size="icon"
               className="border-white/20 text-white/90 hover:bg-white/10"
-              onClick={() =>
-                toast.info("This is mock data.", {
-                  description: "Hook this action to a real filter later.",
-                })
-              }
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
             >
-              View full loans list
+              {refreshing || loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCcw className="h-4 w-4" />
+              )}
+              <span className="sr-only">Refresh overview</span>
             </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {DUE_TODAY.map((loan) => (
-              <div
-                key={loan.id}
-                className="rounded-md border border-white/10 p-3 flex items-start justify-between bg-slate-900/40"
-              >
-                <div>
-                  <div className="font-medium leading-tight">{loan.title}</div>
-                  <div className="text-sm opacity-80">
-                    Borrower: <span className="font-medium opacity-90">{loan.borrower}</span>
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 text-xs opacity-80">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{loan.due}</span>
-                    <span className="opacity-60">•</span>
-                    <span>{loan.hoursLeft} hours left</span>
-                  </div>
-                </div>
-                <div className="shrink-0 flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-white/20 text-white/90 hover:bg-white/10"
-                    onClick={() =>
-                      toast.success("Marked as returned (mock)", {
-                        description: loan.title,
-                      })
-                    }
-                  >
-                    Mark returned
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="hover:bg-white/10"
-                    onClick={() => toast.message("Open loan details (mock)")}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                    <span className="sr-only">Open</span>
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Pending reservations */}
-        <Card className="lg:col-span-2 bg-slate-800/60 border-white/10">
-          <CardHeader className="pb-2 flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Pending reservations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="space-y-3">
-              {PENDING_RESERVATIONS.map((r) => (
-                <li
-                  key={r.id}
-                  className="rounded-md border border-white/10 p-3 bg-slate-900/40 flex items-start justify-between gap-3"
-                >
-                  <div>
-                    <div className="font-medium leading-tight">{r.title}</div>
-                    <div className="text-sm opacity-80">
-                      Requestor:{" "}
-                      <span className="font-medium opacity-90">{r.borrower}</span>
+        {error && (
+          <div className="rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-100">
+            {error}
+          </div>
+        )}
+
+        {/* KPI cards */}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+          {/* Total books */}
+          <Card className="bg-slate-800/60 border-white/10">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm font-medium text-white/80">
+                Books in catalog
+              </CardTitle>
+              <BookOpen className="h-4 w-4 text-white/60" />
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <Skeleton className="h-7 w-16" />
+              ) : (
+                <div className="text-2xl font-semibold">
+                  {metrics.totalBooks.toLocaleString()}
+                </div>
+              )}
+              <p className="text-xs text-white/60 mt-1">
+                Available:{" "}
+                {loading ? (
+                  <Skeleton className="h-4 w-16 inline-block align-middle" />
+                ) : (
+                  metrics.availableBooks.toLocaleString()
+                )}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Borrow activity */}
+          <Card className="bg-slate-800/60 border-white/10">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm font-medium text-white/80">
+                Active borrows
+              </CardTitle>
+              <ListChecks className="h-4 w-4 text-white/60" />
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <Skeleton className="h-7 w-16" />
+              ) : (
+                <div className="text-2xl font-semibold">
+                  {metrics.activeBorrows.toLocaleString()}
+                </div>
+              )}
+              <p className="text-xs text-white/60 mt-1">
+                Returned so far:{" "}
+                {loading ? (
+                  <Skeleton className="h-4 w-20 inline-block align-middle" />
+                ) : (
+                  metrics.returnedBorrows.toLocaleString()
+                )}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Overdue items */}
+          <Card className="bg-slate-800/60 border-white/10">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm font-medium text-white/80">
+                Overdue items
+              </CardTitle>
+              <AlertTriangle className="h-4 w-4 text-amber-300" />
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <Skeleton className="h-7 w-16" />
+              ) : (
+                <div className="text-2xl font-semibold text-amber-200">
+                  {metrics.overdueBorrows.toLocaleString()}
+                </div>
+              )}
+              <p className="text-xs text-white/60 mt-1">
+                Items still not returned past due date.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Damage reports */}
+          <Card className="bg-slate-800/60 border-white/10">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm font-medium text-white/80">
+                Damage reports
+              </CardTitle>
+              <ShieldAlert className="h-4 w-4 text-red-300" />
+            </CardHeader>
+            <CardContent>
+              {loading && damageCount === null ? (
+                <Skeleton className="h-7 w-16" />
+              ) : (
+                <div className="text-2xl font-semibold text-red-200">
+                  {metrics.damageReports.toLocaleString()}
+                </div>
+              )}
+              <p className="text-xs text-white/60 mt-1">
+                Total reports filed for damaged items.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Feedback / rating */}
+          <Card className="bg-slate-800/60 border-white/10">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm font-medium text-white/80">
+                Student feedback
+              </CardTitle>
+              <MessageSquare className="h-4 w-4 text-white/60" />
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <Skeleton className="h-7 w-24" />
+              ) : metrics.avgRating != null ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-semibold">
+                    {metrics.avgRating.toFixed(1)}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs text-yellow-200">
+                    <Star className="h-3 w-3 fill-yellow-300 text-yellow-300" />
+                    / 5.0
+                  </span>
+                </div>
+              ) : (
+                <div className="text-sm text-white/70">No ratings yet</div>
+              )}
+              <p className="text-xs text-white/60 mt-1">
+                Total feedback:{" "}
+                {loading ? (
+                  <Skeleton className="h-4 w-16 inline-block align-middle" />
+                ) : (
+                  metrics.feedbackCount.toLocaleString()
+                )}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Activity panels */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Recent borrow activity */}
+          <Card className="bg-slate-800/60 border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-white/70" />
+                Recent borrow activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              {loading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-7 w-full" />
+                  <Skeleton className="h-7 w-full" />
+                  <Skeleton className="h-7 w-full" />
+                  <Skeleton className="h-7 w-full" />
+                </div>
+              ) : recentBorrowRecords.length === 0 ? (
+                <div className="py-6 text-xs text-white/70 text-center">
+                  No borrow activity recorded yet.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10">
+                      <TableHead className="text-xs text-white/70">
+                        Student
+                      </TableHead>
+                      <TableHead className="text-xs text-white/70">
+                        Book
+                      </TableHead>
+                      <TableHead className="text-xs text-white/70">
+                        Status
+                      </TableHead>
+                      <TableHead className="text-xs text-white/70">
+                        Due date
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recentBorrowRecords.map((r) => {
+                      const studentLabel =
+                        r.studentName ||
+                        r.studentEmail ||
+                        r.studentId ||
+                        "Unknown";
+                      const status = r.status;
+                      const statusClasses =
+                        status === "returned"
+                          ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
+                          : "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80";
+                      const statusLabel =
+                        status === "returned" ? "Returned" : "Borrowed";
+
+                      return (
+                        <TableRow
+                          key={r.id}
+                          className="border-white/5 hover:bg-white/5 transition-colors"
+                        >
+                          <TableCell className="text-xs text-white/80">
+                            {studentLabel}
+                          </TableCell>
+                          <TableCell className="text-xs text-white/90">
+                            {r.bookTitle || r.bookId || "Unknown book"}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <Badge
+                              className={statusClasses}
+                              variant="outline"
+                            >
+                              {statusLabel}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-white/80">
+                            {r.dueDate || "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Latest feedback */}
+          <Card className="bg-slate-800/60 border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-white/70" />
+                Latest feedback
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {loading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-3/4" />
+                </div>
+              ) : latestFeedbacks.length === 0 ? (
+                <div className="py-6 text-xs text-white/70 text-center">
+                  No feedback submitted yet.
+                </div>
+              ) : (
+                latestFeedbacks.map((f) => (
+                  <div
+                    key={f.id}
+                    className="rounded-md border border-white/10 bg-slate-900/60 px-3 py-2 text-xs space-y-1"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-white/90 truncate">
+                        {f.bookTitle || `Book #${f.bookId}`}
+                      </div>
+                      <div className="inline-flex items-center gap-1 text-yellow-200">
+                        <Star className="h-3 w-3 fill-yellow-300 text-yellow-300" />
+                        <span>{f.rating.toFixed(1)}</span>
+                      </div>
                     </div>
-                    <div className="text-xs opacity-70">{r.requestedAt}</div>
+                    {f.comment && (
+                      <p className="text-white/80 wrap-break-word">
+                        {f.comment}
+                      </p>
+                    )}
+                    {f.createdAt && (
+                      <p className="text-[10px] text-white/50">
+                        {new Date(f.createdAt).toLocaleString()}
+                      </p>
+                    )}
                   </div>
-                  <div className="shrink-0 flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                      onClick={() =>
-                        toast.success("Reservation approved (mock)", {
-                          description: r.title,
-                        })
-                      }
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-white/20 text-white/90 hover:bg-white/10"
-                      onClick={() =>
-                        toast.warning("Reservation declined (mock)", {
-                          description: r.title,
-                        })
-                      }
-                    >
-                      Decline
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* Quick actions / recent activity */}
-      <section className="mt-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Quick actions (mock skeleton) */}
-        <Card className="lg:col-span-2 bg-slate-800/60 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle>Quick actions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loadingQuickActions ? (
-              <div className="space-y-3">
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                <Button
-                  variant="outline"
-                  className="justify-start border-white/20 text-white/90 hover:bg-white/10"
-                  onClick={() =>
-                    toast.message("Navigate to Books Management (mock)", {
-                      description: "Wire this button to /dashboard/librarian/books.",
-                    })
-                  }
-                >
-                  Add or edit books
-                </Button>
-                <Button
-                  variant="outline"
-                  className="justify-start border-white/20 text-white/90 hover:bg-white/10"
-                  onClick={() => toast.message("Run inventory report (mock)")}
-                >
-                  Run inventory report
-                </Button>
-                <Button
-                  variant="outline"
-                  className="justify-start border-white/20 text-white/90 hover:bg-white/10"
-                  onClick={() => toast.message("Export overdue list (mock)")}
-                >
-                  Export overdue list
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent activity */}
-        <Card className="lg:col-span-3 bg-slate-800/60 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Recent librarian activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="space-y-4">
-              {RECENT_ACTIVITY.map((a) => (
-                <li key={a.id} className="relative pl-6">
-                  <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-pink-500" />
-                  <div className="text-sm">{a.text}</div>
-                  <div className="text-xs opacity-70">{a.when}</div>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-      </section>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </DashboardLayout>
   );
 }
