@@ -2,7 +2,7 @@
 import { BORROW_ROUTES } from "@/api/borrows/route";
 import { API_BASE } from "@/api/auth/route";
 
-export type BorrowStatus = "borrowed" | "returned";
+export type BorrowStatus = "borrowed" | "pending" | "returned";
 
 export type BorrowRecordDTO = {
     id: string;
@@ -13,7 +13,7 @@ export type BorrowRecordDTO = {
     bookId: string;
     bookTitle: string | null;
     borrowDate: string; // ISO date (YYYY-MM-DD)
-    dueDate: string;    // ISO date
+    dueDate: string; // ISO date
     returnDate: string | null; // ISO date or null
     status: BorrowStatus;
     fine: number; // pesos
@@ -82,12 +82,16 @@ async function requestJSON<T = unknown>(
                 if (data && typeof data === "object" && typeof data.message === "string") {
                     message = data.message;
                 }
-            } catch { /* empty */ }
+            } catch {
+                /* empty */
+            }
         } else {
             try {
                 const text = await resp.text();
                 if (text) message = text;
-            } catch { /* empty */ }
+            } catch {
+                /* empty */
+            }
         }
         throw new Error(message);
     }
@@ -101,7 +105,7 @@ export type CreateBorrowPayload = {
     userId: string | number;
     bookId: string | number;
     borrowDate?: string; // YYYY-MM-DD (defaults server-side to today)
-    dueDate: string;     // YYYY-MM-DD
+    dueDate: string; // YYYY-MM-DD
 };
 
 export type UpdateBorrowPayload = Partial<{
@@ -149,6 +153,31 @@ export async function createSelfBorrow(
     return res.record;
 }
 
+/**
+ * Student online action: request to return a book.
+ * - Sets status to "pending"
+ * - Does NOT change return_date
+ * - The book remains unavailable until a librarian marks it as "returned".
+ */
+export async function requestBorrowReturn(
+    id: string | number
+): Promise<BorrowRecordDTO> {
+    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {
+        method: "PATCH",
+        body: {
+            status: "pending",
+        },
+    });
+    return res.record;
+}
+
+/**
+ * Librarian/Admin action: finalize the return.
+ * - Sets status to "returned"
+ * - Sets return_date (defaults to today)
+ * - Marks the book as available again (on the server).
+ */
 export async function markBorrowReturned(
     id: string | number,
     returnDate?: string

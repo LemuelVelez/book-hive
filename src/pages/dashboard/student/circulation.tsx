@@ -37,7 +37,7 @@ import { toast } from "sonner";
 
 import {
   fetchMyBorrowRecords,
-  markBorrowReturned,
+  requestBorrowReturn,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -95,7 +95,8 @@ export default function StudentCirculationPage() {
       setRecords(data);
     } catch (err: any) {
       const msg =
-        err?.message || "Failed to load your circulation records. Please try again.";
+        err?.message ||
+        "Failed to load your circulation records. Please try again.";
       setError(msg);
       toast.error("Failed to load circulation", { description: msg });
     } finally {
@@ -120,7 +121,10 @@ export default function StudentCirculationPage() {
     let rows = [...records];
 
     if (statusFilter === "borrowed") {
-      rows = rows.filter((r) => r.status === "borrowed");
+      // Treat both "borrowed" and "pending" as active borrows for filtering
+      rows = rows.filter(
+        (r) => r.status === "borrowed" || r.status === "pending"
+      );
     } else if (statusFilter === "returned") {
       rows = rows.filter((r) => r.status === "returned");
     }
@@ -135,13 +139,14 @@ export default function StudentCirculationPage() {
     }
 
     // Newest borrow first
-    return rows.sort((a, b) =>
-      b.borrowDate.localeCompare(a.borrowDate)
-    );
+    return rows.sort((a, b) => b.borrowDate.localeCompare(a.borrowDate));
   }, [records, statusFilter, search]);
 
   const active = React.useMemo(
-    () => records.filter((r) => r.status === "borrowed"),
+    () =>
+      records.filter(
+        (r) => r.status === "borrowed" || r.status === "pending"
+      ),
     [records]
   );
   const totalActiveFine = React.useMemo(
@@ -149,30 +154,34 @@ export default function StudentCirculationPage() {
     [active]
   );
 
-  async function handleReturn(record: BorrowRecordDTO) {
+  async function handleRequestReturn(record: BorrowRecordDTO) {
     if (record.status !== "borrowed") {
-      toast.info("Already returned", {
-        description: "This book is already marked as returned.",
+      toast.info("Return request not needed", {
+        description:
+          record.status === "pending"
+            ? "This book already has a pending return request."
+            : "This book is already marked as returned.",
       });
       return;
     }
 
     setReturnBusyId(record.id);
     try {
-      const updated = await markBorrowReturned(record.id);
+      const updated = await requestBorrowReturn(record.id);
 
       setRecords((prev) =>
         prev.map((r) => (r.id === updated.id ? updated : r))
       );
 
-      toast.success("Book marked as returned", {
-        description: `“${record.bookTitle ?? `Book #${record.bookId}`}” has been returned.`,
+      toast.success("Return request submitted", {
+        description:
+          "Your online return request is now pending. Please bring the physical book to the librarian for verification.",
       });
     } catch (err: any) {
       const msg =
         err?.message ||
-        "Could not mark this book as returned. Please try again later.";
-      toast.error("Return failed", { description: msg });
+        "Could not submit your return request. Please try again later.";
+      toast.error("Return request failed", { description: msg });
     } finally {
       setReturnBusyId(null);
     }
@@ -189,7 +198,16 @@ export default function StudentCirculationPage() {
               Borrowed books (circulation)
             </h2>
             <p className="text-xs text-white/70">
-              View all books you&apos;ve borrowed and return the ones you&apos;re done with.
+              View all books you&apos;ve borrowed, track due dates and fines,
+              and send online return requests.
+            </p>
+            <p className="mt-1 text-[11px] text-amber-200/90">
+              Books <span className="font-semibold">cannot be auto-returned</span>. When
+              you request a return, the status becomes{" "}
+              <span className="font-semibold">Pending verification</span>. A
+              librarian must verify the{" "}
+              <span className="font-semibold">physical book</span> before it
+              changes to <span className="font-semibold">Returned</span>.
             </p>
           </div>
         </div>
@@ -246,7 +264,7 @@ export default function StudentCirculationPage() {
               </div>
 
               {/* Status filter */}
-              <div className="w-full md:w-[180px]">
+              <div className="w-full md:w-[200px]">
                 <Select
                   value={statusFilter}
                   onValueChange={(v) => setStatusFilter(v as StatusFilter)}
@@ -256,13 +274,27 @@ export default function StudentCirculationPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 text-white border-white/10">
                     <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="borrowed">Borrowed only</SelectItem>
+                    <SelectItem value="borrowed">
+                      Active (Borrowed + Pending)
+                    </SelectItem>
                     <SelectItem value="returned">Returned only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
           </div>
+
+          <p className="mt-2 text-[11px] text-white/60">
+            You can only{" "}
+            <span className="font-semibold text-purple-200">
+              request a return
+            </span>{" "}
+            for books that are still{" "}
+            <span className="font-semibold text-amber-200">Borrowed</span>. Once
+            requested, the status becomes{" "}
+            <span className="font-semibold text-amber-200">Pending</span> until a
+            librarian confirms the physical return.
+          </p>
         </CardHeader>
 
         <CardContent className="overflow-x-auto">
@@ -287,7 +319,11 @@ export default function StudentCirculationPage() {
               <TableCaption className="text-xs text-white/60">
                 Showing {filtered.length}{" "}
                 {filtered.length === 1 ? "record" : "records"}. You can only
-                return books with status{" "}
+                submit a{" "}
+                <span className="font-semibold text-purple-200">
+                  return request
+                </span>{" "}
+                for books that are currently{" "}
                 <span className="font-semibold text-amber-200">Borrowed</span>.
               </TableCaption>
               <TableHeader>
@@ -321,7 +357,9 @@ export default function StudentCirculationPage() {
               <TableBody>
                 {filtered.map((record) => {
                   const isBorrowed = record.status === "borrowed";
-                  const isOverdue = isBorrowed && record.fine > 0;
+                  const isPending = record.status === "pending";
+                  const isActive = isBorrowed || isPending;
+                  const isOverdue = isActive && record.fine > 0;
 
                   return (
                     <TableRow
@@ -348,28 +386,32 @@ export default function StudentCirculationPage() {
                         {fmtDate(record.returnDate)}
                       </TableCell>
                       <TableCell>
-                        {isBorrowed ? (
-                          <Badge
-                            className={
-                              isOverdue
-                                ? "bg-red-500/80 hover:bg-red-500 text-white border-red-400/80"
-                                : "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
-                            }
-                          >
-                            <span className="inline-flex items-center gap-1">
-                              {isOverdue ? (
-                                <AlertTriangle className="h-3 w-3" />
-                              ) : (
-                                <Clock3 className="h-3 w-3" />
-                              )}
-                              {isOverdue ? "Overdue" : "Borrowed"}
-                            </span>
-                          </Badge>
-                        ) : (
+                        {record.status === "returned" ? (
                           <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
                             <span className="inline-flex items-center gap-1">
                               <CheckCircle2 className="h-3 w-3" />
                               Returned
+                            </span>
+                          </Badge>
+                        ) : isPending ? (
+                          <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock3 className="h-3 w-3" />
+                              Pending verification
+                            </span>
+                          </Badge>
+                        ) : isOverdue ? (
+                          <Badge className="bg-red-500/80 hover:bg-red-500 text-white border-red-400/80">
+                            <span className="inline-flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              Overdue
+                            </span>
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock3 className="h-3 w-3" />
+                              Borrowed
                             </span>
                           </Badge>
                         )}
@@ -378,7 +420,7 @@ export default function StudentCirculationPage() {
                         {peso(record.fine)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {isBorrowed ? (
+                        {record.status === "borrowed" ? (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
@@ -390,10 +432,10 @@ export default function StudentCirculationPage() {
                                 {returnBusyId === record.id ? (
                                   <span className="inline-flex items-center gap-2">
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    Returning…
+                                    Sending…
                                   </span>
                                 ) : (
-                                  "Return book"
+                                  "Request return"
                                 )}
                               </Button>
                             </AlertDialogTrigger>
@@ -401,15 +443,21 @@ export default function StudentCirculationPage() {
                             <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
                               <AlertDialogHeader>
                                 <AlertDialogTitle>
-                                  Mark book as returned?
+                                  Request to return this book?
                                 </AlertDialogTitle>
                                 <AlertDialogDescription className="text-white/70">
-                                  You&apos;re about to mark{" "}
+                                  You&apos;re about to submit an online return
+                                  request for{" "}
                                   <span className="font-semibold text-white">
-                                    “{record.bookTitle ?? `Book #${record.bookId}`}”
-                                  </span>{" "}
-                                  as returned. Make sure you have already given the
-                                  physical copy back to the librarian.
+                                    “
+                                    {record.bookTitle ??
+                                      `Book #${record.bookId}`}”
+                                  </span>
+                                  . The status will change to{" "}
+                                  <span className="font-semibold text-amber-200">
+                                    Pending verification
+                                  </span>
+                                  .
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
 
@@ -423,6 +471,18 @@ export default function StudentCirculationPage() {
                                 <p>
                                   <span className="text-white/60">Due date:</span>{" "}
                                   {fmtDate(record.dueDate)}
+                                </p>
+                                <p className="text-xs text-white/70">
+                                  You{" "}
+                                  <span className="font-semibold">
+                                    must still bring the physical book
+                                  </span>{" "}
+                                  to the library. A librarian will verify the
+                                  book and then mark it as{" "}
+                                  <span className="font-semibold text-emerald-200">
+                                    Returned
+                                  </span>
+                                  .
                                 </p>
                                 {record.fine > 0 && (
                                   <p className="text-red-300">
@@ -445,20 +505,30 @@ export default function StudentCirculationPage() {
                                 <AlertDialogAction
                                   className="bg-purple-600 hover:bg-purple-700 text-white"
                                   disabled={returnBusyId === record.id}
-                                  onClick={() => void handleReturn(record)}
+                                  onClick={() => void handleRequestReturn(record)}
                                 >
                                   {returnBusyId === record.id ? (
                                     <span className="inline-flex items-center gap-2">
                                       <Loader2 className="h-4 w-4 animate-spin" />
-                                      Returning…
+                                      Sending…
                                     </span>
                                   ) : (
-                                    "Confirm return"
+                                    "Submit request"
                                   )}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
+                        ) : record.status === "pending" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            className="border-amber-400/50 text-amber-200/80"
+                          >
+                            Pending verification
+                          </Button>
                         ) : (
                           <Button
                             type="button"
