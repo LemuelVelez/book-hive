@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 import { fetchBooks, type BookDTO } from "@/lib/books";
 import {
     fetchMyFeedbacks,
@@ -57,10 +59,7 @@ type StarRatingProps = {
 
 function StarRating({ value, onChange, readOnly, size = "md" }: StarRatingProps) {
     const stars = [1, 2, 3, 4, 5];
-    const baseClass =
-        size === "sm"
-            ? "h-3.5 w-3.5"
-            : "h-5 w-5";
+    const baseClass = size === "sm" ? "h-3.5 w-3.5" : "h-5 w-5";
 
     return (
         <div className="inline-flex items-center gap-1">
@@ -121,6 +120,37 @@ export default function StudentInsightsHubPage() {
     const [damageNotes, setDamageNotes] = React.useState<string>("");
     const [damageFiles, setDamageFiles] = React.useState<File[]>([]);
     const [submittingDamage, setSubmittingDamage] = React.useState(false);
+
+    // Image preview dialog state
+    const [previewOpen, setPreviewOpen] = React.useState(false);
+    const [previewImages, setPreviewImages] = React.useState<string[]>([]);
+    const [previewIndex, setPreviewIndex] = React.useState(0);
+
+    const hasPreviewImage = previewImages.length > 0;
+    const currentPreviewUrl = hasPreviewImage
+        ? previewImages[Math.min(Math.max(previewIndex, 0), previewImages.length - 1)]
+        : "";
+
+    function openPreview(images: string[], index = 0) {
+        if (!images || !images.length) return;
+        setPreviewImages(images);
+        setPreviewIndex(index);
+        setPreviewOpen(true);
+    }
+
+    function showPrev() {
+        setPreviewIndex((idx) => {
+            if (!previewImages.length) return 0;
+            return (idx - 1 + previewImages.length) % previewImages.length;
+        });
+    }
+
+    function showNext() {
+        setPreviewIndex((idx) => {
+            if (!previewImages.length) return 0;
+            return (idx + 1) % previewImages.length;
+        });
+    }
 
     const loadAll = React.useCallback(async () => {
         setError(null);
@@ -637,7 +667,8 @@ export default function StudentInsightsHubPage() {
                                             key={r.id}
                                             className="rounded-md border border-white/10 bg-slate-900/70 px-3 py-2 text-xs"
                                         >
-                                            <div className="flex items-start justify-between gap-2">
+                                            {/* ⬇️ MOBILE: vertical, DESKTOP: same horizontal layout */}
+                                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                                                 <div className="space-y-0.5">
                                                     <div className="font-medium text-white">
                                                         {r.bookTitle ?? `Book #${r.bookId}`}
@@ -645,14 +676,14 @@ export default function StudentInsightsHubPage() {
                                                     <div className="text-[10px] text-white/50">
                                                         Reported: {fmtDate(r.reportedAt)}
                                                     </div>
-                                                    <div className="flex items-center gap-2 mt-1">
+                                                    <div className="flex flex-wrap items-center gap-2 mt-1">
                                                         <Badge
                                                             className={
                                                                 r.status === "paid"
                                                                     ? "bg-emerald-600/80 border-emerald-400/70"
                                                                     : r.status === "assessed"
                                                                         ? "bg-amber-600/80 border-amber-400/70"
-                                                                        : "bg-slate-700/80 border-slate-500/70"
+                                                                        : "text-white bg-slate-700/80 border-slate-500/70"
                                                             }
                                                         >
                                                             {r.status === "pending"
@@ -680,18 +711,27 @@ export default function StudentInsightsHubPage() {
                                                 </div>
 
                                                 {r.photoUrls.length > 0 && (
-                                                    <div className="flex flex-col items-end gap-1">
-                                                        <div className="relative h-14 w-20 overflow-hidden rounded-md border border-white/20 bg-slate-800">
+                                                    <div className="flex flex-col items-start sm:items-end gap-1 mt-2 sm:mt-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openPreview(r.photoUrls, 0)}
+                                                            className="cursor-pointer relative h-14 w-20 overflow-hidden rounded-md border border-white/20 bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                                                            aria-label="Preview damage photos"
+                                                        >
                                                             <img
                                                                 src={r.photoUrls[0]}
                                                                 alt="Damage"
                                                                 className="h-full w-full object-cover"
                                                             />
-                                                        </div>
+                                                        </button>
                                                         {r.photoUrls.length > 1 && (
-                                                            <span className="text-[10px] text-white/60">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openPreview(r.photoUrls, 0)}
+                                                                className="text-[10px] text-white/60 hover:text-white/90 underline-offset-2 hover:underline"
+                                                            >
                                                                 +{r.photoUrls.length - 1} more
-                                                            </span>
+                                                            </button>
                                                         )}
                                                     </div>
                                                 )}
@@ -713,6 +753,58 @@ export default function StudentInsightsHubPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Image preview dialog */}
+            <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+                <DialogContent className="max-w-3xl bg-slate-900 text-white border-white/10">
+                    <DialogHeader>
+                        <DialogTitle className="text-sm">
+                            Damage photo preview
+                            {previewImages.length > 1
+                                ? ` (${previewIndex + 1} of ${previewImages.length})`
+                                : ""}
+                        </DialogTitle>
+                    </DialogHeader>
+                    {currentPreviewUrl ? (
+                        <div className="mt-2 flex flex-col gap-4">
+                            <div className="relative max-h-[70vh] overflow-hidden rounded-lg border border-white/20 bg-black/40">
+                                <img
+                                    src={currentPreviewUrl}
+                                    alt="Damage report photo"
+                                    className="max-h-[70vh] w-full object-contain"
+                                />
+                            </div>
+                            {previewImages.length > 1 && (
+                                <div className="flex items-center justify-between text-xs text-white/70">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-white/20 text-white/80 hover:bg-white/10"
+                                        onClick={showPrev}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <span>
+                                        Image {previewIndex + 1} of {previewImages.length}
+                                    </span>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-white/20 text-white/80 hover:bg-white/10"
+                                        onClick={showNext}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-white/60">No image to preview.</p>
+                    )}
+                </DialogContent>
+            </Dialog>
         </DashboardLayout>
     );
 }

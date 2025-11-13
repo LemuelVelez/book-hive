@@ -120,7 +120,7 @@ function App() {
 
           {/* Role-scoped dashboards */}
           <Route
-            path="/dashboard/student"
+            path="/dashboard"
             element={
               <RequireRole allow={['student']}>
                 <StudentDashboard />
@@ -130,7 +130,7 @@ function App() {
 
           {/* ✅ Student books page */}
           <Route
-            path="/dashboard/student/books"
+            path="/dashboard/books"
             element={
               <RequireRole allow={['student']}>
                 <StudentBooksPage />
@@ -140,7 +140,7 @@ function App() {
 
           {/* ✅ Student circulation page */}
           <Route
-            path="/dashboard/student/circulation"
+            path="/dashboard/circulation"
             element={
               <RequireRole allow={['student']}>
                 <StudentCirculationPage />
@@ -150,7 +150,7 @@ function App() {
 
           {/* ✅ NEW: Student Insights Hub page */}
           <Route
-            path="/dashboard/student/insights"
+            path="/dashboard/insights"
             element={
               <RequireRole allow={['student']}>
                 <StudentInsightsHubPage />
