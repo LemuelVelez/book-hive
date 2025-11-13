@@ -97,7 +97,7 @@ Thanks!`
                                 <Button
                                     variant="outline"
                                     onClick={() => navigate(-1)}
-                                    className="border-white/15 text-black/90 hover:text-white hover:bg-black/10"
+                                    className="border-white/15 text-white hover:text-white hover:bg-black/10"
                                 >
                                     Try previous page
                                 </Button>

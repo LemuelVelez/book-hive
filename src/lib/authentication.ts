@@ -8,6 +8,8 @@ export type UserDTO = {
   email: string;
   fullName: string;
   accountType: Role;
+  // Optional explicit role field if backend stores both
+  role?: Role;
   isEmailVerified: boolean;
 };
 
@@ -62,8 +64,7 @@ async function requestJSON<T = unknown>(
     const details = getErrorMessage(e);
     const tail = details ? ` Details: ${details}` : "";
     throw new Error(
-      `Cannot reach the API (${API_BASE}). Is the server running on port 5000 and allowing ${
-        typeof window !== "undefined" ? window.location.origin : "this origin"
+      `Cannot reach the API (${API_BASE}). Is the server running on port 5000 and allowing ${typeof window !== "undefined" ? window.location.origin : "this origin"
       }?${tail}`
     );
   }
@@ -136,6 +137,8 @@ export async function register(payload: {
   email: string;
   password: string;
   accountType: "student" | "other";
+  // Explicit role saved in DB — for now should mirror accountType
+  role: Role;
   studentId?: string;
   course?: string; // program
   yearLevel?: string;

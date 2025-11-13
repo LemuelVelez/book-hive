@@ -112,7 +112,10 @@ function StepItem({
 export default function LandingPage() {
     const navigate = useNavigate()
     const [isAuthed, setIsAuthed] = useState(false)
-    const [dashboardHref, setDashboardHref] = useState('/dashboard/student')
+
+    // ✅ default to /dashboard (student & other both use this)
+    const [dashboardHref, setDashboardHref] = useState('/dashboard')
+
     const [sheetOpen, setSheetOpen] = useState(false) // controls Sheet and icon animation
 
     useEffect(() => {
@@ -124,10 +127,12 @@ export default function LandingPage() {
 
                 setIsAuthed(true)
 
-                // Route user to their own dashboard based on accountType
+                // ✅ Route user to their own dashboard based on accountType
                 switch (user.accountType) {
                     case 'student':
-                        setDashboardHref('/dashboard/student')
+                    case 'other':
+                        // student & other share the same dashboard root
+                        setDashboardHref('/dashboard')
                         break
                     case 'librarian':
                         setDashboardHref('/dashboard/librarian')
@@ -139,7 +144,7 @@ export default function LandingPage() {
                         setDashboardHref('/dashboard/admin')
                         break
                     default:
-                        // Fallback (in case of "other" or unknown types)
+                        // Fallback for unknown types
                         setDashboardHref('/dashboard')
                 }
             })()

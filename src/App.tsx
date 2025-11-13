@@ -4,7 +4,7 @@ import { PageLoadingOverlay } from './components/loading'
 import { Toaster } from '@/components/ui/sonner'
 import NotFoundPage from './pages/404'
 import { AuthRedirectIfAuthed } from '@/components/rolebase'
-import { RequireRole, DashboardIndex } from '@/components/roleguard'
+import { RequireRole } from '@/components/roleguard'
 
 // Lazy-loaded pages for code-splitting
 const LandingPage = lazy(() => import('./pages/landing'))
@@ -27,7 +27,7 @@ const StudentBooksPage = lazy(
 const StudentCirculationPage = lazy(
   () => import('./pages/dashboard/student/circulation')
 )
-// ✅ NEW: Student Insights Hub page
+// ✅ Student Insights Hub page
 const StudentInsightsHubPage = lazy(
   () => import('./pages/dashboard/student/insightsHub')
 )
@@ -50,7 +50,7 @@ const LibrarianBorrowRecordsPage = lazy(
 const LibrarianFeedbacksPage = lazy(
   () => import('./pages/dashboard/librarian/feedbacks')
 )
-// ✅ NEW: Librarian Damage Reports page
+// ✅ Librarian Damage Reports page
 const LibrarianDamageReportsPage = lazy(
   () => import('./pages/dashboard/librarian/damageReports')
 )
@@ -115,49 +115,47 @@ function App() {
             }
           />
 
-          {/* Dashboards root decides based on role */}
-          <Route path="/dashboard" element={<DashboardIndex />} />
-
-          {/* Role-scoped dashboards */}
+          {/* ✅ Dashboards root: Student & Other overview at /dashboard */}
           <Route
             path="/dashboard"
             element={
-              <RequireRole allow={['student']}>
+              <RequireRole allow={['student', 'other']}>
                 <StudentDashboard />
               </RequireRole>
             }
           />
 
-          {/* ✅ Student books page */}
+          {/* ✅ Student / Other books page */}
           <Route
             path="/dashboard/books"
             element={
-              <RequireRole allow={['student']}>
+              <RequireRole allow={['student', 'other']}>
                 <StudentBooksPage />
               </RequireRole>
             }
           />
 
-          {/* ✅ Student circulation page */}
+          {/* ✅ Student / Other circulation page */}
           <Route
             path="/dashboard/circulation"
             element={
-              <RequireRole allow={['student']}>
+              <RequireRole allow={['student', 'other']}>
                 <StudentCirculationPage />
               </RequireRole>
             }
           />
 
-          {/* ✅ NEW: Student Insights Hub page */}
+          {/* ✅ Student / Other Insights Hub page */}
           <Route
             path="/dashboard/insights"
             element={
-              <RequireRole allow={['student']}>
+              <RequireRole allow={['student', 'other']}>
                 <StudentInsightsHubPage />
               </RequireRole>
             }
           />
 
+          {/* Librarian routes */}
           <Route
             path="/dashboard/librarian"
             element={
@@ -206,7 +204,7 @@ function App() {
             }
           />
 
-          {/* ✅ NEW: Librarian Damage Reports */}
+          {/* ✅ Librarian Damage Reports */}
           <Route
             path="/dashboard/librarian/damage-reports"
             element={
@@ -216,6 +214,7 @@ function App() {
             }
           />
 
+          {/* Faculty & Admin */}
           <Route
             path="/dashboard/faculty"
             element={

@@ -311,10 +311,21 @@ export default function AuthPage() {
 
             // Toast + redirect (role aware)
             toast.success("Welcome back!", {
-                description: redirectParam ? "Redirecting to your previous page…" : "Redirecting to your dashboard…",
+                description: redirectParam
+                    ? "Redirecting to your previous page…"
+                    : "Redirecting to your dashboard…",
             });
 
-            const dest = redirectParam ?? dashboardForRole((user.accountType as Role) ?? "student");
+            const rawRole = (user.accountType as Role) ?? "student";
+
+            const dest =
+                redirectParam ??
+                (
+                    rawRole === "student" || rawRole === "other"
+                        ? "/dashboard" // ✅ both student & other → /dashboard
+                        : dashboardForRole(rawRole)
+                );
+
             navigate(dest, { replace: true });
         } catch (err: any) {
             const msg = String(err?.message || "Login failed. Please try again.");
@@ -410,11 +421,16 @@ export default function AuthPage() {
             const finalProgram = program === "Others" ? customProgram.trim() : program;
             const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
 
+            // ✅ Map accountType -> role to send both to backend
+            const role: Role =
+                accountType === "student" ? "student" : "other";
+
             const payload: Record<string, unknown> = {
                 fullName: fullName.trim(),
                 email: regEmail.trim(),
                 password: regPassword,
                 accountType,
+                role, // ✅ ensure role is in sync with accountType
             };
 
             if (accountType === "student") {
@@ -673,12 +689,17 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
+                                                        // ✅ perfectly centered Eye / EyeOff
+                                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                         onClick={() => setShowPassword((s) => !s)}
                                                         aria-label={showPassword ? "Hide password" : "Show password"}
                                                         aria-pressed={showPassword}
                                                     >
-                                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                        {showPassword ? (
+                                                            <EyeOff className="h-4 w-4" />
+                                                        ) : (
+                                                            <Eye className="h-4 w-4" />
+                                                        )}
                                                     </Button>
                                                 </div>
                                             </FieldContent>
@@ -1145,12 +1166,17 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
+                                                        // ✅ centered Eye / EyeOff
+                                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                         onClick={() => setShowRegPassword((s) => !s)}
                                                         aria-label={showRegPassword ? "Hide password" : "Show password"}
                                                         aria-pressed={showRegPassword}
                                                     >
-                                                        {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                        {showRegPassword ? (
+                                                            <EyeOff className="h-4 w-4" />
+                                                        ) : (
+                                                            <Eye className="h-4 w-4" />
+                                                        )}
                                                     </Button>
                                                 </div>
                                             </FieldContent>
@@ -1177,12 +1203,17 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
+                                                        // ✅ centered Eye / EyeOff
+                                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                         onClick={() => setShowRegConfirm((s) => !s)}
                                                         aria-label={showRegConfirm ? "Hide password" : "Show password"}
                                                         aria-pressed={showRegConfirm}
                                                     >
-                                                        {showRegConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                        {showRegConfirm ? (
+                                                            <EyeOff className="h-4 w-4" />
+                                                        ) : (
+                                                            <Eye className="h-4 w-4" />
+                                                        )}
                                                     </Button>
                                                 </div>
                                             </FieldContent>

@@ -199,7 +199,7 @@ export default function ResetPasswordPage() {
                                                 type="button"
                                                 variant="ghost"
                                                 size="icon"
-                                                className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
+                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                 onClick={() => setShowPass((s) => !s)}
                                                 aria-label={showPass ? "Hide password" : "Show password"}
                                                 aria-pressed={showPass}
@@ -229,7 +229,7 @@ export default function ResetPasswordPage() {
                                                 type="button"
                                                 variant="ghost"
                                                 size="icon"
-                                                className="absolute right-1.5 top-0.5 h-10 w-10 text-white/70 hover:text-black"
+                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                 onClick={() => setShowConfirm((s) => !s)}
                                                 aria-label={showConfirm ? "Hide password" : "Show password"}
                                                 aria-pressed={showConfirm}
