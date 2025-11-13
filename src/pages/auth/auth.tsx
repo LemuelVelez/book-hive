@@ -949,7 +949,7 @@ export default function AuthPage() {
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-slate-900 text-white border-white/10">
                                                         <SelectItem value="student">Student</SelectItem>
-                                                        <SelectItem value="other">Other (Faculty/Staff/Guest)</SelectItem>
+                                                        <SelectItem value="other">Other</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </FieldContent>

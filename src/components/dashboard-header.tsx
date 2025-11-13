@@ -46,10 +46,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     }, [])
 
     function inferRoleFromPath(path: string): string | undefined {
-        if (path.startsWith("/dashboard/student")) return "student"
+        // Check more specific sub-sections first
         if (path.startsWith("/dashboard/librarian")) return "librarian"
         if (path.startsWith("/dashboard/faculty")) return "faculty"
         if (path.startsWith("/dashboard/admin")) return "admin"
+        // Generic borrower section (/dashboard, /dashboard/books, /dashboard/circulation, /dashboard/insights)
+        if (path.startsWith("/dashboard")) return "student" // fallback label for borrower area
         return undefined
     }
 
@@ -57,6 +59,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         if (!raw) return ""
         const map: Record<string, string> = {
             student: "Student",
+            other: "Guest", // ✅ show "Guest" for role "other"
             librarian: "Librarian",
             faculty: "Faculty",
             admin: "Admin",
@@ -78,8 +81,9 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
     const showWelcome = !!roleLabel || !!displayName
 
-    // Only students & faculty see the "Reserve" quick action
-    const showReserve = rawRole === "student" || rawRole === "faculty"
+    // ✅ Student and Other share the same quick actions (plus faculty)
+    const showReserve =
+        rawRole === "student" || rawRole === "other" || rawRole === "faculty"
 
     return (
         <header className="sticky top-0 z-10 bg-slate-800/60 backdrop-blur supports-backdrop-filter:bg-slate-800/60 border-b border-white/10">

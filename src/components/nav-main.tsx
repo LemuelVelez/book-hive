@@ -8,7 +8,14 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Home, BookOpen, Users2, ListChecks, MessageSquare, ShieldAlert } from "lucide-react"
+import {
+    Home,
+    BookOpen,
+    Users2,
+    ListChecks,
+    MessageSquare,
+    ShieldAlert,
+} from "lucide-react"
 
 type Item = {
     label: string
@@ -28,33 +35,45 @@ export function NavMain() {
         { label: "Overview", icon: Home, to: "/dashboard", exact: true },
     ]
 
-    // Derive section from URL instead of calling /api/auth/me
-    if (pathname.startsWith("/dashboard/student")) {
-        groupLabel = "Student"
+    // Borrower (Student + Other) section:
+    // All borrower routes are under /dashboard (excluding librarian/faculty/admin subpaths)
+    const isLibrarian = pathname.startsWith("/dashboard/librarian")
+    const isFaculty = pathname.startsWith("/dashboard/faculty")
+    const isAdmin = pathname.startsWith("/dashboard/admin")
+
+    const isBorrowerSection =
+        pathname.startsWith("/dashboard") &&
+        !isLibrarian &&
+        !isFaculty &&
+        !isAdmin
+
+    if (isBorrowerSection) {
+        // Shared navigation for "student" and "other" roles
+        groupLabel = "My Library"
         items = [
             {
                 label: "Overview",
                 icon: Home,
-                to: "/dashboard/student",
+                to: "/dashboard",
                 exact: true,
             },
             {
                 label: "Books",
                 icon: BookOpen,
-                to: "/dashboard/student/books",
+                to: "/dashboard/books",
             },
             {
                 label: "Circulation",
                 icon: ListChecks,
-                to: "/dashboard/student/circulation",
+                to: "/dashboard/circulation",
             },
             {
                 label: "Insights Hub",
                 icon: MessageSquare,
-                to: "/dashboard/student/insights",
+                to: "/dashboard/insights",
             },
         ]
-    } else if (pathname.startsWith("/dashboard/librarian")) {
+    } else if (isLibrarian) {
         groupLabel = "Librarian"
         items = [
             {
@@ -89,7 +108,7 @@ export function NavMain() {
                 to: "/dashboard/librarian/users",
             },
         ]
-    } else if (pathname.startsWith("/dashboard/faculty")) {
+    } else if (isFaculty) {
         groupLabel = "Faculty"
         items = [
             {
@@ -99,7 +118,7 @@ export function NavMain() {
                 exact: true,
             },
         ]
-    } else if (pathname.startsWith("/dashboard/admin")) {
+    } else if (isAdmin) {
         groupLabel = "Admin"
         items = [
             {
@@ -126,10 +145,14 @@ export function NavMain() {
 
                             const isActive = item.exact
                                 ? pathname === item.to
-                                : pathname === item.to || pathname.startsWith(item.to + "/")
+                                : pathname === item.to ||
+                                pathname.startsWith(item.to + "/")
 
                             return (
-                                <SidebarMenuItem key={item.label} className="whitespace-nowrap">
+                                <SidebarMenuItem
+                                    key={item.label}
+                                    className="whitespace-nowrap"
+                                >
                                     <SidebarMenuButton
                                         asChild
                                         isActive={isActive}
