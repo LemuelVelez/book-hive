@@ -48,6 +48,11 @@ export function NavMain() {
                 icon: ListChecks,
                 to: "/dashboard/student/circulation",
             },
+            {
+                label: "Insights Hub",
+                icon: MessageSquare,
+                to: "/dashboard/student/insights",
+            },
         ]
     } else if (pathname.startsWith("/dashboard/librarian")) {
         groupLabel = "Librarian"

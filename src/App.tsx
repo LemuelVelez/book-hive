@@ -27,6 +27,10 @@ const StudentBooksPage = lazy(
 const StudentCirculationPage = lazy(
   () => import('./pages/dashboard/student/circulation')
 )
+// ✅ NEW: Student Insights Hub page
+const StudentInsightsHubPage = lazy(
+  () => import('./pages/dashboard/student/insightsHub')
+)
 
 const LibrarianDashboard = lazy(
   () => import('./pages/dashboard/librarian/dashboard')
@@ -140,6 +144,16 @@ function App() {
             element={
               <RequireRole allow={['student']}>
                 <StudentCirculationPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ NEW: Student Insights Hub page */}
+          <Route
+            path="/dashboard/student/insights"
+            element={
+              <RequireRole allow={['student']}>
+                <StudentInsightsHubPage />
               </RequireRole>
             }
           />

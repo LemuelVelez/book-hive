@@ -1,17 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { FEEDBACK_ROUTES } from "@/api/feedbacks/route";
+import { DAMAGE_ROUTES } from "@/api/damageReports/route";
 import { API_BASE } from "@/api/auth/route";
 
-export type FeedbackDTO = {
+export type DamageStatus = "pending" | "assessed" | "paid";
+export type DamageSeverity = "minor" | "moderate" | "major";
+
+export type DamageReportDTO = {
     id: string;
-    userId: string | number;
+    userId: string;
     studentEmail: string | null;
     studentId: string | null;
-    bookId: string | number;
+    studentName?: string | null;
+    bookId: string;
     bookTitle: string | null;
-    rating: number; // 1..5
-    comment: string | null;
-    createdAt?: string | null;
+    damageType: string;
+    severity: DamageSeverity;
+    fee: number;
+    status: DamageStatus;
+    reportedAt: string;
+    notes: string | null;
+    photoUrls: string[]; // up to 3 URLs
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -43,7 +51,7 @@ async function requestJSON<T = unknown>(
     const { asFormData, body, headers, ...rest } = init;
 
     const finalInit: RequestInit = {
-        credentials: "include", // use cookies for auth session if any
+        credentials: "include", // use cookies for auth session
         method: "GET",
         ...rest,
         headers: new Headers(headers || {}),
@@ -78,12 +86,16 @@ async function requestJSON<T = unknown>(
                 if (data && typeof data === "object" && typeof data.message === "string") {
                     message = data.message;
                 }
-            } catch { /* empty */ }
+            } catch {
+                /* empty */
+            }
         } else {
             try {
                 const text = await resp.text();
                 if (text) message = text;
-            } catch { /* empty */ }
+            } catch {
+                /* empty */
+            }
         }
         throw new Error(message);
     }
@@ -91,36 +103,52 @@ async function requestJSON<T = unknown>(
     return (isJson ? resp.json() : (null as any)) as Promise<T>;
 }
 
-/* ----------------------- Public Feedbacks API ----------------------- */
+/* ----------------------- Public Damage Reports API ----------------------- */
 
-/** GET /api/feedbacks -> { ok: true, feedbacks: FeedbackDTO[] } */
-export async function fetchFeedbacks(): Promise<FeedbackDTO[]> {
-    type Resp = JsonOk<{ feedbacks: FeedbackDTO[] }>;
-    const res = await requestJSON<Resp>(FEEDBACK_ROUTES.list, { method: "GET" });
-    return res.feedbacks;
+export async function fetchMyDamageReports(): Promise<DamageReportDTO[]> {
+    type Resp = JsonOk<{ reports: DamageReportDTO[] }>;
+    const res = await requestJSON<Resp>(DAMAGE_ROUTES.my, { method: "GET" });
+    return res.reports;
 }
 
-/** GET /api/feedbacks/my -> { ok: true, feedbacks: FeedbackDTO[] } */
-export async function fetchMyFeedbacks(): Promise<FeedbackDTO[]> {
-    type Resp = JsonOk<{ feedbacks: FeedbackDTO[] }>;
-    const res = await requestJSON<Resp>(FEEDBACK_ROUTES.my, { method: "GET" });
-    return res.feedbacks;
-}
-
-export type CreateFeedbackPayload = {
+export type CreateDamageReportPayload = {
     bookId: string | number;
-    rating: number;
-    comment?: string | null;
+    damageType: string;
+    severity: DamageSeverity;
+    notes?: string | null;
+    fee?: number | null;
+    photos?: File[]; // up to 3 files
 };
 
-/** POST /api/feedbacks -> { ok: true, feedback: FeedbackDTO } */
-export async function createFeedback(
-    payload: CreateFeedbackPayload
-): Promise<FeedbackDTO> {
-    type Resp = JsonOk<{ feedback: FeedbackDTO }>;
-    const res = await requestJSON<Resp>(FEEDBACK_ROUTES.create, {
+export async function createDamageReport(
+    payload: CreateDamageReportPayload
+): Promise<DamageReportDTO> {
+    const fd = new FormData();
+    fd.append("bookId", String(payload.bookId));
+    fd.append("damageType", payload.damageType);
+    fd.append("severity", payload.severity);
+
+    if (payload.notes != null && payload.notes !== "") {
+        fd.append("notes", payload.notes);
+    }
+
+    if (payload.fee != null) {
+        fd.append("fee", String(payload.fee));
+    }
+
+    if (payload.photos && payload.photos.length) {
+        // backend expects field "photos" (array), max 3
+        payload.photos.slice(0, 3).forEach((file) => {
+            fd.append("photos", file);
+        });
+    }
+
+    type Resp = JsonOk<{ report: DamageReportDTO }>;
+    const res = await requestJSON<Resp>(DAMAGE_ROUTES.create, {
         method: "POST",
-        body: payload,
+        body: fd,
+        asFormData: true,
     });
-    return res.feedback;
+
+    return res.report;
 }
