@@ -43,6 +43,11 @@ export function NavMain() {
                 icon: BookOpen,
                 to: "/dashboard/student/books",
             },
+            {
+                label: "Circulation",
+                icon: ListChecks,
+                to: "/dashboard/student/circulation",
+            },
         ]
     } else if (pathname.startsWith("/dashboard/librarian")) {
         groupLabel = "Librarian"

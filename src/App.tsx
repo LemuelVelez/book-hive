@@ -23,6 +23,10 @@ const StudentDashboard = lazy(
 const StudentBooksPage = lazy(
   () => import('./pages/dashboard/student/book')
 )
+// ✅ Student Circulation page
+const StudentCirculationPage = lazy(
+  () => import('./pages/dashboard/student/circulation')
+)
 
 const LibrarianDashboard = lazy(
   () => import('./pages/dashboard/librarian/dashboard')
@@ -126,6 +130,16 @@ function App() {
             element={
               <RequireRole allow={['student']}>
                 <StudentBooksPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Student circulation page */}
+          <Route
+            path="/dashboard/student/circulation"
+            element={
+              <RequireRole allow={['student']}>
+                <StudentCirculationPage />
               </RequireRole>
             }
           />
