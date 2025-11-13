@@ -3,13 +3,42 @@ import * as React from "react"
 import { useLocation } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { me as apiMe } from "@/lib/authentication"
+
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader as DialogHeaderUI,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+
+import { fetchBooks, type BookDTO } from "@/lib/books"
+import { createSelfBorrow } from "@/lib/borrows"
 
 // Simple module-level cache so we only call /api/auth/me once per page load
 let cachedUser: any | null = null
 let cachedUserLoaded = false
+
+function fmtDate(d?: string | null) {
+    if (!d) return "—"
+    try {
+        return new Date(d).toISOString().slice(0, 10)
+    } catch {
+        return d
+    }
+}
 
 /** Top header shown inside the dashboard content area */
 export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
@@ -17,6 +46,13 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const pathname = location.pathname
 
     const [user, setUser] = React.useState<any | null>(cachedUser)
+
+    // Quick-reserve dialog state
+    const [reserveOpen, setReserveOpen] = React.useState(false)
+    const [reserveLoading, setReserveLoading] = React.useState(false)
+    const [reserveSubmitting, setReserveSubmitting] = React.useState(false)
+    const [books, setBooks] = React.useState<BookDTO[]>([])
+    const [selectedBookId, setSelectedBookId] = React.useState<string>("")
 
     React.useEffect(() => {
         // If we've already loaded user once, reuse it (no flicker on route changes)
@@ -85,6 +121,102 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const showReserve =
         rawRole === "student" || rawRole === "other" || rawRole === "faculty"
 
+    // ---- Reserve dialog logic ----
+
+    const availableBooks = React.useMemo(
+        () => books.filter((b) => b.available),
+        [books],
+    )
+
+    // Load books lazily when dialog is opened for the first time
+    React.useEffect(() => {
+        if (!reserveOpen) return
+        if (books.length > 0) return
+
+        let cancelled = false
+
+            ; (async () => {
+                setReserveLoading(true)
+                try {
+                    const data = await fetchBooks()
+                    if (!cancelled) {
+                        setBooks(data)
+                    }
+                } catch (err: any) {
+                    const msg =
+                        err?.message || "Failed to load books for reservation. Please try again."
+                    toast.error("Failed to load books", { description: msg })
+                } finally {
+                    if (!cancelled) {
+                        setReserveLoading(false)
+                    }
+                }
+            })()
+
+        return () => {
+            cancelled = true
+        }
+    }, [reserveOpen, books.length])
+
+    async function handleReserveConfirm() {
+        if (!selectedBookId) {
+            toast.warning("Choose a book first", {
+                description: "Please select a book you want to reserve.",
+            })
+            return
+        }
+
+        const chosen = books.find((b) => b.id === selectedBookId)
+        if (!chosen) {
+            toast.error("Invalid selection", {
+                description: "The selected book could not be found.",
+            })
+            return
+        }
+
+        if (!chosen.available) {
+            toast.info("Book is not available right now.", {
+                description: "You can only reserve books marked as Available.",
+            })
+            return
+        }
+
+        setReserveSubmitting(true)
+        try {
+            const record = await createSelfBorrow(selectedBookId)
+
+            toast.success("Book reserved", {
+                description: `"${chosen.title}" has been reserved/borrowed. Due on ${fmtDate(
+                    record.dueDate,
+                )}.`,
+            })
+
+            // Optimistically mark as unavailable in this dialog
+            setBooks((prev) =>
+                prev.map((b) =>
+                    b.id === selectedBookId ? { ...b, available: false } : b,
+                ),
+            )
+
+            setReserveOpen(false)
+            setSelectedBookId("")
+        } catch (err: any) {
+            const msg =
+                err?.message ||
+                "Could not reserve this book right now. Please try again later."
+            toast.error("Reservation failed", { description: msg })
+        } finally {
+            setReserveSubmitting(false)
+        }
+    }
+
+    function handleReserveOpenChange(open: boolean) {
+        setReserveOpen(open)
+        if (!open) {
+            setSelectedBookId("")
+        }
+    }
+
     return (
         <header className="sticky top-0 z-10 bg-slate-800/60 backdrop-blur supports-backdrop-filter:bg-slate-800/60 border-b border-white/10">
             <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-3">
@@ -115,15 +247,105 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                 {/* Quick actions */}
                 <div className="flex items-center gap-1.5">
                     {showReserve && (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="hidden md:inline-flex border-white/20 text-white/90 hover:bg-white/10"
-                            onClick={() => toast.info("New reservation (mock)")}
-                        >
-                            <Plus className="h-4 w-4 mr-1.5" />
-                            Reserve
-                        </Button>
+                        <Dialog open={reserveOpen} onOpenChange={handleReserveOpenChange}>
+                            <DialogTrigger asChild>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="hidden md:inline-flex border-white/20 text-white/90 hover:bg-white/10"
+                                >
+                                    <Plus className="h-4 w-4 mr-1.5" />
+                                    Reserve
+                                </Button>
+                            </DialogTrigger>
+
+                            <DialogContent className="bg-slate-900 text-white border-white/10">
+                                <DialogHeaderUI>
+                                    <DialogTitle className="text-sm md:text-base">
+                                        Quick reserve
+                                    </DialogTitle>
+                                    <DialogDescription className="text-white/70 text-xs md:text-sm">
+                                        Choose a book to reserve/borrow. This works the same as
+                                        borrowing from the{" "}
+                                        <span className="font-semibold">Browse Books</span> page.
+                                    </DialogDescription>
+                                </DialogHeaderUI>
+
+                                <div className="mt-3 space-y-3 text-sm">
+                                    {reserveLoading ? (
+                                        <p className="text-xs text-white/60">
+                                            Loading available books…
+                                        </p>
+                                    ) : availableBooks.length === 0 ? (
+                                        <p className="text-xs text-white/60">
+                                            There are currently no books available to reserve. Try
+                                            again later or browse the catalog.
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-white/80">
+                                                    Select book to reserve
+                                                </label>
+                                                <Select
+                                                    value={selectedBookId}
+                                                    onValueChange={(v) => setSelectedBookId(v)}
+                                                >
+                                                    <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                                                        <SelectValue placeholder="Choose a book" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-slate-900 text-white border-white/10 max-h-64">
+                                                        {availableBooks.map((b) => (
+                                                            <SelectItem key={b.id} value={b.id}>
+                                                                {b.title} — {b.author}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-[11px] text-white/50">
+                                                    Only books currently marked as{" "}
+                                                    <span className="font-semibold text-emerald-300">
+                                                        Available
+                                                    </span>{" "}
+                                                    are shown here.
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                <DialogFooter className="mt-4 flex flex-row justify-end gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-white/20 text-white hover:bg-black/20"
+                                        onClick={() => handleReserveOpenChange(false)}
+                                        disabled={reserveSubmitting}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                                        onClick={() => void handleReserveConfirm()}
+                                        disabled={
+                                            reserveSubmitting ||
+                                            reserveLoading ||
+                                            availableBooks.length === 0
+                                        }
+                                    >
+                                        {reserveSubmitting ? (
+                                            <span className="inline-flex items-center gap-2">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Reserving…
+                                            </span>
+                                        ) : (
+                                            "Confirm reserve"
+                                        )}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     )}
                 </div>
             </div>
