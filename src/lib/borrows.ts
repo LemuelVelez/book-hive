@@ -115,6 +115,15 @@ export async function fetchBorrowRecords(): Promise<BorrowRecordDTO[]> {
     return res.records;
 }
 
+/**
+ * List borrow records for the currently authenticated user (any role).
+ */
+export async function fetchMyBorrowRecords(): Promise<BorrowRecordDTO[]> {
+    type Resp = JsonOk<{ records: BorrowRecordDTO[] }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.my, { method: "GET" });
+    return res.records;
+}
+
 export async function createBorrowRecord(
     payload: CreateBorrowPayload
 ): Promise<BorrowRecordDTO> {
@@ -122,6 +131,20 @@ export async function createBorrowRecord(
     const res = await requestJSON<Resp>(BORROW_ROUTES.create, {
         method: "POST",
         body: payload,
+    });
+    return res.record;
+}
+
+/**
+ * Student self-service borrow: userId is taken from the session on the server.
+ */
+export async function createSelfBorrow(
+    bookId: string | number
+): Promise<BorrowRecordDTO> {
+    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.createSelf, {
+        method: "POST",
+        body: { bookId },
     });
     return res.record;
 }

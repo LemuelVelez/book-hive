@@ -38,6 +38,11 @@ export function NavMain() {
                 to: "/dashboard/student",
                 exact: true,
             },
+            {
+                label: "Books",
+                icon: BookOpen,
+                to: "/dashboard/student/books",
+            },
         ]
     } else if (pathname.startsWith("/dashboard/librarian")) {
         groupLabel = "Librarian"
@@ -103,10 +108,7 @@ export function NavMain() {
             </SidebarGroupLabel>
 
             <SidebarGroupContent>
-                {/*
-          Wrap the menu so that long labels or tight layouts can scroll horizontally.
-          The scrollbar is styled via the global `.support-scroll` class from src/index.css.
-        */}
+                {/* Horizontal scroll for tight layouts, styled by .support-scroll */}
                 <div className="support-scroll overflow-x-auto overflow-y-visible whitespace-nowrap pr-1">
                     <SidebarMenu className="min-w-full">
                         {items.map((item) => {

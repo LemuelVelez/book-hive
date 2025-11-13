@@ -20,6 +20,10 @@ const VerifyEmailCallbackPage = lazy(
 const StudentDashboard = lazy(
   () => import('./pages/dashboard/student/dashboard')
 )
+const StudentBooksPage = lazy(
+  () => import('./pages/dashboard/student/book')
+)
+
 const LibrarianDashboard = lazy(
   () => import('./pages/dashboard/librarian/dashboard')
 )
@@ -112,6 +116,16 @@ function App() {
             element={
               <RequireRole allow={['student']}>
                 <StudentDashboard />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Student books page */}
+          <Route
+            path="/dashboard/student/books"
+            element={
+              <RequireRole allow={['student']}>
+                <StudentBooksPage />
               </RequireRole>
             }
           />
