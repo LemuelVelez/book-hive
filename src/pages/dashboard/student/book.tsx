@@ -65,10 +65,17 @@ type BookWithStatus = BookDTO & {
     lastRecord?: BorrowRecordDTO | null;
 };
 
+/**
+ * Format a date string as YYYY-MM-DD in the *local* timezone.
+ * This avoids the off-by-one day bug from using toISOString() / UTC.
+ */
 function fmtDate(d?: string | null) {
     if (!d) return "—";
     try {
-        return new Date(d).toISOString().slice(0, 10);
+        const date = new Date(d);
+        if (Number.isNaN(date.getTime())) return d;
+        // en-CA locale => YYYY-MM-DD format (e.g., 2025-11-13)
+        return date.toLocaleDateString("en-CA");
     } catch {
         return d;
     }

@@ -62,11 +62,16 @@ function peso(n: number) {
     }
 }
 
+/**
+ * Format date as YYYY-MM-DD in *local* timezone
+ * to avoid off-by-one issues from UTC conversions.
+ */
 function fmtDate(d?: string | null) {
     if (!d) return "—";
     try {
-        // Show as YYYY-MM-DD for compactness
-        return new Date(d).toISOString().slice(0, 10);
+        const date = new Date(d);
+        if (Number.isNaN(date.getTime())) return d;
+        return date.toLocaleDateString("en-CA"); // YYYY-MM-DD
     } catch {
         return d;
     }

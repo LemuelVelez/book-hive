@@ -31,10 +31,17 @@ import { createSelfBorrow } from "@/lib/borrows"
 let cachedUser: any | null = null
 let cachedUserLoaded = false
 
+/**
+ * Format a date string as YYYY-MM-DD in the *local* timezone
+ * to avoid off-by-one issues from UTC conversions.
+ */
 function fmtDate(d?: string | null) {
     if (!d) return "—"
     try {
-        return new Date(d).toISOString().slice(0, 10)
+        const date = new Date(d)
+        if (Number.isNaN(date.getTime())) return d
+        // en-CA locale -> YYYY-MM-DD
+        return date.toLocaleDateString("en-CA")
     } catch {
         return d
     }
