@@ -25,10 +25,23 @@ import {
 import { Loader2, RefreshCcw, Search, Star } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-    fetchFeedbacks,
-    type FeedbackDTO,
-} from "@/lib/feedbacks";
+import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
+
+/**
+ * Format date as YYYY-MM-DD in *local* timezone
+ * to avoid off-by-one issues from UTC conversions.
+ */
+function fmtDate(d?: string | null) {
+    if (!d) return "—";
+    try {
+        const date = new Date(d);
+        if (Number.isNaN(date.getTime())) return d;
+        // en-CA -> 2025-11-13 (YYYY-MM-DD)
+        return date.toLocaleDateString("en-CA");
+    } catch {
+        return d;
+    }
+}
 
 /** Render up to 5 stars; filled according to rating */
 function Stars({ rating = 0 }: { rating?: number }) {
@@ -56,7 +69,9 @@ export default function LibrarianFeedbacksPage() {
 
     const [rows, setRows] = React.useState<FeedbackDTO[]>([]);
     const [search, setSearch] = React.useState("");
-    const [ratingFilter, setRatingFilter] = React.useState<"all" | "5" | "4" | "3" | "2" | "1">("all");
+    const [ratingFilter, setRatingFilter] = React.useState<
+        "all" | "5" | "4" | "3" | "2" | "1"
+    >("all");
 
     const load = React.useCallback(async () => {
         setError(null);
@@ -99,7 +114,11 @@ export default function LibrarianFeedbacksPage() {
 
         return list.filter((f) => {
             const student =
-                (f.studentEmail || "") + " " + (f.studentId || "") + " " + (f.userId || "");
+                (f.studentEmail || "") +
+                " " +
+                (f.studentId || "") +
+                " " +
+                (f.userId || "");
             const book = (f.bookTitle || "") + " " + String(f.bookId || "");
             const comment = f.comment || "";
             return (
@@ -164,7 +183,9 @@ export default function LibrarianFeedbacksPage() {
                                 <Select
                                     value={ratingFilter}
                                     onValueChange={(v) =>
-                                        setRatingFilter(v as "all" | "5" | "4" | "3" | "2" | "1")
+                                        setRatingFilter(
+                                            v as "all" | "5" | "4" | "3" | "2" | "1"
+                                        )
                                     }
                                 >
                                     <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
@@ -192,7 +213,9 @@ export default function LibrarianFeedbacksPage() {
                             <Skeleton className="h-9 w-full" />
                         </div>
                     ) : error ? (
-                        <div className="py-6 text-center text-sm text-red-300">{error}</div>
+                        <div className="py-6 text-center text-sm text-red-300">
+                            {error}
+                        </div>
                     ) : filtered.length === 0 ? (
                         <div className="py-10 text-center text-sm text-white/70">
                             No feedbacks found.
@@ -203,7 +226,8 @@ export default function LibrarianFeedbacksPage() {
                             <div className="hidden md:block">
                                 <Table>
                                     <TableCaption className="text-xs text-white/60">
-                                        Showing {filtered.length} {filtered.length === 1 ? "entry" : "entries"}.
+                                        Showing {filtered.length}{" "}
+                                        {filtered.length === 1 ? "entry" : "entries"}.
                                     </TableCaption>
                                     <TableHeader>
                                         <TableRow className="border-white/10">
@@ -227,22 +251,43 @@ export default function LibrarianFeedbacksPage() {
                                     <TableBody>
                                         {filtered.map((f) => {
                                             const student =
-                                                f.studentEmail || f.studentId || `User #${f.userId}`;
-                                            const book = f.bookTitle || `Book #${f.bookId}`;
+                                                f.studentEmail ||
+                                                f.studentId ||
+                                                `User #${f.userId}`;
+                                            const book =
+                                                f.bookTitle || `Book #${f.bookId}`;
                                             const comment = f.comment || "—";
                                             return (
                                                 <TableRow
                                                     key={f.id}
                                                     className="border-white/5 hover:bg-white/5 transition-colors"
                                                 >
-                                                    <TableCell className="text-xs opacity-80">{f.id}</TableCell>
-                                                    <TableCell className="text-sm">{student}</TableCell>
-                                                    <TableCell className="text-sm">{book}</TableCell>
+                                                    <TableCell className="text-xs opacity-80">
+                                                        {f.id}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {student}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {book}
+                                                    </TableCell>
                                                     <TableCell className="text-sm">
                                                         <Stars rating={f.rating} />
                                                     </TableCell>
-                                                    <TableCell className="text-sm max-w-[520px] truncate" title={comment}>
-                                                        {comment}
+                                                    <TableCell className="text-sm max-w-[520px]">
+                                                        <div className="flex flex-col gap-0.5">
+                                                            {f.createdAt && (
+                                                                <span className="text-[11px] text-white/50">
+                                                                    {fmtDate(f.createdAt as any)}
+                                                                </span>
+                                                            )}
+                                                            <span
+                                                                className="truncate"
+                                                                title={comment}
+                                                            >
+                                                                {comment}
+                                                            </span>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -255,8 +300,11 @@ export default function LibrarianFeedbacksPage() {
                             <div className="md:hidden space-y-3">
                                 {filtered.map((f) => {
                                     const student =
-                                        f.studentEmail || f.studentId || `User #${f.userId}`;
-                                    const book = f.bookTitle || `Book #${f.bookId}`;
+                                        f.studentEmail ||
+                                        f.studentId ||
+                                        `User #${f.userId}`;
+                                    const book =
+                                        f.bookTitle || `Book #${f.bookId}`;
                                     const comment = f.comment || "—";
                                     return (
                                         <div
@@ -264,27 +312,52 @@ export default function LibrarianFeedbacksPage() {
                                             className="rounded-xl border border-white/10 bg-slate-900/60 p-3"
                                         >
                                             <div className="flex items-center justify-between">
-                                                <div className="text-xs text-white/60">Feedback ID</div>
-                                                <div className="text-xs font-semibold">{f.id}</div>
+                                                <div className="text-xs text-white/60">
+                                                    Feedback ID
+                                                </div>
+                                                <div className="text-xs font-semibold">
+                                                    {f.id}
+                                                </div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Student</div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Student
+                                                </div>
                                                 <div className="text-sm">{student}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Book</div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Book
+                                                </div>
                                                 <div className="text-sm">{book}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Rating</div>
-                                                <div className="text-sm"><Stars rating={f.rating} /></div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Rating
+                                                </div>
+                                                <div className="text-sm">
+                                                    <Stars rating={f.rating} />
+                                                </div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Comment</div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Submitted
+                                                </div>
+                                                <div className="text-sm">
+                                                    {f.createdAt
+                                                        ? fmtDate(f.createdAt as any)
+                                                        : "—"}
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-2">
+                                                <div className="text-[11px] text-white/60">
+                                                    Comment
+                                                </div>
                                                 <div className="text-sm">{comment}</div>
                                             </div>
                                         </div>

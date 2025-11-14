@@ -46,7 +46,6 @@ import {
 import {
     fetchBooks,
     createBook,
-    updateBook,
     deleteBook,
     type BookDTO,
 } from "@/lib/books";
@@ -172,37 +171,6 @@ export default function LibrarianBooksPage() {
             toast.error("Failed to create book", { description: msg });
         } finally {
             setSaving(false);
-        }
-    };
-
-    const handleToggleAvailable = async (book: BookDTO) => {
-        const nextAvailable = !book.available;
-        // Optimistic update
-        setBooks((prev) =>
-            prev.map((b) =>
-                b.id === book.id ? { ...b, available: nextAvailable } : b
-            )
-        );
-
-        try {
-            const updated = await updateBook(book.id, { available: nextAvailable });
-            setBooks((prev) =>
-                prev.map((b) => (b.id === updated.id ? updated : b))
-            );
-            toast.success("Availability updated", {
-                description: `"${updated.title}" is now ${updated.available ? "available" : "unavailable"
-                    }.`,
-            });
-        } catch (err: any) {
-            // Rollback
-            setBooks((prev) =>
-                prev.map((b) =>
-                    b.id === book.id ? { ...b, available: book.available } : b
-                )
-            );
-            const msg =
-                err?.message || "Failed to update availability. Please try again.";
-            toast.error("Update failed", { description: msg });
         }
     };
 
@@ -523,32 +491,27 @@ export default function LibrarianBooksPage() {
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            <button
-                                                type="button"
-                                                className="inline-flex items-center gap-1 text-xs bg-transparent border-0 cursor-pointer"
-                                                onClick={() => handleToggleAvailable(book)}
+                                            {/* 🔒 Display-only availability (no onClick) */}
+                                            <Badge
+                                                variant={book.available ? "default" : "outline"}
+                                                className={
+                                                    book.available
+                                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
+                                                        : "border-red-400/70 text-red-200 hover:bg-red-500/10"
+                                                }
                                             >
-                                                <Badge
-                                                    variant={book.available ? "default" : "outline"}
-                                                    className={
-                                                        book.available
-                                                            ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                            : "border-red-400/70 text-red-200 hover:bg-red-500/10"
-                                                    }
-                                                >
-                                                    {book.available ? (
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <CheckCircle2 className="h-3 w-3" />
-                                                            Available
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <CircleOff className="h-3 w-3" />
-                                                            Unavailable
-                                                        </span>
-                                                    )}
-                                                </Badge>
-                                            </button>
+                                                {book.available ? (
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                        Available
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <CircleOff className="h-3 w-3" />
+                                                        Unavailable
+                                                    </span>
+                                                )}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             {/* ✅ AlertDialog for delete confirmation */}

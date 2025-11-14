@@ -22,9 +22,28 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Loader2, RefreshCcw, Search, ShieldAlert } from "lucide-react";
+import {
+    Loader2,
+    RefreshCcw,
+    Search,
+    ShieldAlert,
+    Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { API_BASE } from "@/api/auth/route";
+
+// ✅ shadcn AlertDialog for destructive actions (delete)
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 /* ----------------------------- Types ----------------------------- */
 
@@ -41,20 +60,37 @@ export type DamageReportDTO = {
     bookTitle: string | null;
 
     // Core damage info
-    damageType: string;      // e.g., Torn Pages, Water Damage
-    severity: Severity;      // minor | moderate | major
-    status: DamageStatus;    // pending | assessed | paid
-    fee?: number;            // optional display
-    notes?: string | null;   // optional display
-    reportedAt?: string;     // optional display
+    damageType: string; // e.g., Torn Pages, Water Damage
+    severity: Severity; // minor | moderate | major
+    status: DamageStatus; // pending | assessed | paid
+    fee?: number; // optional display
+    notes?: string | null; // optional display
+    reportedAt?: string; // optional display
 
-    // New: uploaded picture
-    photoUrl?: string | null; // may be absolute S3 URL now
+    // Uploaded pictures
+    photoUrl?: string | null; // legacy single URL
+    photoUrls?: string[] | null; // new multi-image support
 };
 
 type JsonOk<T> = { ok: true } & T;
 
 /* ------------------------ Helpers (local) ------------------------ */
+
+/**
+ * Format date as YYYY-MM-DD in *local* timezone
+ * to avoid off-by-one issues from UTC conversions.
+ */
+function fmtDate(d?: string | null) {
+    if (!d) return "—";
+    try {
+        const date = new Date(d);
+        if (Number.isNaN(date.getTime())) return d;
+        // en-CA -> 2025-11-13 (YYYY-MM-DD)
+        return date.toLocaleDateString("en-CA");
+    } catch {
+        return d;
+    }
+}
 
 function peso(n: number | string | undefined) {
     if (n === undefined) return "—";
@@ -108,7 +144,7 @@ function formatDamageInfo(r: DamageReportDTO) {
                 )}
                 {r.reportedAt && (
                     <span className="mr-3">
-                        Reported: {new Date(r.reportedAt).toLocaleString()}
+                        Reported: {fmtDate(r.reportedAt)}
                     </span>
                 )}
                 {r.notes && <span className="block truncate">Notes: {r.notes}</span>}
@@ -167,8 +203,108 @@ async function fetchDamageReports(): Promise<DamageReportDTO[]> {
         throw new Error(`HTTP ${resp.status}`);
     }
 
-    const data = (isJson ? await resp.json() : null) as JsonOk<{ reports: DamageReportDTO[] }>;
+    const data = (isJson ? await resp.json() : null) as JsonOk<{
+        reports: DamageReportDTO[];
+    }>;
     return data.reports ?? [];
+}
+
+/** PATCH damage report (e.g. update status) */
+async function patchDamageReport(
+    id: string | number,
+    patch: Partial<Pick<DamageReportDTO, "status" | "fee" | "notes" | "severity">>
+): Promise<DamageReportDTO> {
+    let resp: Response;
+    try {
+        resp = await fetch(
+            `${API_BASE}/api/damage-reports/${encodeURIComponent(String(id))}`,
+            {
+                method: "PATCH",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patch),
+            }
+        );
+    } catch (e: any) {
+        const details = e?.message ? ` Details: ${e.message}` : "";
+        throw new Error(
+            `Cannot reach the API (${API_BASE}). Is the server running and allowing this origin?${details}`
+        );
+    }
+
+    const ct = resp.headers.get("content-type")?.toLowerCase() || "";
+    const isJson = ct.includes("application/json");
+
+    if (!resp.ok) {
+        if (isJson) {
+            try {
+                const data = (await resp.json()) as any;
+                if (data && typeof data === "object" && typeof data.message === "string") {
+                    throw new Error(data.message);
+                }
+            } catch {
+                /* ignore */
+            }
+        } else {
+            try {
+                const text = await resp.text();
+                if (text) throw new Error(text);
+            } catch {
+                /* ignore */
+            }
+        }
+        throw new Error(`HTTP ${resp.status}`);
+    }
+
+    const data = (isJson ? await resp.json() : null) as JsonOk<{
+        report: DamageReportDTO;
+    }>;
+    return data.report;
+}
+
+/** DELETE damage report */
+async function deleteDamageReport(id: string | number): Promise<void> {
+    let resp: Response;
+    try {
+        resp = await fetch(
+            `${API_BASE}/api/damage-reports/${encodeURIComponent(String(id))}`,
+            {
+                method: "DELETE",
+                credentials: "include",
+            }
+        );
+    } catch (e: any) {
+        const details = e?.message ? ` Details: ${e.message}` : "";
+        throw new Error(
+            `Cannot reach the API (${API_BASE}). Is the server running and allowing this origin?${details}`
+        );
+    }
+
+    const ct = resp.headers.get("content-type")?.toLowerCase() || "";
+    const isJson = ct.includes("application/json");
+
+    if (!resp.ok) {
+        if (isJson) {
+            try {
+                const data = (await resp.json()) as any;
+                if (data && typeof data === "object" && typeof data.message === "string") {
+                    throw new Error(data.message);
+                }
+            } catch {
+                /* ignore */
+            }
+        } else {
+            try {
+                const text = await resp.text();
+                if (text) throw new Error(text);
+            } catch {
+                /* ignore */
+            }
+        }
+        throw new Error(`HTTP ${resp.status}`);
+    }
+
+    // If backend returns JSON we just ignore it here
 }
 
 /* --------------------------- Page Component --------------------------- */
@@ -181,6 +317,10 @@ export default function LibrarianDamageReportsPage() {
     const [rows, setRows] = React.useState<DamageReportDTO[]>([]);
     const [search, setSearch] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState<"all" | DamageStatus>("all");
+
+    // Per-row action states
+    const [updatingId, setUpdatingId] = React.useState<string | null>(null);
+    const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
     const load = React.useCallback(async () => {
         setError(null);
@@ -210,6 +350,63 @@ export default function LibrarianDamageReportsPage() {
         }
     }
 
+    async function handleStatusStep(report: DamageReportDTO) {
+        // pending -> assessed -> paid
+        let next: DamageStatus | null = null;
+        if (report.status === "pending") next = "assessed";
+        else if (report.status === "assessed") next = "paid";
+
+        if (!next || next === report.status) return;
+
+        const idStr = String(report.id);
+        setUpdatingId(idStr);
+
+        // Optimistic UI update
+        const prevRows = rows;
+        setRows((current) =>
+            current.map((r) =>
+                r.id === report.id ? { ...r, status: next as DamageStatus } : r
+            )
+        );
+
+        try {
+            const updated = await patchDamageReport(report.id, { status: next });
+            setRows((current) =>
+                current.map((r) => (r.id === updated.id ? updated : r))
+            );
+            toast.success("Status updated", {
+                description: `Report #${updated.id} is now ${updated.status}.`,
+            });
+        } catch (err: any) {
+            setRows(prevRows);
+            const msg = err?.message || "Failed to update status.";
+            toast.error("Update failed", { description: msg });
+        } finally {
+            setUpdatingId(null);
+        }
+    }
+
+    async function handleDelete(report: DamageReportDTO) {
+        const idStr = String(report.id);
+        setDeletingId(idStr);
+
+        const previous = rows;
+        setRows((current) => current.filter((r) => r.id !== report.id));
+
+        try {
+            await deleteDamageReport(report.id);
+            toast.success("Damage report deleted", {
+                description: `Report #${report.id} has been removed.`,
+            });
+        } catch (err: any) {
+            setRows(previous);
+            const msg = err?.message || "Failed to delete damage report.";
+            toast.error("Delete failed", { description: msg });
+        } finally {
+            setDeletingId(null);
+        }
+    }
+
     const filtered = React.useMemo(() => {
         const q = search.trim().toLowerCase();
         let list = rows;
@@ -229,7 +426,12 @@ export default function LibrarianDamageReportsPage() {
                 " " +
                 String(r.userId || "");
             const book = (r.bookTitle || "") + " " + String(r.bookId || "");
-            const damage = (r.damageType || "") + " " + (r.severity || "") + " " + (r.status || "");
+            const damage =
+                (r.damageType || "") +
+                " " +
+                (r.severity || "") +
+                " " +
+                (r.status || "");
             const notes = r.notes || "";
             return (
                 String(r.id).includes(q) ||
@@ -248,8 +450,12 @@ export default function LibrarianDamageReportsPage() {
                 <div className="flex items-start gap-2">
                     <ShieldAlert className="h-5 w-5 mt-0.5 text-white/70" />
                     <div>
-                        <h2 className="text-lg font-semibold leading-tight">Book Damage Reports</h2>
-                        <p className="text-xs text-white/70">Track reported damages with photos.</p>
+                        <h2 className="text-lg font-semibold leading-tight">
+                            Book Damage Reports
+                        </h2>
+                        <p className="text-xs text-white/70">
+                            Track reported damages with photos and resolve their status.
+                        </p>
                     </div>
                 </div>
 
@@ -314,7 +520,9 @@ export default function LibrarianDamageReportsPage() {
                             <Skeleton className="h-9 w-full" />
                         </div>
                     ) : error ? (
-                        <div className="py-6 text-center text-sm text-red-300">{error}</div>
+                        <div className="py-6 text-center text-sm text-red-300">
+                            {error}
+                        </div>
                     ) : filtered.length === 0 ? (
                         <div className="py-10 text-center text-sm text-white/70">
                             No damage reports found.
@@ -325,7 +533,8 @@ export default function LibrarianDamageReportsPage() {
                             <div className="hidden md:block">
                                 <Table>
                                     <TableCaption className="text-xs text-white/60">
-                                        Showing {filtered.length} {filtered.length === 1 ? "entry" : "entries"}.
+                                        Showing {filtered.length}{" "}
+                                        {filtered.length === 1 ? "entry" : "entries"}.
                                     </TableCaption>
                                     <TableHeader>
                                         <TableRow className="border-white/10">
@@ -344,41 +553,155 @@ export default function LibrarianDamageReportsPage() {
                                             <TableHead className="text-xs font-semibold text-white/70">
                                                 Uploaded Picture
                                             </TableHead>
+                                            <TableHead className="text-xs font-semibold text-white/70 text-right">
+                                                Actions
+                                            </TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {filtered.map((r) => {
                                             const student =
-                                                r.studentEmail || r.studentId || r.studentName || `User #${r.userId}`;
-                                            const book = r.bookTitle || `Book #${r.bookId}`;
-                                            const abs = toAbsoluteUrl(r.photoUrl);
+                                                r.studentEmail ||
+                                                r.studentId ||
+                                                r.studentName ||
+                                                `User #${r.userId}`;
+                                            const book =
+                                                r.bookTitle || `Book #${r.bookId}`;
+                                            const primaryPhoto =
+                                                r.photoUrl ||
+                                                (r.photoUrls && r.photoUrls[0]) ||
+                                                undefined;
+                                            const abs = toAbsoluteUrl(primaryPhoto);
+                                            const totalPhotos =
+                                                (r.photoUrls?.length || 0) ||
+                                                (r.photoUrl ? 1 : 0);
+
+                                            const isRowUpdating =
+                                                updatingId === String(r.id);
+                                            const isRowDeleting =
+                                                deletingId === String(r.id);
+                                            const disableActions =
+                                                isRowUpdating || isRowDeleting;
+
+                                            let statusActionLabel: string | null = null;
+                                            if (r.status === "pending") {
+                                                statusActionLabel = "Mark assessed";
+                                            } else if (r.status === "assessed") {
+                                                statusActionLabel = "Mark paid";
+                                            }
+
                                             return (
                                                 <TableRow
                                                     key={r.id}
                                                     className="border-white/5 hover:bg-white/5 transition-colors"
                                                 >
-                                                    <TableCell className="text-xs opacity-80">{r.id}</TableCell>
-                                                    <TableCell className="text-sm">{student}</TableCell>
-                                                    <TableCell className="text-sm">{book}</TableCell>
-                                                    <TableCell className="text-sm align-top">{formatDamageInfo(r)}</TableCell>
+                                                    <TableCell className="text-xs opacity-80">
+                                                        {r.id}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {student}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {book}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm align-top">
+                                                        {formatDamageInfo(r)}
+                                                    </TableCell>
                                                     <TableCell className="text-sm">
                                                         {abs ? (
-                                                            <a
-                                                                href={abs}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                className="inline-block"
-                                                            >
-                                                                <img
-                                                                    src={abs}
-                                                                    alt={`Damage proof #${r.id}`}
-                                                                    className="h-14 w-14 object-cover rounded-md border border-white/10"
-                                                                    loading="lazy"
-                                                                />
-                                                            </a>
+                                                            <div className="flex flex-col items-start gap-1">
+                                                                <a
+                                                                    href={abs}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="inline-block"
+                                                                >
+                                                                    <img
+                                                                        src={abs}
+                                                                        alt={`Damage proof #${r.id}`}
+                                                                        className="h-14 w-14 object-cover rounded-md border border-white/10"
+                                                                        loading="lazy"
+                                                                    />
+                                                                </a>
+                                                                {totalPhotos > 1 && (
+                                                                    <span className="text-[10px] text-white/60">
+                                                                        +{totalPhotos - 1} more
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         ) : (
                                                             <span className="opacity-60">—</span>
                                                         )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-xs">
+                                                        <div className="inline-flex items-center justify-end gap-1">
+                                                            {statusActionLabel && (
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="h-7 px-2 border-blue-400/70 text-blue-100 hover:bg-blue-500/15"
+                                                                    onClick={() =>
+                                                                        handleStatusStep(r)
+                                                                    }
+                                                                    disabled={disableActions}
+                                                                >
+                                                                    {isRowUpdating ? (
+                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                    ) : (
+                                                                        statusActionLabel
+                                                                    )}
+                                                                </Button>
+                                                            )}
+
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-7 w-7 text-red-300 hover:text-red-100 hover:bg-red-500/15"
+                                                                        disabled={disableActions}
+                                                                    >
+                                                                        {isRowDeleting ? (
+                                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                                        ) : (
+                                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                        <span className="sr-only">
+                                                                            Delete damage report
+                                                                        </span>
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>
+                                                                            Delete report #
+                                                                            {r.id}?
+                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogDescription className="text-white/70">
+                                                                            This action cannot be
+                                                                            undone. The damage report
+                                                                            will be permanently
+                                                                            removed from the system.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel className="border-white/20 text-white hover:bg-black/20">
+                                                                            Cancel
+                                                                        </AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            className="bg-red-600 hover:bg-red-700 text-white"
+                                                                            onClick={() =>
+                                                                                handleDelete(r)
+                                                                            }
+                                                                        >
+                                                                            Delete report
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -391,48 +714,171 @@ export default function LibrarianDamageReportsPage() {
                             <div className="md:hidden space-y-3">
                                 {filtered.map((r) => {
                                     const student =
-                                        r.studentEmail || r.studentId || r.studentName || `User #${r.userId}`;
-                                    const book = r.bookTitle || `Book #${r.bookId}`;
-                                    const abs = toAbsoluteUrl(r.photoUrl);
+                                        r.studentEmail ||
+                                        r.studentId ||
+                                        r.studentName ||
+                                        `User #${r.userId}`;
+                                    const book =
+                                        r.bookTitle || `Book #${r.bookId}`;
+                                    const primaryPhoto =
+                                        r.photoUrl ||
+                                        (r.photoUrls && r.photoUrls[0]) ||
+                                        undefined;
+                                    const abs = toAbsoluteUrl(primaryPhoto);
+                                    const totalPhotos =
+                                        (r.photoUrls?.length || 0) ||
+                                        (r.photoUrl ? 1 : 0);
+
+                                    const isRowUpdating =
+                                        updatingId === String(r.id);
+                                    const isRowDeleting =
+                                        deletingId === String(r.id);
+                                    const disableActions =
+                                        isRowUpdating || isRowDeleting;
+
+                                    let statusActionLabel: string | null = null;
+                                    if (r.status === "pending") {
+                                        statusActionLabel = "Mark assessed";
+                                    } else if (r.status === "assessed") {
+                                        statusActionLabel = "Mark paid";
+                                    }
+
                                     return (
                                         <div
                                             key={r.id}
                                             className="rounded-xl border border-white/10 bg-slate-900/60 p-3"
                                         >
                                             <div className="flex items-center justify-between">
-                                                <div className="text-xs text-white/60">Damage Report ID</div>
-                                                <div className="text-xs font-semibold">{r.id}</div>
+                                                <div className="text-xs text-white/60">
+                                                    Damage Report ID
+                                                </div>
+                                                <div className="text-xs font-semibold">
+                                                    {r.id}
+                                                </div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Student Email (or ID)</div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Student Email (or ID)
+                                                </div>
                                                 <div className="text-sm">{student}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Book Title (or ID)</div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Book Title (or ID)
+                                                </div>
                                                 <div className="text-sm">{book}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Damage Information</div>
-                                                <div className="text-sm">{formatDamageInfo(r)}</div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Damage Information
+                                                </div>
+                                                <div className="text-sm">
+                                                    {formatDamageInfo(r)}
+                                                </div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">Uploaded Picture</div>
+                                                <div className="text-[11px] text-white/60">
+                                                    Uploaded Picture
+                                                </div>
                                                 {abs ? (
-                                                    <a href={abs} target="_blank" rel="noreferrer" className="inline-block">
-                                                        <img
-                                                            src={abs}
-                                                            alt={`Damage proof #${r.id}`}
-                                                            className="h-24 w-24 object-cover rounded-md border border-white/10"
-                                                            loading="lazy"
-                                                        />
-                                                    </a>
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        <a
+                                                            href={abs}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="inline-block"
+                                                        >
+                                                            <img
+                                                                src={abs}
+                                                                alt={`Damage proof #${r.id}`}
+                                                                className="h-24 w-24 object-cover rounded-md border border-white/10"
+                                                                loading="lazy"
+                                                            />
+                                                        </a>
+                                                        {totalPhotos > 1 && (
+                                                            <span className="text-[10px] text-white/60">
+                                                                +{totalPhotos - 1} more
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 ) : (
-                                                    <div className="text-sm opacity-60">—</div>
+                                                    <div className="text-sm opacity-60">
+                                                        —
+                                                    </div>
                                                 )}
+                                            </div>
+
+                                            {/* Actions (stacked on mobile) */}
+                                            <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                                                {statusActionLabel && (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+                                                        onClick={() => handleStatusStep(r)}
+                                                        disabled={disableActions}
+                                                    >
+                                                        {isRowUpdating ? (
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                Updating…
+                                                            </span>
+                                                        ) : (
+                                                            statusActionLabel
+                                                        )}
+                                                    </Button>
+                                                )}
+
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="w-full sm:w-auto border-red-500/60 text-red-300 hover:bg-red-500/15"
+                                                            disabled={disableActions}
+                                                        >
+                                                            {isRowDeleting ? (
+                                                                <span className="inline-flex items-center gap-2">
+                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                    Deleting…
+                                                                </span>
+                                                            ) : (
+                                                                <>
+                                                                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                                                    Delete
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>
+                                                                Delete report #{r.id}?
+                                                            </AlertDialogTitle>
+                                                            <AlertDialogDescription className="text-white/70">
+                                                                This action cannot be undone. The
+                                                                damage report will be permanently
+                                                                removed from the system.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel className="border-white/20 text-white hover:bg-black/20">
+                                                                Cancel
+                                                            </AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                className="bg-red-600 hover:bg-red-700 text-white"
+                                                                onClick={() => handleDelete(r)}
+                                                            >
+                                                                Delete report
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
                                             </div>
                                         </div>
                                     );
