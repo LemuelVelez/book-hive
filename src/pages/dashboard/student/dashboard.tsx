@@ -44,6 +44,19 @@ import {
     type DamageReportDTO,
 } from "@/lib/damageReports"
 
+import {
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    Tooltip,
+    PieChart,
+    Pie,
+    Cell,
+    Legend,
+} from "recharts"
+
 /**
  * Format date as YYYY-MM-DD in *local* timezone
  * to avoid off-by-one issues from UTC conversions.
@@ -71,6 +84,14 @@ function peso(n: number) {
     } catch {
         return `₱${n.toFixed(2)}`
     }
+}
+
+const FEEDBACK_COLORS = ["#22c55e", "#a855f7", "#f97316", "#38bdf8", "#f43f5e"]
+
+const CIRCULATION_COLORS: Record<string, string> = {
+    Active: "#22c55e",
+    Returned: "#a855f7",
+    Overdue: "#f97316",
 }
 
 export default function StudentDashboardPage() {
@@ -177,6 +198,33 @@ export default function StudentDashboardPage() {
                 .slice(0, 3),
         [damageReports],
     )
+
+    // ---- Chart data ----
+    const circulationChartData = React.useMemo(
+        () => [
+            { name: "Active", value: activeRecords.length },
+            { name: "Returned", value: returnedRecords.length },
+            { name: "Overdue", value: overdueCount },
+        ],
+        [activeRecords.length, returnedRecords.length, overdueCount],
+    )
+
+    const feedbackChartData = React.useMemo(() => {
+        if (!feedbacks.length) return []
+        const counts: Record<number, number> = {}
+        feedbacks.forEach((f) => {
+            const r = Number(f.rating)
+            if (!r || Number.isNaN(r)) return
+            counts[r] = (counts[r] || 0) + 1
+        })
+        return Array.from({ length: 5 }, (_, i) => {
+            const rating = i + 1
+            return {
+                name: `${rating}★`,
+                value: counts[rating] || 0,
+            }
+        }).filter((d) => d.value > 0)
+    }, [feedbacks])
 
     return (
         <DashboardLayout title="My Library overview">
@@ -400,6 +448,149 @@ export default function StudentDashboardPage() {
                                 <ArrowRight className="h-3 w-3 ml-1" />
                             </Link>
                         </Button>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Charts section */}
+            <div className="grid gap-6 lg:grid-cols-2 mb-6">
+                {/* Circulation bar chart */}
+                <Card className="bg-slate-800/60 border-white/10">
+                    <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                        <div className="space-y-1">
+                            <CardTitle className="text-sm font-semibold">
+                                Circulation status (bar graph)
+                            </CardTitle>
+                            <p className="text-[11px] text-white/60">
+                                Visual breakdown of your current and past borrow records.
+                            </p>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="h-64">
+                        {loading ? (
+                            <div className="flex flex-col gap-2 h-full justify-center">
+                                <Skeleton className="h-6 w-24" />
+                                <Skeleton className="h-40 w-full" />
+                            </div>
+                        ) : records.length === 0 ? (
+                            <div className="flex items-center justify-center h-full text-xs text-white/60 text-center px-4">
+                                No circulation data yet. Borrow some books to see the chart.
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={circulationChartData}
+                                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                                >
+                                    <XAxis
+                                        dataKey="name"
+                                        stroke="#cbd5f5"
+                                        fontSize={12}
+                                        tickLine={false}
+                                    />
+                                    <YAxis
+                                        allowDecimals={false}
+                                        stroke="#cbd5f5"
+                                        fontSize={12}
+                                        tickLine={false}
+                                    />
+                                    <Tooltip
+                                        cursor={{ fill: "rgba(148,163,184,0.15)" }}
+                                        contentStyle={{
+                                            backgroundColor: "#020617",
+                                            border: "1px solid rgba(148,163,184,0.4)",
+                                            borderRadius: "0.375rem",
+                                            fontSize: "0.75rem",
+                                            color: "#e5e7eb",
+                                        }}
+                                        itemStyle={{ color: "#e5e7eb" }}
+                                        labelStyle={{ color: "#e5e7eb" }}
+                                    />
+                                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                        {circulationChartData.map((entry) => (
+                                            <Cell
+                                                key={entry.name}
+                                                fill={
+                                                    CIRCULATION_COLORS[entry.name] ?? "#e5e7eb"
+                                                }
+                                            />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Feedback pie chart */}
+                <Card className="bg-slate-800/60 border-white/10">
+                    <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                        <div className="space-y-1">
+                            <CardTitle className="text-sm font-semibold">
+                                Feedback rating distribution (pie chart)
+                            </CardTitle>
+                            <p className="text-[11px] text-white/60">
+                                How your submitted ratings are distributed across 1–5 stars.
+                            </p>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="h-64">
+                        {loading ? (
+                            <div className="flex flex-col gap-2 h-full justify-center">
+                                <Skeleton className="h-6 w-24" />
+                                <Skeleton className="h-40 w-full" />
+                            </div>
+                        ) : !feedbackChartData.length ? (
+                            <div className="flex items-center justify-center h-full text-xs text-white/60 text-center px-4">
+                                You haven&apos;t submitted any rated feedback yet.
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#020617",
+                                            border: "1px solid rgba(148,163,184,0.4)",
+                                            borderRadius: "0.375rem",
+                                            fontSize: "0.75rem",
+                                            color: "#e5e7eb",
+                                        }}
+                                        itemStyle={{ color: "#e5e7eb" }}
+                                        labelStyle={{ color: "#e5e7eb" }}
+                                    />
+                                    <Legend
+                                        verticalAlign="bottom"
+                                        height={24}
+                                        formatter={(value) => (
+                                            <span className="text-[11px] text-slate-100">
+                                                {value}
+                                            </span>
+                                        )}
+                                    />
+                                    <Pie
+                                        data={feedbackChartData}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        cx="50%"
+                                        cy="45%"
+                                        innerRadius={40}
+                                        outerRadius={70}
+                                        paddingAngle={2}
+                                    >
+                                        {feedbackChartData.map((_, index) => (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={
+                                                    FEEDBACK_COLORS[
+                                                    index % FEEDBACK_COLORS.length
+                                                    ]
+                                                }
+                                            />
+                                        ))}
+                                    </Pie>
+                                </PieChart>
+                            </ResponsiveContainer>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -732,9 +923,9 @@ export default function StudentDashboardPage() {
                                                 <Badge
                                                     className={
                                                         r.status === "paid"
-                                                            ? "bg-emerald-600/80 border-emerald-400/70"
+                                                            ? "text-white bg-emerald-600/80 border-emerald-400/70"
                                                             : r.status === "assessed"
-                                                                ? "bg-amber-600/80 border-amber-400/70"
+                                                                ? "text-white bg-amber-600/80 border-amber-400/70"
                                                                 : "text-white bg-slate-700/80 border-slate-500/70"
                                                     }
                                                 >

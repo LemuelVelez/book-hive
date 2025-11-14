@@ -111,6 +111,7 @@ export type CreateBorrowPayload = {
 export type UpdateBorrowPayload = Partial<{
     returnDate: string | null; // YYYY-MM-DD or null
     status: BorrowStatus;
+    fine: number;
 }>;
 
 export async function fetchBorrowRecords(): Promise<BorrowRecordDTO[]> {
@@ -172,23 +173,36 @@ export async function requestBorrowReturn(
     return res.record;
 }
 
+export type MarkBorrowReturnedOptions = {
+    returnDate?: string;
+    fine?: number;
+};
+
 /**
  * Librarian/Admin action: finalize the return.
  * - Sets status to "returned"
  * - Sets return_date (defaults to today)
+ * - Optionally sets fine (overdue + damage) in pesos.
  * - Marks the book as available again (on the server).
  */
 export async function markBorrowReturned(
     id: string | number,
-    returnDate?: string
+    options: MarkBorrowReturnedOptions = {}
 ): Promise<BorrowRecordDTO> {
+    const body: UpdateBorrowPayload = {
+        status: "returned",
+        returnDate:
+            options.returnDate ?? new Date().toISOString().slice(0, 10),
+    };
+
+    if (typeof options.fine === "number") {
+        body.fine = options.fine;
+    }
+
     type Resp = JsonOk<{ record: BorrowRecordDTO }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {
         method: "PATCH",
-        body: {
-            status: "returned",
-            returnDate: returnDate ?? new Date().toISOString().slice(0, 10),
-        },
+        body,
     });
     return res.record;
 }
