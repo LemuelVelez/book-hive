@@ -24,7 +24,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
     Select,
@@ -41,6 +40,8 @@ import {
     CheckCircle2,
     XCircle,
     Search,
+    Clock3,
+    AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,7 +51,11 @@ import {
     type BorrowRecordDTO,
 } from "@/lib/borrows";
 
+// === CONFIG: adjust fine per day here if needed ===
+const FINE_PER_DAY = 5; // ₱5.00 per overdue day
+
 function peso(n: number) {
+    if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00";
     try {
         return new Intl.NumberFormat("en-PH", {
             style: "currency",
@@ -77,6 +82,36 @@ function fmtDate(d?: string | null) {
     }
 }
 
+/**
+ * Compute overdue days and automatic fine based on due date and today (local).
+ */
+function computeAutoFine(dueDate?: string | null) {
+    if (!dueDate) {
+        return { overdueDays: 0, autoFine: 0 };
+    }
+
+    const due = new Date(dueDate);
+    if (Number.isNaN(due.getTime())) {
+        return { overdueDays: 0, autoFine: 0 };
+    }
+
+    const now = new Date();
+
+    const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const todayLocal = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+    );
+
+    const diffMs = todayLocal.getTime() - dueLocal.getTime();
+    const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const overdueDays = rawDays > 0 ? rawDays : 0;
+    const autoFine = overdueDays > 0 ? overdueDays * FINE_PER_DAY : 0;
+
+    return { overdueDays, autoFine };
+}
+
 export default function LibrarianBorrowRecordsPage() {
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
@@ -84,7 +119,18 @@ export default function LibrarianBorrowRecordsPage() {
 
     const [records, setRecords] = React.useState<BorrowRecordDTO[]>([]);
     const [search, setSearch] = React.useState("");
-    const [statusFilter, setStatusFilter] = React.useState<"all" | "borrowed" | "returned">("all");
+    const [statusFilter, setStatusFilter] = React.useState<
+        "all" | "borrowed" | "returned"
+    >("all");
+
+    // --- Return dialog state (for marking as returned / verifying pending) ---
+    const [returnDialogOpen, setReturnDialogOpen] = React.useState(false);
+    const [selectedRecord, setSelectedRecord] =
+        React.useState<BorrowRecordDTO | null>(null);
+    const [fineInput, setFineInput] = React.useState<string>("0.00");
+    const [overduePreview, setOverduePreview] = React.useState<number>(0);
+    const [autoFinePreview, setAutoFinePreview] = React.useState<number>(0);
+    const [submittingReturn, setSubmittingReturn] = React.useState(false);
 
     const loadRecords = React.useCallback(async () => {
         setError(null);
@@ -114,16 +160,66 @@ export default function LibrarianBorrowRecordsPage() {
         }
     }
 
-    async function handleMarkReturned(rec: BorrowRecordDTO) {
-        try {
-            const updated = await markBorrowReturned(rec.id);
-            setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-            toast.success("Marked as returned", {
-                description: `Record #${rec.id} returned.`,
+    /**
+     * Open dialog to mark a record as returned (for both borrowed + pending).
+     * Auto-compute fine (if overdue), but allow librarian to edit it.
+     */
+    function openReturnDialog(rec: BorrowRecordDTO) {
+        const { overdueDays, autoFine } = computeAutoFine(rec.dueDate);
+
+        // If there's already a fine stored, prefer that as initial value.
+        const initialFine =
+            typeof rec.fine === "number" && rec.fine > 0 ? rec.fine : autoFine;
+
+        setSelectedRecord(rec);
+        setOverduePreview(overdueDays);
+        setAutoFinePreview(autoFine);
+        setFineInput(initialFine.toFixed(2));
+        setReturnDialogOpen(true);
+    }
+
+    function closeReturnDialog() {
+        setReturnDialogOpen(false);
+        setSelectedRecord(null);
+        setSubmittingReturn(false);
+    }
+
+    async function handleConfirmReturn() {
+        if (!selectedRecord) return;
+
+        const trimmed = fineInput.trim();
+        const parsed = trimmed === "" ? 0 : Number(trimmed);
+
+        if (Number.isNaN(parsed) || parsed < 0) {
+            toast.error("Invalid fine amount", {
+                description: "Fine must be a non-negative number.",
             });
+            return;
+        }
+
+        setSubmittingReturn(true);
+        try {
+            // Use `any` to be flexible if backend supports payload for custom fine.
+            const updated: BorrowRecordDTO = await (markBorrowReturned as any)(
+                selectedRecord.id,
+                { fine: parsed }
+            );
+
+            setRecords((prev) =>
+                prev.map((r) => (r.id === updated.id ? updated : r))
+            );
+
+            toast.success("Marked as returned", {
+                description: `Record #${updated.id} marked as returned with fine ${peso(
+                    updated.fine ?? parsed
+                )}.`,
+            });
+
+            closeReturnDialog();
         } catch (err: any) {
             const msg = err?.message || "Failed to mark as returned.";
             toast.error("Update failed", { description: msg });
+            setSubmittingReturn(false);
         }
     }
 
@@ -131,8 +227,13 @@ export default function LibrarianBorrowRecordsPage() {
         const q = search.trim().toLowerCase();
         let rows = records;
 
-        if (statusFilter !== "all") {
-            rows = rows.filter((r) => r.status === statusFilter);
+        // "Borrowed" filter: treat both borrowed + pending as "active"
+        if (statusFilter === "borrowed") {
+            rows = rows.filter(
+                (r) => r.status === "borrowed" || r.status === "pending"
+            );
+        } else if (statusFilter === "returned") {
+            rows = rows.filter((r) => r.status === "returned");
         }
 
         if (!q) return rows;
@@ -160,9 +261,20 @@ export default function LibrarianBorrowRecordsPage() {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <div>
-                        <h2 className="text-lg font-semibold leading-tight">Borrow &amp; Return Logs</h2>
+                        <h2 className="text-lg font-semibold leading-tight">
+                            Borrow &amp; Return Logs
+                        </h2>
                         <p className="text-xs text-white/70">
                             Track who borrowed which book, due dates, returns, and fines.
+                        </p>
+                        <p className="mt-1 text-[11px] text-amber-200/90">
+                            For{" "}
+                            <span className="font-semibold">pending verification</span>{" "}
+                            records, use this page to confirm the{" "}
+                            <span className="font-semibold">physical return</span>, auto-
+                            compute fines, and mark them as{" "}
+                            <span className="font-semibold">Returned</span>. This will keep
+                            the student&apos;s circulation status in sync.
                         </p>
                     </div>
                 </div>
@@ -205,7 +317,7 @@ export default function LibrarianBorrowRecordsPage() {
                             </div>
 
                             {/* Status filter (shadcn Select): full width on mobile */}
-                            <div className="w-full md:w-[180px]">
+                            <div className="w-full md:w-[200px]">
                                 <Select
                                     value={statusFilter}
                                     onValueChange={(v) =>
@@ -217,8 +329,10 @@ export default function LibrarianBorrowRecordsPage() {
                                     </SelectTrigger>
                                     <SelectContent className="bg-slate-900 text-white border-white/10">
                                         <SelectItem value="all">All</SelectItem>
-                                        <SelectItem value="borrowed">Borrowed</SelectItem>
-                                        <SelectItem value="returned">Returned</SelectItem>
+                                        <SelectItem value="borrowed">
+                                            Active (Borrowed + Pending)
+                                        </SelectItem>
+                                        <SelectItem value="returned">Returned only</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -240,146 +354,292 @@ export default function LibrarianBorrowRecordsPage() {
                             No borrow records found.
                         </div>
                     ) : (
-                        <Table>
-                            <TableCaption className="text-xs text-white/60">
-                                Showing {filtered.length} {filtered.length === 1 ? "record" : "records"}.
-                            </TableCaption>
-                            <TableHeader>
-                                <TableRow className="border-white/10">
-                                    <TableHead className="w-[90px] text-xs font-semibold text-white/70">
-                                        Borrow ID
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Student Email (or ID)
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Book Title (or ID)
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Borrow Date
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Due Date
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Return Date
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Status
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70 text-right">
-                                        ₱Fine
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70 text-right">
-                                        Actions
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filtered.map((rec) => {
-                                    const studentLabel =
-                                        rec.studentEmail ||
-                                        rec.studentId ||
-                                        rec.studentName ||
-                                        `User #${rec.userId}`;
-                                    const bookLabel = rec.bookTitle || `Book #${rec.bookId}`;
+                        <>
+                            <Table>
+                                <TableCaption className="text-xs text-white/60">
+                                    Showing {filtered.length}{" "}
+                                    {filtered.length === 1 ? "record" : "records"}. Use the{" "}
+                                    <span className="font-semibold text-amber-200">
+                                        Active (Borrowed + Pending)
+                                    </span>{" "}
+                                    filter to quickly see records that still need attention.
+                                </TableCaption>
+                                <TableHeader>
+                                    <TableRow className="border-white/10">
+                                        <TableHead className="w-[90px] text-xs font-semibold text-white/70">
+                                            Borrow ID
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Student Email (or ID)
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Book Title (or ID)
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Borrow Date
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Due Date
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Return Date
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Status
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70 text-right">
+                                            ₱Fine
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70 text-right">
+                                            Actions
+                                        </TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filtered.map((rec) => {
+                                        const studentLabel =
+                                            rec.studentEmail ||
+                                            rec.studentId ||
+                                            rec.studentName ||
+                                            `User #${rec.userId}`;
+                                        const bookLabel = rec.bookTitle || `Book #${rec.bookId}`;
 
-                                    return (
-                                        <TableRow
-                                            key={rec.id}
-                                            className="border-white/5 hover:bg-white/5 transition-colors"
-                                        >
-                                            <TableCell className="text-xs opacity-80">
-                                                {rec.id}
-                                            </TableCell>
-                                            <TableCell className="text-sm">{studentLabel}</TableCell>
-                                            <TableCell className="text-sm">{bookLabel}</TableCell>
-                                            <TableCell className="text-sm opacity-90">
-                                                {fmtDate(rec.borrowDate)}
-                                            </TableCell>
-                                            <TableCell className="text-sm opacity-90">
-                                                {fmtDate(rec.dueDate)}
-                                            </TableCell>
-                                            <TableCell className="text-sm opacity-90">
-                                                {fmtDate(rec.returnDate)}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                    variant={
-                                                        rec.status === "borrowed" ? "default" : "outline"
-                                                    }
-                                                    className={
-                                                        rec.status === "borrowed"
-                                                            ? "bg-amber-500/90 hover:bg-amber-500 text-black border-amber-400/80"
-                                                            : "border-emerald-400/70 text-emerald-200 hover:bg-emerald-500/10"
-                                                    }
-                                                >
-                                                    {rec.status === "borrowed" ? (
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <CornerDownLeft className="h-3 w-3" />
-                                                            Borrowed
-                                                        </span>
+                                        const isReturned = rec.status === "returned";
+                                        const isPending = rec.status === "pending";
+                                        const isBorrowed = rec.status === "borrowed";
+
+                                        const { overdueDays } = computeAutoFine(rec.dueDate);
+                                        const isOverdue =
+                                            (isBorrowed || isPending) && overdueDays > 0;
+
+                                        return (
+                                            <TableRow
+                                                key={rec.id}
+                                                className="border-white/5 hover:bg-white/5 transition-colors"
+                                            >
+                                                <TableCell className="text-xs opacity-80">
+                                                    {rec.id}
+                                                </TableCell>
+                                                <TableCell className="text-sm">{studentLabel}</TableCell>
+                                                <TableCell className="text-sm">{bookLabel}</TableCell>
+                                                <TableCell className="text-sm opacity-90">
+                                                    {fmtDate(rec.borrowDate)}
+                                                </TableCell>
+                                                <TableCell className="text-sm opacity-90">
+                                                    {fmtDate(rec.dueDate)}
+                                                </TableCell>
+                                                <TableCell className="text-sm opacity-90">
+                                                    {fmtDate(rec.returnDate)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {isReturned ? (
+                                                        <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
+                                                            <span className="inline-flex items-center gap-1">
+                                                                <CheckCircle2 className="h-3 w-3" />
+                                                                Returned
+                                                            </span>
+                                                        </Badge>
+                                                    ) : isPending ? (
+                                                        <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                                                            <span className="inline-flex items-center gap-1">
+                                                                <Clock3 className="h-3 w-3" />
+                                                                Pending verification
+                                                            </span>
+                                                        </Badge>
+                                                    ) : isOverdue ? (
+                                                        <Badge className="bg-red-500/80 hover:bg-red-500 text-white border-red-400/80">
+                                                            <span className="inline-flex items-center gap-1">
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                Overdue
+                                                            </span>
+                                                        </Badge>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <CheckCircle2 className="h-3 w-3" />
-                                                            Returned
+                                                        <Badge className="bg-amber-500/90 hover:bg-amber-500 text-black border-amber-400/80">
+                                                            <span className="inline-flex items-center gap-1">
+                                                                <CornerDownLeft className="h-3 w-3" />
+                                                                Borrowed
+                                                            </span>
+                                                        </Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right text-sm">
+                                                    {peso(rec.fine as number)}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {isBorrowed || isPending ? (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className={
+                                                                isPending
+                                                                    ? "text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                                                    : "text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                                            }
+                                                            onClick={() => openReturnDialog(rec)}
+                                                        >
+                                                            {isPending ? "Verify & mark returned" : "Mark returned"}
+                                                        </Button>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 text-white/60 text-xs">
+                                                            <XCircle className="h-3.5 w-3.5" /> No actions
                                                         </span>
                                                     )}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {peso(rec.fine)}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {rec.status === "borrowed" ? (
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
-                                                            >
-                                                                Mark returned
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>
-                                                                    Mark as returned?
-                                                                </AlertDialogTitle>
-                                                                <AlertDialogDescription className="text-white/70">
-                                                                    This will set <b>Return Date</b> to today and
-                                                                    free the book’s availability.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel className="border-white/20 text-white hover:bg-black/20">
-                                                                    Cancel
-                                                                </AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                                                    onClick={() => handleMarkReturned(rec)}
-                                                                >
-                                                                    Confirm
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 text-white/60 text-xs">
-                                                        <XCircle className="h-3.5 w-3.5" /> No actions
-                                                    </span>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </>
                     )}
                 </CardContent>
             </Card>
+
+            {/* Global dialog for confirming return & fine computation */}
+            <AlertDialog
+                open={returnDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        closeReturnDialog();
+                    } else {
+                        setReturnDialogOpen(true);
+                    }
+                }}
+            >
+                {selectedRecord && (
+                    <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>
+                                {selectedRecord.status === "pending"
+                                    ? "Verify and mark as returned?"
+                                    : "Mark as returned?"}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-white/70">
+                                You&apos;re about to mark{" "}
+                                <span className="font-semibold text-white">
+                                    “{selectedRecord.bookTitle ?? `Book #${selectedRecord.bookId}`}”
+                                </span>{" "}
+                                as <span className="font-semibold">Returned</span> for{" "}
+                                <span className="font-semibold">
+                                    {selectedRecord.studentEmail ??
+                                        selectedRecord.studentId ??
+                                        `User #${selectedRecord.userId}`}
+                                </span>
+                                .
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="mt-3 text-sm text-white/80 space-y-1">
+                            <p>
+                                <span className="text-white/60">Borrowed on:</span>{" "}
+                                {fmtDate(selectedRecord.borrowDate)}
+                            </p>
+                            <p>
+                                <span className="text-white/60">Due date:</span>{" "}
+                                {fmtDate(selectedRecord.dueDate)}
+                            </p>
+                            <p>
+                                <span className="text-white/60">Assumed return date:</span>{" "}
+                                {fmtDate(new Date().toISOString())}{" "}
+                                <span className="text-xs text-white/50">
+                                    (today, for fine computation)
+                                </span>
+                            </p>
+                            <p className="text-xs text-white/70 pt-1">
+                                Overdue days:{" "}
+                                <span className="font-semibold">
+                                    {overduePreview} day{overduePreview === 1 ? "" : "s"}
+                                </span>
+                                {overduePreview > 0 ? (
+                                    <>
+                                        {" "}
+                                        · Auto fine @ {peso(FINE_PER_DAY)} per day:{" "}
+                                        <span className="font-semibold">
+                                            {peso(autoFinePreview)}
+                                        </span>
+                                    </>
+                                ) : (
+                                    " (No overdue days → auto fine is ₱0.00)"
+                                )}
+                            </p>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                            <label className="text-xs font-medium text-white/80">
+                                Final fine amount (editable)
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <div className="relative w-full">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
+                                        ₱
+                                    </span>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        value={fineInput}
+                                        onChange={(e) => setFineInput(e.target.value)}
+                                        className="pl-6 bg-slate-900/70 border-white/20 text-white"
+                                    />
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/30 text-xs text-white/80"
+                                    onClick={() =>
+                                        setFineInput(autoFinePreview.toFixed(2))
+                                    }
+                                >
+                                    Use auto
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/30 text-xs text-white/80"
+                                    onClick={() =>
+                                        setFineInput(
+                                            (selectedRecord.fine ?? 0).toFixed(2)
+                                        )
+                                    }
+                                >
+                                    Use existing
+                                </Button>
+                            </div>
+                            <p className="text-[11px] text-white/60">
+                                The fine above will be saved with this record. You may set it
+                                to <span className="font-semibold">0</span> for waivers or
+                                adjust it manually if needed.
+                            </p>
+                        </div>
+
+                        <AlertDialogFooter>
+                            <AlertDialogCancel
+                                className="border-white/20 text-white hover:bg-black/20"
+                                disabled={submittingReturn}
+                            >
+                                Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                disabled={submittingReturn}
+                                onClick={handleConfirmReturn}
+                            >
+                                {submittingReturn ? (
+                                    <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Saving…
+                                    </span>
+                                ) : (
+                                    "Confirm return"
+                                )}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                )}
+            </AlertDialog>
         </DashboardLayout>
     );
 }
