@@ -60,7 +60,7 @@ import {
     register as apiRegister,
     resendVerifyEmail as apiResendVerifyEmail,
     checkStudentIdAvailability,
-    submitSupportTicket,
+    // submitSupportTicket,
 } from "@/lib/authentication";
 import { dashboardForRole, type Role } from "@/hooks/use-session";
 
@@ -108,7 +108,9 @@ const REMEMBER_FLAG_KEY = "bookhive:remember";
 const REMEMBER_EMAIL_KEY = "bookhive:rememberEmail";
 
 // No-op: reference args to satisfy no-unused-vars and keep a non-empty body for no-empty
-const noop = (...args: unknown[]) => { void args; };
+const noop = (...args: unknown[]) => {
+    void args;
+};
 
 // -------------------------
 // Lightweight query helpers
@@ -181,7 +183,7 @@ export default function AuthPage() {
     const [supSubject, setSupSubject] = useState("");
     const [supMessage, setSupMessage] = useState("");
     const [supFile, setSupFile] = useState<File | null>(null);
-    const [supSubmitting, setSupSubmitting] = useState(false);
+    const [supSubmitting /* , setSupSubmitting */] = useState(false);
     const [supError, setSupError] = useState<string>("");
     const [supSuccess, setSupSuccess] = useState<string>("");
     const [consent, setConsent] = useState(false);
@@ -320,11 +322,9 @@ export default function AuthPage() {
 
             const dest =
                 redirectParam ??
-                (
-                    rawRole === "student" || rawRole === "other"
-                        ? "/dashboard" // ✅ both student & other → /dashboard
-                        : dashboardForRole(rawRole)
-                );
+                (rawRole === "student" || rawRole === "other"
+                    ? "/dashboard" // ✅ both student & other → /dashboard
+                    : dashboardForRole(rawRole));
 
             navigate(dest, { replace: true });
         } catch (err: any) {
@@ -342,7 +342,10 @@ export default function AuthPage() {
                 } catch (e) {
                     noop(e);
                 }
-                navigate(`/auth/verify-email?email=${encodeURIComponent(email.trim())}`, { replace: true });
+                navigate(
+                    `/auth/verify-email?email=${encodeURIComponent(email.trim())}`,
+                    { replace: true }
+                );
                 setIsLoggingIn(false);
                 return;
             }
@@ -380,9 +383,12 @@ export default function AuthPage() {
 
         // Student-only required fields
         if (accountType === "student") {
-            const finalCollege = college === "Others" ? customCollege.trim() : college;
-            const finalProgram = program === "Others" ? customProgram.trim() : program;
-            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
+            const finalCollege =
+                college === "Others" ? customCollege.trim() : college;
+            const finalProgram =
+                program === "Others" ? customProgram.trim() : program;
+            const finalYearLevel =
+                yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
 
             if (!studentId.trim()) {
                 const msg = "Student ID is required for student accounts.";
@@ -409,7 +415,8 @@ export default function AuthPage() {
                 return;
             }
             if (studentIdAvailable === false) {
-                const msg = "That Student ID is already in use. Please use a different one.";
+                const msg =
+                    "That Student ID is already in use. Please use a different one.";
                 setRegError(msg);
                 toast.error("Student ID unavailable", { description: msg });
                 return;
@@ -418,12 +425,13 @@ export default function AuthPage() {
 
         setIsRegistering(true);
         try {
-            const finalProgram = program === "Others" ? customProgram.trim() : program;
-            const finalYearLevel = yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
+            const finalProgram =
+                program === "Others" ? customProgram.trim() : program;
+            const finalYearLevel =
+                yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
 
             // ✅ Map accountType -> role to send both to backend
-            const role: Role =
-                accountType === "student" ? "student" : "other";
+            const role: Role = accountType === "student" ? "student" : "other";
 
             const payload: Record<string, unknown> = {
                 fullName: fullName.trim(),
@@ -455,11 +463,14 @@ export default function AuthPage() {
 
             // Route to verify page with email pre-filled
             navigate(
-                `/auth/verify-email?email=${encodeURIComponent(regEmail.trim())}&justRegistered=1`,
+                `/auth/verify-email?email=${encodeURIComponent(
+                    regEmail.trim()
+                )}&justRegistered=1`,
                 { replace: true }
             );
         } catch (err: any) {
-            const msg = err?.message || "Failed to register. Please try again.";
+            const msg =
+                err?.message || "Failed to register. Please try again.";
             setRegError(msg);
             toast.error("Registration failed", { description: msg });
         } finally {
@@ -474,7 +485,9 @@ export default function AuthPage() {
             triggerLogin();
         }
     };
-    const onRegisterKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    const onRegisterKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (
+        e
+    ) => {
         if (e.key === "Enter") {
             e.preventDefault();
             triggerRegister();
@@ -496,8 +509,15 @@ export default function AuthPage() {
         setSupSuccess("");
     };
 
-    // POST: /api/support/ticket — with optional file attachment
+    // POST: /api/support/ticket — currently disabled, show "under development"
     const submitSupport = async () => {
+        const msg = "Contact Support is under development. Coming soon.";
+        setSupError("");
+        setSupSuccess(msg);
+        toast.info("Under development", { description: msg });
+
+        // --- Original implementation (temporarily disabled) ---
+        /*
         setSupError("");
         setSupSuccess("");
 
@@ -561,12 +581,15 @@ export default function AuthPage() {
             toast.success("Support ticket sent", { description: successMsg });
             resetSupport();
         } catch (err: any) {
-            const msg = err?.message || "Something went wrong while sending your request.";
+            const msg =
+                err?.message ||
+                "Something went wrong while sending your request.";
             setSupError(msg);
             toast.error("Support ticket failed", { description: msg });
         } finally {
             setSupSubmitting(false);
         }
+        */
     };
 
     // -------------------------
@@ -584,13 +607,18 @@ export default function AuthPage() {
                     <span className="hidden md:inline">Back</span>
                 </Link>
 
-                <Link to="/" className="inline-flex items-center gap-2">
+                <Link
+                    to="/"
+                    className="inline-flex items-center gap-2"
+                >
                     <img
                         src={logo}
                         alt="JRMSU-TC Book-Hive logo"
                         className="h-10 w-10 rounded-md object-contain"
                     />
-                    <span className="hidden md:inline font-semibold">JRMSU-TC Book-Hive</span>
+                    <span className="hidden md:inline font-semibold">
+                        JRMSU-TC Book-Hive
+                    </span>
                 </Link>
             </header>
 
@@ -604,14 +632,20 @@ export default function AuthPage() {
                             alt="Book-Hive logo"
                             className="h-32 w-32 mx-auto mb-4 rounded-xl object-contain"
                         />
-                        <h1 className="text-2xl font-bold">JRMSU-TC Book-Hive</h1>
-                        <p className="text-white/70">Library Borrowing & Reservation Platform</p>
+                        <h1 className="text-2xl font-bold">
+                            JRMSU-TC Book-Hive
+                        </h1>
+                        <p className="text-white/70">
+                            Library Borrowing & Reservation Platform
+                        </p>
                     </div>
 
                     {/* Auth Tabs */}
                     <Tabs
                         value={activeTab}
-                        onValueChange={(v) => setActiveTab(v as "login" | "register")}
+                        onValueChange={(v) =>
+                            setActiveTab(v as "login" | "register")
+                        }
                         className="w-full"
                     >
                         <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -633,20 +667,28 @@ export default function AuthPage() {
                         <TabsContent value="login">
                             <Card className="border-white/10 bg-slate-800/60 backdrop-blur">
                                 <CardHeader>
-                                    <CardTitle className="text-white">Login to your account</CardTitle>
-                                    <CardDescription>Use your Book-Hive credentials</CardDescription>
+                                    <CardTitle className="text-white">
+                                        Login to your account
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Use your Book-Hive credentials
+                                    </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     {loginError && (
                                         <Alert className="mb-4 bg-red-500/15 border-red-500/40 text-red-200">
-                                            <AlertDescription>{loginError}</AlertDescription>
+                                            <AlertDescription>
+                                                {loginError}
+                                            </AlertDescription>
                                         </Alert>
                                     )}
 
                                     <div className="space-y-4">
                                         {/* Email */}
                                         <Field>
-                                            <FieldLabel className="text-white">Email</FieldLabel>
+                                            <FieldLabel className="text-white">
+                                                Email
+                                            </FieldLabel>
                                             <FieldContent>
                                                 <div className="relative">
                                                     <Mail className="absolute left-3 top-3 h-4 w-4 text-white/50" />
@@ -657,8 +699,12 @@ export default function AuthPage() {
                                                         className="pl-10 bg-slate-900/70 border-white/10 text-white"
                                                         required
                                                         value={email}
-                                                        onChange={handleEmailChange}
-                                                        onKeyDown={onLoginKeyDown}
+                                                        onChange={
+                                                            handleEmailChange
+                                                        }
+                                                        onKeyDown={
+                                                            onLoginKeyDown
+                                                        }
                                                         autoComplete="username"
                                                         autoCapitalize="none"
                                                         autoCorrect="off"
@@ -670,19 +716,31 @@ export default function AuthPage() {
 
                                         {/* Password with show/hide */}
                                         <Field>
-                                            <FieldLabel className="text-white">Password</FieldLabel>
+                                            <FieldLabel className="text-white">
+                                                Password
+                                            </FieldLabel>
                                             <FieldContent>
                                                 <div className="relative">
                                                     <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
                                                     <Input
                                                         id="password"
-                                                        type={showPassword ? "text" : "password"}
+                                                        type={
+                                                            showPassword
+                                                                ? "text"
+                                                                : "password"
+                                                        }
                                                         placeholder="••••••••"
                                                         className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
                                                         required
                                                         value={password}
-                                                        onChange={(e) => setPassword(e.target.value)}
-                                                        onKeyDown={onLoginKeyDown}
+                                                        onChange={(e) =>
+                                                            setPassword(
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        onKeyDown={
+                                                            onLoginKeyDown
+                                                        }
                                                         autoComplete="current-password"
                                                     />
                                                     <Button
@@ -691,9 +749,19 @@ export default function AuthPage() {
                                                         size="icon"
                                                         // ✅ perfectly centered Eye / EyeOff
                                                         className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
-                                                        onClick={() => setShowPassword((s) => !s)}
-                                                        aria-label={showPassword ? "Hide password" : "Show password"}
-                                                        aria-pressed={showPassword}
+                                                        onClick={() =>
+                                                            setShowPassword(
+                                                                (s) => !s
+                                                            )
+                                                        }
+                                                        aria-label={
+                                                            showPassword
+                                                                ? "Hide password"
+                                                                : "Show password"
+                                                        }
+                                                        aria-pressed={
+                                                            showPassword
+                                                        }
                                                     >
                                                         {showPassword ? (
                                                             <EyeOff className="h-4 w-4" />
@@ -708,12 +776,24 @@ export default function AuthPage() {
                                         {/* Remember + Forgot */}
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <Checkbox id="remember" checked={rememberMe} onCheckedChange={handleRememberToggle} />
-                                                <Label htmlFor="remember" className="text-sm text-white/80">
+                                                <Checkbox
+                                                    id="remember"
+                                                    checked={rememberMe}
+                                                    onCheckedChange={
+                                                        handleRememberToggle
+                                                    }
+                                                />
+                                                <Label
+                                                    htmlFor="remember"
+                                                    className="text-sm text-white/80"
+                                                >
                                                     Remember me
                                                 </Label>
                                             </div>
-                                            <Link to="/auth/forgot-password" className="text-sm text-purple-300 hover:text-purple-200">
+                                            <Link
+                                                to="/auth/forgot-password"
+                                                className="text-sm text-purple-300 hover:text-purple-200"
+                                            >
                                                 Forgot password?
                                             </Link>
                                         </div>
@@ -725,14 +805,22 @@ export default function AuthPage() {
                                             className="w-full text-white bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                             disabled={isLoggingIn}
                                         >
-                                            {isLoggingIn ? "Logging in…" : "Login"}
+                                            {isLoggingIn
+                                                ? "Logging in…"
+                                                : "Login"}
                                         </Button>
                                     </div>
                                 </CardContent>
 
                                 {/* Support entry lives in the card footer to keep it near actions */}
                                 <CardFooter className="flex justify-center border-t border-white/10">
-                                    <Dialog open={supportOpen} onOpenChange={(o) => { setSupportOpen(o); if (!o) resetSupport(); }}>
+                                    <Dialog
+                                        open={supportOpen}
+                                        onOpenChange={(o) => {
+                                            setSupportOpen(o);
+                                            if (!o) resetSupport();
+                                        }}
+                                    >
                                         <div className="text-sm text-gray-300 flex items-center gap-2">
                                             <span>Need help?</span>
                                             <DialogTrigger asChild>
@@ -740,8 +828,13 @@ export default function AuthPage() {
                                                     type="button"
                                                     className="text-purple-300 hover:text-purple-200 underline decoration-1 underline-offset-[3px] bg-transparent border-0 cursor-pointer inline-flex items-center gap-1"
                                                 >
-                                                    <HelpCircle className="h-4 w-4" aria-hidden />
-                                                    <span>Contact support</span>
+                                                    <HelpCircle
+                                                        className="h-4 w-4"
+                                                        aria-hidden
+                                                    />
+                                                    <span>
+                                                        Contact support
+                                                    </span>
                                                 </button>
                                             </DialogTrigger>
                                         </div>
@@ -754,18 +847,24 @@ export default function AuthPage() {
                                                     Contact support
                                                 </DialogTitle>
                                                 <DialogDescription className="text-white/70">
-                                                    Tell us what’s going on. We’ll email you once we’ve checked your ticket.
+                                                    Tell us what’s going on.
+                                                    We’ll email you once we’ve
+                                                    checked your ticket.
                                                 </DialogDescription>
                                             </DialogHeader>
 
                                             {/* Submission status */}
                                             {supSuccess ? (
                                                 <Alert className="bg-emerald-500/15 border-emerald-500/40 text-emerald-200">
-                                                    <AlertDescription>{supSuccess}</AlertDescription>
+                                                    <AlertDescription>
+                                                        {supSuccess}
+                                                    </AlertDescription>
                                                 </Alert>
                                             ) : supError ? (
                                                 <Alert className="bg-red-500/15 border-red-500/40 text-red-200">
-                                                    <AlertDescription>{supError}</AlertDescription>
+                                                    <AlertDescription>
+                                                        {supError}
+                                                    </AlertDescription>
                                                 </Alert>
                                             ) : null}
 
@@ -773,22 +872,36 @@ export default function AuthPage() {
                                             <div className="grid gap-4 py-2">
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                     <div className="space-y-2">
-                                                        <Label htmlFor="sup-name">Your name</Label>
+                                                        <Label htmlFor="sup-name">
+                                                            Your name
+                                                        </Label>
                                                         <Input
                                                             id="sup-name"
                                                             value={supName}
-                                                            onChange={(e) => setSupName(e.target.value)}
+                                                            onChange={(e) =>
+                                                                setSupName(
+                                                                    e.target
+                                                                        .value
+                                                                )
+                                                            }
                                                             placeholder="Juan Dela Cruz"
                                                             className="bg-slate-900/70 border-white/10 text-white"
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <Label htmlFor="sup-email">Email</Label>
+                                                        <Label htmlFor="sup-email">
+                                                            Email
+                                                        </Label>
                                                         <Input
                                                             id="sup-email"
                                                             type="email"
                                                             value={supEmail}
-                                                            onChange={(e) => setSupEmail(e.target.value)}
+                                                            onChange={(e) =>
+                                                                setSupEmail(
+                                                                    e.target
+                                                                        .value
+                                                                )
+                                                            }
                                                             placeholder="you@example.com"
                                                             className="bg-slate-900/70 border-white/10 text-white"
                                                         />
@@ -796,71 +909,139 @@ export default function AuthPage() {
                                                 </div>
 
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="sup-category">Category</Label>
-                                                    <Select value={supCategory} onValueChange={setSupCategory}>
-                                                        <SelectTrigger id="sup-category" className="bg-slate-900/70 border-white/10 text-white">
+                                                    <Label htmlFor="sup-category">
+                                                        Category
+                                                    </Label>
+                                                    <Select
+                                                        value={supCategory}
+                                                        onValueChange={
+                                                            setSupCategory
+                                                        }
+                                                    >
+                                                        <SelectTrigger
+                                                            id="sup-category"
+                                                            className="bg-slate-900/70 border-white/10 text-white"
+                                                        >
                                                             <SelectValue placeholder="Select a category" />
                                                         </SelectTrigger>
                                                         <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                            <SelectItem value="Login issue">Login issue</SelectItem>
-                                                            <SelectItem value="Registration issue">Registration issue</SelectItem>
-                                                            <SelectItem value="Borrowing/Reservation">Borrowing / Reservation</SelectItem>
-                                                            <SelectItem value="Account settings">Account settings</SelectItem>
-                                                            <SelectItem value="Bug report">Bug report</SelectItem>
-                                                            <SelectItem value="Feature request">Feature request</SelectItem>
-                                                            <SelectItem value="Other">Other</SelectItem>
+                                                            <SelectItem value="Login issue">
+                                                                Login issue
+                                                            </SelectItem>
+                                                            <SelectItem value="Registration issue">
+                                                                Registration
+                                                                issue
+                                                            </SelectItem>
+                                                            <SelectItem value="Borrowing/Reservation">
+                                                                Borrowing /
+                                                                Reservation
+                                                            </SelectItem>
+                                                            <SelectItem value="Account settings">
+                                                                Account
+                                                                settings
+                                                            </SelectItem>
+                                                            <SelectItem value="Bug report">
+                                                                Bug report
+                                                            </SelectItem>
+                                                            <SelectItem value="Feature request">
+                                                                Feature request
+                                                            </SelectItem>
+                                                            <SelectItem value="Other">
+                                                                Other
+                                                            </SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 </div>
 
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="sup-subject">Subject</Label>
+                                                    <Label htmlFor="sup-subject">
+                                                        Subject
+                                                    </Label>
                                                     <Input
                                                         id="sup-subject"
                                                         value={supSubject}
-                                                        onChange={(e) => setSupSubject(e.target.value)}
+                                                        onChange={(e) =>
+                                                            setSupSubject(
+                                                                e.target.value
+                                                            )
+                                                        }
                                                         placeholder="Short summary (e.g., Can't log in)"
                                                         className="bg-slate-900/70 border-white/10 text-white"
                                                     />
                                                 </div>
 
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="sup-message">Details</Label>
+                                                    <Label htmlFor="sup-message">
+                                                        Details
+                                                    </Label>
                                                     <Textarea
                                                         id="sup-message"
                                                         value={supMessage}
-                                                        onChange={(e) => setSupMessage(e.target.value)}
+                                                        onChange={(e) =>
+                                                            setSupMessage(
+                                                                e.target.value
+                                                            )
+                                                        }
                                                         placeholder="Describe the issue and the steps to reproduce it…"
                                                         className="min-h-[120px] bg-slate-900/70 border-white/10 text-white"
                                                     />
                                                 </div>
 
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="sup-file" className="inline-flex items-center gap-2">
+                                                    <Label
+                                                        htmlFor="sup-file"
+                                                        className="inline-flex items-center gap-2"
+                                                    >
                                                         <Paperclip className="h-4 w-4" />
-                                                        Attach screenshot (optional)
+                                                        Attach screenshot
+                                                        (optional)
                                                     </Label>
                                                     <Input
                                                         id="sup-file"
                                                         type="file"
                                                         accept=".png,.jpg,.jpeg,.gif,.pdf"
-                                                        onChange={(e) => setSupFile(e.target.files?.[0] ?? null)}
+                                                        onChange={(e) =>
+                                                            setSupFile(
+                                                                e.target.files?.[0] ??
+                                                                null
+                                                            )
+                                                        }
                                                         className="bg-slate-900/70 border-white/10 text-white file:text-white"
                                                     />
                                                     {supFile && (
-                                                        <p className="text-xs text-white/60">Selected: {supFile.name}</p>
+                                                        <p className="text-xs text-white/60">
+                                                            Selected:{" "}
+                                                            {supFile.name}
+                                                        </p>
                                                     )}
                                                 </div>
 
                                                 <div className="flex items-start gap-2">
-                                                    <Checkbox id="sup-consent" checked={consent} onCheckedChange={(v) => setConsent(v === true)} />
-                                                    <Label htmlFor="sup-consent" className="text-sm text-white/80">
-                                                        You may contact me about this ticket and store the information I provided for support.
+                                                    <Checkbox
+                                                        id="sup-consent"
+                                                        checked={consent}
+                                                        onCheckedChange={(v) =>
+                                                            setConsent(
+                                                                v === true
+                                                            )
+                                                        }
+                                                    />
+                                                    <Label
+                                                        htmlFor="sup-consent"
+                                                        className="text-sm text-white/80"
+                                                    >
+                                                        You may contact me about
+                                                        this ticket and store
+                                                        the information I
+                                                        provided for support.
                                                     </Label>
                                                 </div>
 
                                                 <div className="text-xs text-white/50">
-                                                    Tip: Including your Student ID and program helps us resolve account-specific issues faster.
+                                                    Tip: Including your Student
+                                                    ID and program helps us
+                                                    resolve account-specific
+                                                    issues faster.
                                                 </div>
                                             </div>
 
@@ -868,7 +1049,10 @@ export default function AuthPage() {
                                             <DialogFooterUI className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
                                                 <div className="text-xs text-white/60">
                                                     Or email us at{" "}
-                                                    <a className="underline hover:text-white" href="mailto:support@example.com">
+                                                    <a
+                                                        className="underline hover:text-white"
+                                                        href="mailto:support@example.com"
+                                                    >
                                                         support@example.com
                                                     </a>
                                                 </div>
@@ -876,7 +1060,12 @@ export default function AuthPage() {
                                                     <Button
                                                         type="button"
                                                         variant="outline"
-                                                        onClick={() => { setSupportOpen(false); resetSupport(); }}
+                                                        onClick={() => {
+                                                            setSupportOpen(
+                                                                false
+                                                            );
+                                                            resetSupport();
+                                                        }}
                                                         className="border-white/15 bg-black/50 text:white hover:text-white hover:bg:black/10 w-full sm:w-auto"
                                                         disabled={supSubmitting}
                                                     >
@@ -890,7 +1079,8 @@ export default function AuthPage() {
                                                     >
                                                         {supSubmitting ? (
                                                             <span className="inline-flex items-center gap-2">
-                                                                <Loader2 className="h-4 w-4 animate-spin" /> Sending…
+                                                                <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                                                                Sending…
                                                             </span>
                                                         ) : (
                                                             "Send ticket"
@@ -908,20 +1098,28 @@ export default function AuthPage() {
                         <TabsContent value="register">
                             <Card className="border-white/10 bg-slate-800/60 backdrop-blur">
                                 <CardHeader>
-                                    <CardTitle className="text-white">Create an account</CardTitle>
-                                    <CardDescription>Register to use Book-Hive</CardDescription>
+                                    <CardTitle className="text-white">
+                                        Create an account
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Register to use Book-Hive
+                                    </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     {regError && (
                                         <Alert className="mb-4 bg-red-500/15 border-red-500/40 text-red-200">
-                                            <AlertDescription>{regError}</AlertDescription>
+                                            <AlertDescription>
+                                                {regError}
+                                            </AlertDescription>
                                         </Alert>
                                     )}
 
                                     <div className="space-y-4">
                                         {/* Full name */}
                                         <Field>
-                                            <FieldLabel className="text-white">Full Name</FieldLabel>
+                                            <FieldLabel className="text-white">
+                                                Full Name
+                                            </FieldLabel>
                                             <FieldContent>
                                                 <div className="relative">
                                                     <User className="absolute left-3 top-3 h-4 w-4 text-white/50" />
@@ -930,8 +1128,14 @@ export default function AuthPage() {
                                                         placeholder="Juan Dela Cruz"
                                                         className="pl-10 bg-slate-900/70 border-white/10 text-white"
                                                         value={fullName}
-                                                        onChange={(e) => setFullName(e.target.value)}
-                                                        onKeyDown={onRegisterKeyDown}
+                                                        onChange={(e) =>
+                                                            setFullName(
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        onKeyDown={
+                                                            onRegisterKeyDown
+                                                        }
                                                         required
                                                         autoComplete="name"
                                                     />
@@ -941,15 +1145,28 @@ export default function AuthPage() {
 
                                         {/* Account type */}
                                         <Field>
-                                            <FieldLabel className="text-white">Account Type</FieldLabel>
+                                            <FieldLabel className="text-white">
+                                                Account Type
+                                            </FieldLabel>
                                             <FieldContent>
-                                                <Select value={accountType} onValueChange={(v) => setAccountType(v as AccountType)}>
+                                                <Select
+                                                    value={accountType}
+                                                    onValueChange={(v) =>
+                                                        setAccountType(
+                                                            v as AccountType
+                                                        )
+                                                    }
+                                                >
                                                     <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                                                         <SelectValue placeholder="Select account type" />
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                        <SelectItem value="student">Student</SelectItem>
-                                                        <SelectItem value="other">Other</SelectItem>
+                                                        <SelectItem value="student">
+                                                            Student
+                                                        </SelectItem>
+                                                        <SelectItem value="other">
+                                                            Other
+                                                        </SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </FieldContent>
@@ -961,7 +1178,10 @@ export default function AuthPage() {
                                                 {/* Student ID */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
-                                                        Student ID <span className="text-red-300">*</span>
+                                                        Student ID{" "}
+                                                        <span className="text-red-300">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <FieldContent>
                                                         <div className="relative">
@@ -971,21 +1191,42 @@ export default function AuthPage() {
                                                                 placeholder="e.g., TC-20-A-00001"
                                                                 className="pl-10 bg-slate-900/70 border-white/10 text-white"
                                                                 value={studentId}
-                                                                onChange={(e) => setStudentId(e.target.value)}
-                                                                onKeyDown={onRegisterKeyDown}
+                                                                onChange={(e) =>
+                                                                    setStudentId(
+                                                                        e.target
+                                                                            .value
+                                                                    )
+                                                                }
+                                                                onKeyDown={
+                                                                    onRegisterKeyDown
+                                                                }
                                                                 required
                                                                 autoComplete="off"
-                                                                spellCheck={false}
+                                                                spellCheck={
+                                                                    false
+                                                                }
                                                             />
                                                         </div>
                                                     </FieldContent>
 
                                                     {/* Debounced availability indicator */}
                                                     {checkingStudentId ? (
-                                                        <span className="text-xs text-white/60">Checking availability…</span>
-                                                    ) : studentId && studentIdAvailable !== null ? (
-                                                        <span className={`text-xs ${studentIdAvailable ? "text-emerald-300" : "text-red-300"}`}>
-                                                            {studentIdAvailable ? "Student ID is available" : "Student ID is already taken"}
+                                                        <span className="text-xs text-white/60">
+                                                            Checking
+                                                            availability…
+                                                        </span>
+                                                    ) : studentId &&
+                                                        studentIdAvailable !==
+                                                        null ? (
+                                                        <span
+                                                            className={`text-xs ${studentIdAvailable
+                                                                ? "text-emerald-300"
+                                                                : "text-red-300"
+                                                                }`}
+                                                        >
+                                                            {studentIdAvailable
+                                                                ? "Student ID is available"
+                                                                : "Student ID is already taken"}
                                                         </span>
                                                     ) : null}
                                                 </Field>
@@ -993,129 +1234,261 @@ export default function AuthPage() {
                                                 {/* College */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
-                                                        College <span className="text-red-300">*</span>
+                                                        College{" "}
+                                                        <span className="text-red-300">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <FieldContent>
                                                         <Select
-                                                            value={college || undefined}
-                                                            onValueChange={(v) => {
+                                                            value={
+                                                                college ||
+                                                                undefined
+                                                            }
+                                                            onValueChange={(
+                                                                v
+                                                            ) => {
                                                                 setCollege(v);
                                                                 setProgram("");
-                                                                setCustomCollege("");
+                                                                setCustomCollege(
+                                                                    ""
+                                                                );
                                                             }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                                                                 <SelectValue placeholder="Select college" />
                                                             </SelectTrigger>
                                                             <SelectContent className="bg-slate-900 text-white border-white/10 max-h-80">
-                                                                {Object.keys(COLLEGES).map((c) => (
-                                                                    <SelectItem key={c} value={c} className="whitespace-normal leading-tight py-2">
-                                                                        <span className="md:hidden block text-base">{COLLEGE_ACRONYM[c]}</span>
+                                                                {Object.keys(
+                                                                    COLLEGES
+                                                                ).map((c) => (
+                                                                    <SelectItem
+                                                                        key={c}
+                                                                        value={
+                                                                            c
+                                                                        }
+                                                                        className="whitespace-normal leading-tight py-2"
+                                                                    >
+                                                                        <span className="md:hidden block text-base">
+                                                                            {
+                                                                                COLLEGE_ACRONYM[
+                                                                                c
+                                                                                ]
+                                                                            }
+                                                                        </span>
                                                                         <span className="hidden md:flex w-full items-center justify-between gap-2">
-                                                                            <span className="block">{c}</span>
-                                                                            <span className="text-xs opacity-70">{COLLEGE_ACRONYM[c]}</span>
+                                                                            <span className="block">
+                                                                                {
+                                                                                    c
+                                                                                }
+                                                                            </span>
+                                                                            <span className="text-xs opacity-70">
+                                                                                {
+                                                                                    COLLEGE_ACRONYM[
+                                                                                    c
+                                                                                    ]
+                                                                                }
+                                                                            </span>
                                                                         </span>
                                                                     </SelectItem>
                                                                 ))}
-                                                                <SelectItem value="Others" className="whitespace-normal leading-tight py-2">
-                                                                    <span className="block">Others (Please specify)</span>
+                                                                <SelectItem
+                                                                    value="Others"
+                                                                    className="whitespace-normal leading-tight py-2"
+                                                                >
+                                                                    <span className="block">
+                                                                        Others
+                                                                        (Please
+                                                                        specify)
+                                                                    </span>
                                                                 </SelectItem>
                                                             </SelectContent>
                                                         </Select>
-                                                        {college === "Others" && (
-                                                            <div className="mt-2">
-                                                                <Input
-                                                                    placeholder="Please specify your college"
-                                                                    value={customCollege}
-                                                                    onChange={(e) => setCustomCollege(e.target.value)}
-                                                                    autoComplete="organization"
-                                                                    className="bg-slate-900/70 border-white/10 text-white"
-                                                                />
-                                                            </div>
-                                                        )}
+                                                        {college ===
+                                                            "Others" && (
+                                                                <div className="mt-2">
+                                                                    <Input
+                                                                        placeholder="Please specify your college"
+                                                                        value={
+                                                                            customCollege
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) =>
+                                                                            setCustomCollege(
+                                                                                e
+                                                                                    .target
+                                                                                    .value
+                                                                            )
+                                                                        }
+                                                                        autoComplete="organization"
+                                                                        className="bg-slate-900/70 border-white/10 text-white"
+                                                                    />
+                                                                </div>
+                                                            )}
                                                     </FieldContent>
                                                 </Field>
 
                                                 {/* Program depends on College */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
-                                                        Program <span className="text-red-300">*</span>
+                                                        Program{" "}
+                                                        <span className="text-red-300">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <FieldContent>
                                                         <Select
                                                             disabled={!college}
-                                                            value={program || undefined}
-                                                            onValueChange={(v) => {
+                                                            value={
+                                                                program ||
+                                                                undefined
+                                                            }
+                                                            onValueChange={(
+                                                                v
+                                                            ) => {
                                                                 setProgram(v);
-                                                                setCustomProgram("");
+                                                                setCustomProgram(
+                                                                    ""
+                                                                );
                                                             }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white disabled:opacity-60">
-                                                                <SelectValue placeholder={college ? "Select program" : "Select college first"} />
+                                                                <SelectValue
+                                                                    placeholder={
+                                                                        college
+                                                                            ? "Select program"
+                                                                            : "Select college first"
+                                                                    }
+                                                                />
                                                             </SelectTrigger>
                                                             <SelectContent className="bg-slate-900 text-white border-white/10 max-h-80">
-                                                                {availablePrograms.map((p) => (
-                                                                    <SelectItem key={p} value={p} className="whitespace-normal leading-tight py-2">
-                                                                        {p}
-                                                                    </SelectItem>
-                                                                ))}
+                                                                {availablePrograms.map(
+                                                                    (p) => (
+                                                                        <SelectItem
+                                                                            key={
+                                                                                p
+                                                                            }
+                                                                            value={
+                                                                                p
+                                                                            }
+                                                                            className="whitespace-normal leading-tight py-2"
+                                                                        >
+                                                                            {p}
+                                                                        </SelectItem>
+                                                                    )
+                                                                )}
                                                                 {!!college && (
-                                                                    <SelectItem value="Others" className="whitespace-normal leading-tight py-2">
-                                                                        <span className="block">Others (Please specify)</span>
+                                                                    <SelectItem
+                                                                        value="Others"
+                                                                        className="whitespace-normal leading-tight py-2"
+                                                                    >
+                                                                        <span className="block">
+                                                                            Others
+                                                                            (Please
+                                                                            specify)
+                                                                        </span>
                                                                     </SelectItem>
                                                                 )}
                                                             </SelectContent>
                                                         </Select>
-                                                        {program === "Others" && (
-                                                            <div className="mt-2">
-                                                                <Input
-                                                                    placeholder="Please specify your program"
-                                                                    value={customProgram}
-                                                                    onChange={(e) => setCustomProgram(e.target.value)}
-                                                                    autoComplete="off"
-                                                                    className="bg-slate-900/70 border-white/10 text:white"
-                                                                />
-                                                            </div>
-                                                        )}
+                                                        {program ===
+                                                            "Others" && (
+                                                                <div className="mt-2">
+                                                                    <Input
+                                                                        placeholder="Please specify your program"
+                                                                        value={
+                                                                            customProgram
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) =>
+                                                                            setCustomProgram(
+                                                                                e
+                                                                                    .target
+                                                                                    .value
+                                                                            )
+                                                                        }
+                                                                        autoComplete="off"
+                                                                        className="bg-slate-900/70 border-white/10 text:white"
+                                                                    />
+                                                                </div>
+                                                            )}
                                                     </FieldContent>
                                                 </Field>
 
                                                 {/* Year level */}
                                                 <Field>
                                                     <FieldLabel className="text-white">
-                                                        Year Level <span className="text-red-300">*</span>
+                                                        Year Level{" "}
+                                                        <span className="text-red-300">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <FieldContent>
                                                         <Select
-                                                            value={yearLevel || undefined}
-                                                            onValueChange={(v) => {
-                                                                setYearLevel(v as YearLevelOption);
-                                                                setCustomYearLevel("");
+                                                            value={
+                                                                yearLevel ||
+                                                                undefined
+                                                            }
+                                                            onValueChange={(
+                                                                v
+                                                            ) => {
+                                                                setYearLevel(
+                                                                    v as YearLevelOption
+                                                                );
+                                                                setCustomYearLevel(
+                                                                    ""
+                                                                );
                                                             }}
                                                         >
                                                             <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                                                                 <SelectValue placeholder="Select year level" />
                                                             </SelectTrigger>
                                                             <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                                {YEAR_LEVELS.map((y) => (
-                                                                    <SelectItem key={y} value={y}>
-                                                                        {y}
-                                                                    </SelectItem>
-                                                                ))}
-                                                                <SelectItem value="Others">Others (Please specify)</SelectItem>
+                                                                {YEAR_LEVELS.map(
+                                                                    (y) => (
+                                                                        <SelectItem
+                                                                            key={
+                                                                                y
+                                                                            }
+                                                                            value={
+                                                                                y
+                                                                            }
+                                                                        >
+                                                                            {y}
+                                                                        </SelectItem>
+                                                                    )
+                                                                )}
+                                                                <SelectItem value="Others">
+                                                                    Others
+                                                                    (Please
+                                                                    specify)
+                                                                </SelectItem>
                                                             </SelectContent>
                                                         </Select>
-                                                        {yearLevel === "Others" && (
-                                                            <div className="mt-2">
-                                                                <Input
-                                                                    placeholder="Please specify your year level"
-                                                                    value={customYearLevel}
-                                                                    onChange={(e) => setCustomYearLevel(e.target.value)}
-                                                                    autoComplete="off"
-                                                                    className="bg-slate-900/70 border-white/10 text-white"
-                                                                />
-                                                            </div>
-                                                        )}
+                                                        {yearLevel ===
+                                                            "Others" && (
+                                                                <div className="mt-2">
+                                                                    <Input
+                                                                        placeholder="Please specify your year level"
+                                                                        value={
+                                                                            customYearLevel
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) =>
+                                                                            setCustomYearLevel(
+                                                                                e
+                                                                                    .target
+                                                                                    .value
+                                                                            )
+                                                                        }
+                                                                        autoComplete="off"
+                                                                        className="bg-slate-900/70 border-white/10 text-white"
+                                                                    />
+                                                                </div>
+                                                            )}
                                                     </FieldContent>
                                                 </Field>
                                             </>
@@ -1123,7 +1496,9 @@ export default function AuthPage() {
 
                                         {/* Email */}
                                         <Field>
-                                            <FieldLabel className="text-white">Email</FieldLabel>
+                                            <FieldLabel className="text-white">
+                                                Email
+                                            </FieldLabel>
                                             <FieldContent>
                                                 <div className="relative">
                                                     <Mail className="absolute left-3 top-3 h-4 w-4 text-white/50" />
@@ -1133,8 +1508,14 @@ export default function AuthPage() {
                                                         placeholder="you@example.com"
                                                         className="pl-10 bg-slate-900/70 border-white/10 text-white"
                                                         value={regEmail}
-                                                        onChange={(e) => setRegEmail(e.target.value)}
-                                                        onKeyDown={onRegisterKeyDown}
+                                                        onChange={(e) =>
+                                                            setRegEmail(
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        onKeyDown={
+                                                            onRegisterKeyDown
+                                                        }
                                                         required
                                                         autoComplete="email"
                                                         autoCapitalize="none"
@@ -1147,18 +1528,30 @@ export default function AuthPage() {
 
                                         {/* Password */}
                                         <Field>
-                                            <FieldLabel className="text-white">Password</FieldLabel>
+                                            <FieldLabel className="text-white">
+                                                Password
+                                            </FieldLabel>
                                             <FieldContent>
                                                 <div className="relative">
                                                     <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
                                                     <Input
                                                         id="reg-password"
-                                                        type={showRegPassword ? "text" : "password"}
+                                                        type={
+                                                            showRegPassword
+                                                                ? "text"
+                                                                : "password"
+                                                        }
                                                         placeholder="At least 8 characters"
                                                         className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
                                                         value={regPassword}
-                                                        onChange={(e) => setRegPassword(e.target.value)}
-                                                        onKeyDown={onRegisterKeyDown}
+                                                        onChange={(e) =>
+                                                            setRegPassword(
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        onKeyDown={
+                                                            onRegisterKeyDown
+                                                        }
                                                         required
                                                         autoComplete="new-password"
                                                     />
@@ -1168,9 +1561,19 @@ export default function AuthPage() {
                                                         size="icon"
                                                         // ✅ centered Eye / EyeOff
                                                         className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
-                                                        onClick={() => setShowRegPassword((s) => !s)}
-                                                        aria-label={showRegPassword ? "Hide password" : "Show password"}
-                                                        aria-pressed={showRegPassword}
+                                                        onClick={() =>
+                                                            setShowRegPassword(
+                                                                (s) => !s
+                                                            )
+                                                        }
+                                                        aria-label={
+                                                            showRegPassword
+                                                                ? "Hide password"
+                                                                : "Show password"
+                                                        }
+                                                        aria-pressed={
+                                                            showRegPassword
+                                                        }
                                                     >
                                                         {showRegPassword ? (
                                                             <EyeOff className="h-4 w-4" />
@@ -1184,18 +1587,30 @@ export default function AuthPage() {
 
                                         {/* Confirm password */}
                                         <Field>
-                                            <FieldLabel className="text-white">Confirm Password</FieldLabel>
+                                            <FieldLabel className="text-white">
+                                                Confirm Password
+                                            </FieldLabel>
                                             <FieldContent>
                                                 <div className="relative">
                                                     <Lock className="absolute left-3 top-3 h-4 w-4 text-white/50" />
                                                     <Input
                                                         id="confirm-password"
-                                                        type={showRegConfirm ? "text" : "password"}
+                                                        type={
+                                                            showRegConfirm
+                                                                ? "text"
+                                                                : "password"
+                                                        }
                                                         placeholder="Repeat your password"
                                                         className="pl-10 pr-10 bg-slate-900/70 border-white/10 text-white"
                                                         value={confirmPassword}
-                                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                                        onKeyDown={onRegisterKeyDown}
+                                                        onChange={(e) =>
+                                                            setConfirmPassword(
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        onKeyDown={
+                                                            onRegisterKeyDown
+                                                        }
                                                         required
                                                         autoComplete="new-password"
                                                     />
@@ -1205,9 +1620,19 @@ export default function AuthPage() {
                                                         size="icon"
                                                         // ✅ centered Eye / EyeOff
                                                         className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
-                                                        onClick={() => setShowRegConfirm((s) => !s)}
-                                                        aria-label={showRegConfirm ? "Hide password" : "Show password"}
-                                                        aria-pressed={showRegConfirm}
+                                                        onClick={() =>
+                                                            setShowRegConfirm(
+                                                                (s) => !s
+                                                            )
+                                                        }
+                                                        aria-label={
+                                                            showRegConfirm
+                                                                ? "Hide password"
+                                                                : "Show password"
+                                                        }
+                                                        aria-pressed={
+                                                            showRegConfirm
+                                                        }
                                                     >
                                                         {showRegConfirm ? (
                                                             <EyeOff className="h-4 w-4" />
@@ -1219,9 +1644,13 @@ export default function AuthPage() {
                                             </FieldContent>
 
                                             {/* Real-time mismatch hint */}
-                                            {regPassword !== confirmPassword && confirmPassword.length > 0 && (
-                                                <FieldError>Passwords do not match.</FieldError>
-                                            )}
+                                            {regPassword !==
+                                                confirmPassword &&
+                                                confirmPassword.length > 0 && (
+                                                    <FieldError>
+                                                        Passwords do not match.
+                                                    </FieldError>
+                                                )}
                                         </Field>
 
                                         {/* Register CTA */}
@@ -1231,7 +1660,9 @@ export default function AuthPage() {
                                             className="w-full text-white bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                                             disabled={isRegistering}
                                         >
-                                            {isRegistering ? "Creating account…" : "Register"}
+                                            {isRegistering
+                                                ? "Creating account…"
+                                                : "Register"}
                                         </Button>
                                     </div>
                                 </CardContent>
@@ -1241,7 +1672,9 @@ export default function AuthPage() {
                                     <p className="text-sm text-gray-300">
                                         Already have an account?{" "}
                                         <button
-                                            onClick={() => setActiveTab("login")}
+                                            onClick={() =>
+                                                setActiveTab("login")
+                                            }
                                             className="text-purple-300 hover:text-purple-200 underline bg-transparent border-none cursor-pointer"
                                         >
                                             Login
@@ -1254,15 +1687,17 @@ export default function AuthPage() {
 
                     {/* Legal / acceptable use hint */}
                     <p className="mt-6 text-center text-xs text-white/60">
-                        By continuing, you agree to the acceptable use of the JRMSU-TC Book-Hive
-                        platform.
+                        By continuing, you agree to the acceptable use of the
+                        JRMSU-TC Book-Hive platform.
                     </p>
                 </div>
             </main>
 
             {/* Simple footer with dynamic year */}
             <footer className="py-6 text-center text-white/60 text-sm">
-                <p>© {new Date().getFullYear()} JRMSU-TC — Book-Hive</p>
+                <p>
+                    © {new Date().getFullYear()} JRMSU-TC — Book-Hive
+                </p>
             </footer>
         </div>
     );
