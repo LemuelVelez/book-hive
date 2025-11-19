@@ -472,7 +472,7 @@ export default function StudentBooksPage() {
                                                         {/* My status – causes overflow; give it its own horizontal scrollbar */}
                                                         <TableCell
                                                             className={
-                                                                "align-top w-[150px] max-w-[150px] pr-1 text-xs " +
+                                                                "align-top w-[100px] max-w-[100px] pr-1 text-xs " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -522,7 +522,7 @@ export default function StudentBooksPage() {
                                                         {/* Action – also gets its own horizontal scrollbar */}
                                                         <TableCell
                                                             className={
-                                                                "text-right align-top w-[150px] max-w-[150px] " +
+                                                                "text-right align-top w-[100px] max-w-[100px] " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
