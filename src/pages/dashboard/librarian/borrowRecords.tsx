@@ -183,7 +183,7 @@ export default function LibrarianBorrowRecordsPage() {
     }
 
     /**
-     * Open dialog to mark a record as returned (for both borrowed + pending).
+     * Open dialog to mark a record as returned (for pending).
      * Auto-compute fine (if overdue), but allow librarian to edit it.
      */
     function openReturnDialog(rec: BorrowRecordDTO) {
@@ -535,17 +535,19 @@ export default function LibrarianBorrowRecordsPage() {
                                                                 <Edit className="h-3.5 w-3.5" />
                                                                 <span>Edit due date</span>
                                                             </Button>
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
-                                                                onClick={() => openReturnDialog(rec)}
-                                                            >
-                                                                {isPending
-                                                                    ? "Verify & mark returned"
-                                                                    : "Mark returned"}
-                                                            </Button>
+
+                                                            {/* Only show verify button for pending records */}
+                                                            {isPending && (
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                                                    onClick={() => openReturnDialog(rec)}
+                                                                >
+                                                                    Verify &amp; mark returned
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 text-white/60 text-xs">
