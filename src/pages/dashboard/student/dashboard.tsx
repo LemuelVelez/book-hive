@@ -93,6 +93,15 @@ function normalizeFine(value: any): number {
     return Number.isNaN(num) ? 0 : num
 }
 
+function isActiveStatus(status: any): boolean {
+    const s = String(status ?? "").toLowerCase()
+    return s === "borrowed" || s === "pending"
+}
+
+function isReturnedStatus(status: any): boolean {
+    return String(status ?? "").toLowerCase() === "returned"
+}
+
 const FEEDBACK_COLORS = ["#22c55e", "#a855f7", "#f97316", "#38bdf8", "#f43f5e"]
 
 const CIRCULATION_COLORS: Record<string, string> = {
@@ -115,7 +124,7 @@ export default function StudentDashboardPage() {
         setError(null)
         setLoading(true)
         try {
-            const [booksData, rawRecordsData, feedbacksData, damageData] =
+            const [booksData, recordsData, feedbacksData, damageData] =
                 await Promise.all([
                     fetchBooks(),
                     fetchMyBorrowRecords(),
@@ -123,12 +132,7 @@ export default function StudentDashboardPage() {
                     fetchMyDamageReports(),
                 ])
 
-            // 🔐 IMPORTANT: normalize fine to a real number here
-            const recordsData: BorrowRecordDTO[] = rawRecordsData.map((r: any) => ({
-                ...r,
-                fine: normalizeFine(r.fine),
-            }))
-
+            // Use the records as-is from the API; we normalize fines only when computing
             setBooks(booksData)
             setRecords(recordsData)
             setFeedbacks(feedbacksData)
@@ -161,31 +165,43 @@ export default function StudentDashboardPage() {
     const totalBooks = books.length
     const availableBooks = books.filter((b) => b.available).length
 
+    // Make status handling tolerant (borrowed / pending / returned etc, any casing)
     const activeRecords = React.useMemo(
-        () =>
-            records.filter(
-                (r) => r.status === "borrowed" || r.status === "pending",
-            ),
-        [records],
-    )
-    const returnedRecords = React.useMemo(
-        () => records.filter((r) => r.status === "returned"),
+        () => records.filter((r) => isActiveStatus(r.status)),
         [records],
     )
 
+    const returnedRecords = React.useMemo(
+        () => records.filter((r) => isReturnedStatus(r.status)),
+        [records],
+    )
+
+    // Overdue = active record with a positive fine
     const overdueCount = React.useMemo(
         () =>
-            activeRecords.filter((r) => normalizeFine(r.fine) > 0).length,
+            activeRecords.filter((r) => normalizeFine((r as any).fine) > 0).length,
         [activeRecords],
     )
 
+    // This is now aligned with the circulation page logic:
+    // it sums fines for all active (borrowed + pending) records.
     const activeFineTotal = React.useMemo(
         () =>
             activeRecords.reduce((sum, r) => {
-                const fine = normalizeFine(r.fine)
-                return sum + (fine > 0 ? fine : 0)
+                const fine = normalizeFine((r as any).fine)
+                return sum + fine
             }, 0),
         [activeRecords],
+    )
+
+    // All recorded fines (any status) – mirrors what the librarian dashboard sees
+    const totalFineAll = React.useMemo(
+        () =>
+            records.reduce((sum, r) => {
+                const fine = normalizeFine((r as any).fine)
+                return sum + fine
+            }, 0),
+        [records],
     )
 
     const totalFeedbacks = feedbacks.length
@@ -194,7 +210,10 @@ export default function StudentDashboardPage() {
     const recentBorrows = React.useMemo(
         () =>
             [...records]
-                .sort((a, b) => (a.borrowDate ?? "").localeCompare(b.borrowDate ?? "") * -1)
+                .sort(
+                    (a, b) =>
+                        (a.borrowDate ?? "").localeCompare(b.borrowDate ?? "") * -1,
+                )
                 .slice(0, 5),
         [records],
     )
@@ -233,7 +252,7 @@ export default function StudentDashboardPage() {
         if (!feedbacks.length) return []
         const counts: Record<number, number> = {}
         feedbacks.forEach((f) => {
-            const r = Number(f.rating)
+            const r = Number((f as any).rating)
             if (!r || Number.isNaN(r)) return
             counts[r] = (counts[r] || 0) + 1
         })
@@ -404,6 +423,12 @@ export default function StudentDashboardPage() {
                                         </span>
                                     )}
                                 </p>
+                                <p>
+                                    All recorded fines:{" "}
+                                    <span className="font-semibold text-amber-200">
+                                        {peso(totalFineAll)}
+                                    </span>
+                                </p>
                             </>
                         )}
                         <Button
@@ -530,9 +555,7 @@ export default function StudentDashboardPage() {
                                         {circulationChartData.map((entry) => (
                                             <Cell
                                                 key={entry.name}
-                                                fill={
-                                                    CIRCULATION_COLORS[entry.name] ?? "#e5e7eb"
-                                                }
+                                                fill={CIRCULATION_COLORS[entry.name] ?? "#e5e7eb"}
                                             />
                                         ))}
                                     </Bar>
@@ -601,9 +624,7 @@ export default function StudentDashboardPage() {
                                             <Cell
                                                 key={`cell-${index}`}
                                                 fill={
-                                                    FEEDBACK_COLORS[
-                                                    index % FEEDBACK_COLORS.length
-                                                    ]
+                                                    FEEDBACK_COLORS[index % FEEDBACK_COLORS.length]
                                                 }
                                             />
                                         ))}
@@ -665,12 +686,14 @@ export default function StudentDashboardPage() {
                                         {recentBorrows.length === 1 ? "record" : "records"}.
                                     </p>
                                     {recentBorrows.map((r) => {
-                                        const isBorrowed = r.status === "borrowed"
-                                        const isPending = r.status === "pending"
-                                        const isReturned = r.status === "returned"
+                                        const isBorrowed = isActiveStatus(r.status) &&
+                                            String(r.status ?? "").toLowerCase() === "borrowed"
+                                        const isPending =
+                                            String(r.status ?? "").toLowerCase() === "pending"
+                                        const isReturned = isReturnedStatus(r.status)
                                         const isActive = isBorrowed || isPending
 
-                                        const fine = normalizeFine(r.fine)
+                                        const fine = normalizeFine((r as any).fine)
                                         const isOverdue = isActive && fine > 0
 
                                         let badgeColor =
@@ -767,12 +790,13 @@ export default function StudentDashboardPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {recentBorrows.map((r) => {
-                                                const isBorrowed = r.status === "borrowed"
-                                                const isPending = r.status === "pending"
-                                                const isReturned = r.status === "returned"
+                                                const statusStr = String(r.status ?? "").toLowerCase()
+                                                const isBorrowed = statusStr === "borrowed"
+                                                const isPending = statusStr === "pending"
+                                                const isReturned = statusStr === "returned"
                                                 const isActive = isBorrowed || isPending
 
-                                                const fine = normalizeFine(r.fine)
+                                                const fine = normalizeFine((r as any).fine)
                                                 const isOverdue = isActive && fine > 0
 
                                                 let badgeColor =
