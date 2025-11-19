@@ -159,12 +159,23 @@ export default function StudentDashboardPage() {
         () => records.filter((r) => r.status === "returned"),
         [records],
     )
+
+    // Coerce fine to a safe number everywhere
     const overdueCount = React.useMemo(
-        () => activeRecords.filter((r) => (r.fine || 0) > 0).length,
+        () =>
+            activeRecords.filter((r) => {
+                const fine = +(r.fine ?? 0) || 0
+                return fine > 0
+            }).length,
         [activeRecords],
     )
+
     const activeFineTotal = React.useMemo(
-        () => activeRecords.reduce((sum, r) => sum + (r.fine || 0), 0),
+        () =>
+            activeRecords.reduce((sum, r) => {
+                const fine = +(r.fine ?? 0) || 0
+                return sum + (fine > 0 ? fine : 0)
+            }, 0),
         [activeRecords],
     )
 
@@ -649,7 +660,9 @@ export default function StudentDashboardPage() {
                                         const isPending = r.status === "pending"
                                         const isReturned = r.status === "returned"
                                         const isActive = isBorrowed || isPending
-                                        const isOverdue = isActive && (r.fine || 0) > 0
+
+                                        const fine = +(r.fine ?? 0) || 0
+                                        const isOverdue = isActive && fine > 0
 
                                         let badgeColor =
                                             "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
@@ -709,7 +722,7 @@ export default function StudentDashboardPage() {
                                                     </div>
                                                     <div>
                                                         <span className="text-white/50">Fine:</span>{" "}
-                                                        {peso(r.fine)}
+                                                        {peso(fine)}
                                                     </div>
                                                 </div>
                                             </div>
@@ -749,7 +762,9 @@ export default function StudentDashboardPage() {
                                                 const isPending = r.status === "pending"
                                                 const isReturned = r.status === "returned"
                                                 const isActive = isBorrowed || isPending
-                                                const isOverdue = isActive && (r.fine || 0) > 0
+
+                                                const fine = +(r.fine ?? 0) || 0
+                                                const isOverdue = isActive && fine > 0
 
                                                 let badgeColor =
                                                     "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
@@ -801,7 +816,7 @@ export default function StudentDashboardPage() {
                                                             </Badge>
                                                         </TableCell>
                                                         <TableCell className="text-sm">
-                                                            {peso(r.fine)}
+                                                            {peso(fine)}
                                                         </TableCell>
                                                     </TableRow>
                                                 )

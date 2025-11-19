@@ -510,7 +510,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                             </span>
                                                         </Badge>
                                                     ) : (
-                                                        <Badge className="bg-amber-500/90 hover:bg-amber-500 text-black border-amber-400/80">
+                                                        <Badge className="bg-amber-500/90 hover:bg-amber-500 text-white border-amber-400/80">
                                                             <span className="inline-flex items-center gap-1">
                                                                 <CornerDownLeft className="h-3 w-3" />
                                                                 Borrowed
