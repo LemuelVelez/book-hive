@@ -42,12 +42,14 @@ import {
     Search,
     Clock3,
     AlertTriangle,
+    Edit,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
     fetchBorrowRecords,
     markBorrowReturned,
+    updateBorrowDueDate,
     type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -132,6 +134,14 @@ export default function LibrarianBorrowRecordsPage() {
     const [autoFinePreview, setAutoFinePreview] = React.useState<number>(0);
     const [submittingReturn, setSubmittingReturn] = React.useState(false);
 
+    // --- Edit due date dialog state ---
+    const [dueDialogOpen, setDueDialogOpen] = React.useState(false);
+    const [dueRecord, setDueRecord] = React.useState<BorrowRecordDTO | null>(
+        null
+    );
+    const [dueDateInput, setDueDateInput] = React.useState<string>("");
+    const [submittingDue, setSubmittingDue] = React.useState(false);
+
     const loadRecords = React.useCallback(async () => {
         setError(null);
         setLoading(true);
@@ -148,7 +158,7 @@ export default function LibrarianBorrowRecordsPage() {
     }, []);
 
     React.useEffect(() => {
-        loadRecords();
+        void loadRecords();
     }, [loadRecords]);
 
     async function handleRefresh() {
@@ -158,6 +168,18 @@ export default function LibrarianBorrowRecordsPage() {
         } finally {
             setRefreshing(false);
         }
+    }
+
+    function openDueDialog(rec: BorrowRecordDTO) {
+        setDueRecord(rec);
+        setDueDateInput(rec.dueDate ?? "");
+        setDueDialogOpen(true);
+    }
+
+    function closeDueDialog() {
+        setDueDialogOpen(false);
+        setDueRecord(null);
+        setSubmittingDue(false);
     }
 
     /**
@@ -199,11 +221,9 @@ export default function LibrarianBorrowRecordsPage() {
 
         setSubmittingReturn(true);
         try {
-            // Use `any` to be flexible if backend supports payload for custom fine.
-            const updated: BorrowRecordDTO = await (markBorrowReturned as any)(
-                selectedRecord.id,
-                { fine: parsed }
-            );
+            const updated = await markBorrowReturned(selectedRecord.id, {
+                fine: parsed,
+            });
 
             setRecords((prev) =>
                 prev.map((r) => (r.id === updated.id ? updated : r))
@@ -220,6 +240,36 @@ export default function LibrarianBorrowRecordsPage() {
             const msg = err?.message || "Failed to mark as returned.";
             toast.error("Update failed", { description: msg });
             setSubmittingReturn(false);
+        }
+    }
+
+    async function handleSaveDueDate() {
+        if (!dueRecord) return;
+
+        if (!dueDateInput) {
+            toast.error("Invalid due date", {
+                description: "Please pick a due date.",
+            });
+            return;
+        }
+
+        setSubmittingDue(true);
+        try {
+            const updated = await updateBorrowDueDate(dueRecord.id, dueDateInput);
+
+            setRecords((prev) =>
+                prev.map((r) => (r.id === updated.id ? updated : r))
+            );
+
+            toast.success("Due date updated", {
+                description: `New due date: ${fmtDate(updated.dueDate)}.`,
+            });
+
+            closeDueDialog();
+        } catch (err: any) {
+            const msg = err?.message || "Failed to update due date.";
+            toast.error("Update failed", { description: msg });
+            setSubmittingDue(false);
         }
     }
 
@@ -348,7 +398,9 @@ export default function LibrarianBorrowRecordsPage() {
                             <Skeleton className="h-9 w-full" />
                         </div>
                     ) : error ? (
-                        <div className="py-6 text-center text-sm text-red-300">{error}</div>
+                        <div className="py-6 text-center text-sm text-red-300">
+                            {error}
+                        </div>
                     ) : filtered.length === 0 ? (
                         <div className="py-10 text-center text-sm text-white/70">
                             No borrow records found.
@@ -420,8 +472,12 @@ export default function LibrarianBorrowRecordsPage() {
                                                 <TableCell className="text-xs opacity-80">
                                                     {rec.id}
                                                 </TableCell>
-                                                <TableCell className="text-sm">{studentLabel}</TableCell>
-                                                <TableCell className="text-sm">{bookLabel}</TableCell>
+                                                <TableCell className="text-sm">
+                                                    {studentLabel}
+                                                </TableCell>
+                                                <TableCell className="text-sm">
+                                                    {bookLabel}
+                                                </TableCell>
                                                 <TableCell className="text-sm opacity-90">
                                                     {fmtDate(rec.borrowDate)}
                                                 </TableCell>
@@ -467,19 +523,30 @@ export default function LibrarianBorrowRecordsPage() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {isBorrowed || isPending ? (
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className={
-                                                                isPending
-                                                                    ? "text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
-                                                                    : "text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
-                                                            }
-                                                            onClick={() => openReturnDialog(rec)}
-                                                        >
-                                                            {isPending ? "Verify & mark returned" : "Mark returned"}
-                                                        </Button>
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            {/* ✏️ Edit due date button with Lucide Edit icon */}
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="border-white/25 text-xs text-white/80 inline-flex items-center gap-1"
+                                                                onClick={() => openDueDialog(rec)}
+                                                            >
+                                                                <Edit className="h-3.5 w-3.5" />
+                                                                <span>Edit due date</span>
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                                                onClick={() => openReturnDialog(rec)}
+                                                            >
+                                                                {isPending
+                                                                    ? "Verify & mark returned"
+                                                                    : "Mark returned"}
+                                                            </Button>
+                                                        </div>
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 text-white/60 text-xs">
                                                             <XCircle className="h-3.5 w-3.5" /> No actions
@@ -518,7 +585,8 @@ export default function LibrarianBorrowRecordsPage() {
                             <AlertDialogDescription className="text-white/70">
                                 You&apos;re about to mark{" "}
                                 <span className="font-semibold text-white">
-                                    “{selectedRecord.bookTitle ?? `Book #${selectedRecord.bookId}`}”
+                                    “{selectedRecord.bookTitle ??
+                                        `Book #${selectedRecord.bookId}`}”
                                 </span>{" "}
                                 as <span className="font-semibold">Returned</span> for{" "}
                                 <span className="font-semibold">
@@ -588,9 +656,7 @@ export default function LibrarianBorrowRecordsPage() {
                                     variant="outline"
                                     size="sm"
                                     className="border-white/30 text-xs text-white/80"
-                                    onClick={() =>
-                                        setFineInput(autoFinePreview.toFixed(2))
-                                    }
+                                    onClick={() => setFineInput(autoFinePreview.toFixed(2))}
                                 >
                                     Use auto
                                 </Button>
@@ -600,9 +666,7 @@ export default function LibrarianBorrowRecordsPage() {
                                     size="sm"
                                     className="border-white/30 text-xs text-white/80"
                                     onClick={() =>
-                                        setFineInput(
-                                            (selectedRecord.fine ?? 0).toFixed(2)
-                                        )
+                                        setFineInput((selectedRecord.fine ?? 0).toFixed(2))
                                     }
                                 >
                                     Use existing
@@ -634,6 +698,89 @@ export default function LibrarianBorrowRecordsPage() {
                                     </span>
                                 ) : (
                                     "Confirm return"
+                                )}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                )}
+            </AlertDialog>
+
+            {/* Dialog for editing due date */}
+            <AlertDialog
+                open={dueDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        closeDueDialog();
+                    } else {
+                        setDueDialogOpen(true);
+                    }
+                }}
+            >
+                {dueRecord && (
+                    <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Edit due date</AlertDialogTitle>
+                            <AlertDialogDescription className="text-white/70">
+                                You&apos;re updating the due date for{" "}
+                                <span className="font-semibold text-white">
+                                    “{dueRecord.bookTitle ?? `Book #${dueRecord.bookId}`}”
+                                </span>{" "}
+                                borrowed by{" "}
+                                <span className="font-semibold">
+                                    {dueRecord.studentEmail ??
+                                        dueRecord.studentId ??
+                                        `User #${dueRecord.userId}`}
+                                </span>
+                                .
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="mt-3 text-sm text-white/80 space-y-1">
+                            <p>
+                                <span className="text-white/60">Borrowed on:</span>{" "}
+                                {fmtDate(dueRecord.borrowDate)}
+                            </p>
+                            <p>
+                                <span className="text-white/60">Current due date:</span>{" "}
+                                {fmtDate(dueRecord.dueDate)}
+                            </p>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                            <label className="text-xs font-medium text-white/80">
+                                New due date
+                            </label>
+                            <Input
+                                type="date"
+                                value={dueDateInput}
+                                onChange={(e) => setDueDateInput(e.target.value)}
+                                className="bg-slate-900/70 border-white/20 text-white"
+                            />
+                            <p className="text-[11px] text-white/60">
+                                Extending the due date will automatically reduce or remove
+                                overdue fines for this record while it is still active.
+                            </p>
+                        </div>
+
+                        <AlertDialogFooter>
+                            <AlertDialogCancel
+                                className="border-white/20 text-white hover:bg-black/20"
+                                disabled={submittingDue}
+                            >
+                                Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                className="bg-purple-600 hover:bg-purple-700 text-white"
+                                disabled={submittingDue}
+                                onClick={handleSaveDueDate}
+                            >
+                                {submittingDue ? (
+                                    <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Saving…
+                                    </span>
+                                ) : (
+                                    "Save due date"
                                 )}
                             </AlertDialogAction>
                         </AlertDialogFooter>

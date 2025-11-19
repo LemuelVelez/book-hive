@@ -112,6 +112,7 @@ export type UpdateBorrowPayload = Partial<{
     returnDate: string | null; // YYYY-MM-DD or null
     status: BorrowStatus;
     fine: number;
+    dueDate: string; // YYYY-MM-DD
 }>;
 
 export async function fetchBorrowRecords(): Promise<BorrowRecordDTO[]> {
@@ -142,6 +143,7 @@ export async function createBorrowRecord(
 
 /**
  * Student self-service borrow: userId is taken from the session on the server.
+ * Server will now use the per-book borrow_duration_days to compute dueDate.
  */
 export async function createSelfBorrow(
     bookId: string | number
@@ -184,6 +186,7 @@ export type MarkBorrowReturnedOptions = {
  * - Sets return_date (defaults to today)
  * - Optionally sets fine (overdue + damage) in pesos.
  * - Marks the book as available again (on the server).
+ * - The fine you send here (e.g. 100) is persisted and shown to students.
  */
 export async function markBorrowReturned(
     id: string | number,
@@ -198,6 +201,27 @@ export async function markBorrowReturned(
     if (typeof options.fine === "number") {
         body.fine = options.fine;
     }
+
+    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {
+        method: "PATCH",
+        body,
+    });
+    return res.record;
+}
+
+/**
+ * Librarian/Admin action: modify the due date (e.g. extend loan).
+ * This lets you lengthen the due date for valid reasons; the server
+ * will automatically recalculate dynamic fines for active borrows.
+ */
+export async function updateBorrowDueDate(
+    id: string | number,
+    dueDate: string
+): Promise<BorrowRecordDTO> {
+    const body: UpdateBorrowPayload = {
+        dueDate,
+    };
 
     type Resp = JsonOk<{ record: BorrowRecordDTO }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {

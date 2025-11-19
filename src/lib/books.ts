@@ -11,6 +11,11 @@ export type BookDTO = {
   genre: string;
   publicationYear: number;
   available: boolean;
+  /**
+   * Default loan duration for this book in days.
+   * Used by the server when a student borrows via /borrow-records/self.
+   */
+  borrowDurationDays?: number | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -108,6 +113,11 @@ export type CreateBookPayload = {
   genre: string;
   publicationYear: number;
   available?: boolean;
+  /**
+   * Default loan duration for this book in days.
+   * If omitted, the backend will fall back to its default (e.g. 7).
+   */
+  borrowDurationDays?: number;
 };
 
 export type UpdateBookPayload = Partial<CreateBookPayload>;
@@ -118,7 +128,9 @@ export async function fetchBooks(): Promise<BookDTO[]> {
   return res.books;
 }
 
-export async function createBook(payload: CreateBookPayload): Promise<BookDTO> {
+export async function createBook(
+  payload: CreateBookPayload
+): Promise<BookDTO> {
   type Resp = JsonOk<{ book: BookDTO }>;
   const res = await requestJSON<Resp>(BOOK_ROUTES.create, {
     method: "POST",
