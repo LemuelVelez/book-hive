@@ -86,6 +86,13 @@ function peso(n: number) {
     }
 }
 
+// Normalize any "fine-like" value into a safe number
+function normalizeFine(value: any): number {
+    if (value === null || value === undefined) return 0
+    const num = typeof value === "number" ? value : Number(value)
+    return Number.isNaN(num) ? 0 : num
+}
+
 const FEEDBACK_COLORS = ["#22c55e", "#a855f7", "#f97316", "#38bdf8", "#f43f5e"]
 
 const CIRCULATION_COLORS: Record<string, string> = {
@@ -108,13 +115,19 @@ export default function StudentDashboardPage() {
         setError(null)
         setLoading(true)
         try {
-            const [booksData, recordsData, feedbacksData, damageData] =
+            const [booksData, rawRecordsData, feedbacksData, damageData] =
                 await Promise.all([
                     fetchBooks(),
                     fetchMyBorrowRecords(),
                     fetchMyFeedbacks(),
                     fetchMyDamageReports(),
                 ])
+
+            // 🔐 IMPORTANT: normalize fine to a real number here
+            const recordsData: BorrowRecordDTO[] = rawRecordsData.map((r: any) => ({
+                ...r,
+                fine: normalizeFine(r.fine),
+            }))
 
             setBooks(booksData)
             setRecords(recordsData)
@@ -160,20 +173,16 @@ export default function StudentDashboardPage() {
         [records],
     )
 
-    // Coerce fine to a safe number everywhere
     const overdueCount = React.useMemo(
         () =>
-            activeRecords.filter((r) => {
-                const fine = +(r.fine ?? 0) || 0
-                return fine > 0
-            }).length,
+            activeRecords.filter((r) => normalizeFine(r.fine) > 0).length,
         [activeRecords],
     )
 
     const activeFineTotal = React.useMemo(
         () =>
             activeRecords.reduce((sum, r) => {
-                const fine = +(r.fine ?? 0) || 0
+                const fine = normalizeFine(r.fine)
                 return sum + (fine > 0 ? fine : 0)
             }, 0),
         [activeRecords],
@@ -185,7 +194,7 @@ export default function StudentDashboardPage() {
     const recentBorrows = React.useMemo(
         () =>
             [...records]
-                .sort((a, b) => b.borrowDate.localeCompare(a.borrowDate))
+                .sort((a, b) => (a.borrowDate ?? "").localeCompare(b.borrowDate ?? "") * -1)
                 .slice(0, 5),
         [records],
     )
@@ -661,7 +670,7 @@ export default function StudentDashboardPage() {
                                         const isReturned = r.status === "returned"
                                         const isActive = isBorrowed || isPending
 
-                                        const fine = +(r.fine ?? 0) || 0
+                                        const fine = normalizeFine(r.fine)
                                         const isOverdue = isActive && fine > 0
 
                                         let badgeColor =
@@ -730,7 +739,7 @@ export default function StudentDashboardPage() {
                                     })}
                                 </div>
 
-                                {/* Desktop: original table layout preserved */}
+                                {/* Desktop: table layout */}
                                 <div className="hidden md:block">
                                     <Table>
                                         <TableCaption className="text-xs text-white/60">
@@ -763,7 +772,7 @@ export default function StudentDashboardPage() {
                                                 const isReturned = r.status === "returned"
                                                 const isActive = isBorrowed || isPending
 
-                                                const fine = +(r.fine ?? 0) || 0
+                                                const fine = normalizeFine(r.fine)
                                                 const isOverdue = isActive && fine > 0
 
                                                 let badgeColor =
