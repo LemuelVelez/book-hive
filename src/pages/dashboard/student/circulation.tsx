@@ -32,6 +32,7 @@ import {
   Clock3,
   CheckCircle2,
   AlertTriangle,
+  CreditCard,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,6 +41,12 @@ import {
   requestBorrowReturn,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
+
+import {
+  fetchMyFines,
+  requestFinePayment,
+  type FineDTO,
+} from "@/lib/fines";
 
 import {
   AlertDialog,
@@ -84,8 +91,16 @@ function peso(n: number) {
   }
 }
 
+// Normalize any "fine-like" value into a safe number
+function normalizeFine(value: any): number {
+  if (value === null || value === undefined) return 0;
+  const num = typeof value === "number" ? value : Number(value);
+  return Number.isNaN(num) ? 0 : num;
+}
+
 export default function StudentCirculationPage() {
   const [records, setRecords] = React.useState<BorrowRecordDTO[]>([]);
+  const [fines, setFines] = React.useState<FineDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -93,13 +108,18 @@ export default function StudentCirculationPage() {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [returnBusyId, setReturnBusyId] = React.useState<string | null>(null);
+  const [payBusyId, setPayBusyId] = React.useState<string | null>(null);
 
-  const loadRecords = React.useCallback(async () => {
+  const loadAll = React.useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
-      const data = await fetchMyBorrowRecords();
-      setRecords(data);
+      const [recordsData, finesData] = await Promise.all([
+        fetchMyBorrowRecords(),
+        fetchMyFines(),
+      ]);
+      setRecords(recordsData);
+      setFines(finesData);
     } catch (err: any) {
       const msg =
         err?.message ||
@@ -112,13 +132,13 @@ export default function StudentCirculationPage() {
   }, []);
 
   React.useEffect(() => {
-    void loadRecords();
-  }, [loadRecords]);
+    void loadAll();
+  }, [loadAll]);
 
   async function handleRefresh() {
     setRefreshing(true);
     try {
-      await loadRecords();
+      await loadAll();
     } finally {
       setRefreshing(false);
     }
@@ -149,16 +169,34 @@ export default function StudentCirculationPage() {
     return rows.sort((a, b) => b.borrowDate.localeCompare(a.borrowDate));
   }, [records, statusFilter, search]);
 
-  const active = React.useMemo(
+  const activeBorrows = React.useMemo(
     () =>
       records.filter(
         (r) => r.status === "borrowed" || r.status === "pending"
       ),
     [records]
   );
+
+  // Map fines by borrow_record_id for quick lookup
+  const finesByBorrowId = React.useMemo(() => {
+    const map: Record<string, FineDTO> = {};
+    for (const f of fines) {
+      if (f.borrowRecordId) {
+        map[f.borrowRecordId] = f;
+      }
+    }
+    return map;
+  }, [fines]);
+
+  // Active fines = fines table rows whose status === 'active' (unpaid)
   const totalActiveFine = React.useMemo(
-    () => active.reduce((sum, r) => sum + (r.fine || 0), 0),
-    [active]
+    () =>
+      fines.reduce((sum, f) => {
+        if (f.status !== "active") return sum;
+        const amount = normalizeFine(f.amount);
+        return amount > 0 ? sum + amount : sum;
+      }, 0),
+    [fines]
   );
 
   async function handleRequestReturn(record: BorrowRecordDTO) {
@@ -194,6 +232,39 @@ export default function StudentCirculationPage() {
     }
   }
 
+  async function handlePayFine(fine: FineDTO) {
+    if (fine.status !== "active") {
+      toast.info("Fine cannot be paid right now", {
+        description:
+          fine.status === "pending_verification"
+            ? "This fine already has a payment pending verification."
+            : "This fine is no longer active.",
+      });
+      return;
+    }
+
+    setPayBusyId(fine.id);
+    try {
+      const updated = await requestFinePayment(fine.id);
+
+      setFines((prev) =>
+        prev.map((f) => (f.id === updated.id ? updated : f))
+      );
+
+      toast.success("Payment submitted", {
+        description:
+          "Your fine payment is now marked as pending verification. A librarian will confirm it and mark the fine as paid.",
+      });
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        "Could not submit your fine payment. Please try again later.";
+      toast.error("Payment failed", { description: msg });
+    } finally {
+      setPayBusyId(null);
+    }
+  }
+
   return (
     <DashboardLayout title="My Circulation">
       {/* Header */}
@@ -206,7 +277,7 @@ export default function StudentCirculationPage() {
             </h2>
             <p className="text-xs text-white/70">
               View all books you&apos;ve borrowed, track due dates and fines,
-              and send online return requests.
+              send online return requests, and pay active fines.
             </p>
             <p className="mt-1 text-[11px] text-amber-200/90">
               Books <span className="font-semibold">cannot be auto-returned</span>. When
@@ -216,6 +287,12 @@ export default function StudentCirculationPage() {
               <span className="font-semibold">physical book</span> before it
               changes to <span className="font-semibold">Returned</span>.
             </p>
+            <p className="mt-1 text-[11px] text-emerald-200/90">
+              Paying a fine here will mark it as{" "}
+              <span className="font-semibold">Pending verification</span>. A
+              librarian will confirm the payment and switch it to{" "}
+              <span className="font-semibold">Paid</span>.
+            </p>
           </div>
         </div>
 
@@ -224,11 +301,11 @@ export default function StudentCirculationPage() {
             <span>
               Active borrows:{" "}
               <span className="font-semibold text-emerald-300">
-                {active.length}
+                {activeBorrows.length}
               </span>
             </span>
             <span>
-              Potential fines (active):{" "}
+              Active fines (unpaid):{" "}
               <span className="font-semibold text-amber-300">
                 {peso(totalActiveFine)}
               </span>
@@ -302,6 +379,15 @@ export default function StudentCirculationPage() {
             <span className="font-semibold text-amber-200">Pending</span> until a
             librarian confirms the physical return.
           </p>
+          <p className="mt-1 text-[11px] text-white/60">
+            Returned rows with the{" "}
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+              Active fine
+            </span>{" "}
+            tag indicate fines that are still active (unpaid) and can be paid
+            from this page.
+          </p>
         </CardHeader>
 
         <CardContent className="overflow-x-auto">
@@ -325,13 +411,13 @@ export default function StudentCirculationPage() {
             <Table>
               <TableCaption className="text-xs text-white/60">
                 Showing {filtered.length}{" "}
-                {filtered.length === 1 ? "record" : "records"}. You can only
-                submit a{" "}
-                <span className="font-semibold text-purple-200">
-                  return request
+                {filtered.length === 1 ? "record" : "records"}. Returned rows
+                with an <span className="font-semibold text-amber-200">
+                  Active fine
                 </span>{" "}
-                for books that are currently{" "}
-                <span className="font-semibold text-amber-200">Borrowed</span>.
+                tag have unpaid fines you can pay here. Payments go into{" "}
+                <span className="font-semibold">Pending verification</span>{" "}
+                until a librarian confirms them.
               </TableCaption>
               <TableHeader>
                 <TableRow className="border-white/10">
@@ -365,8 +451,18 @@ export default function StudentCirculationPage() {
                 {filtered.map((record) => {
                   const isBorrowed = record.status === "borrowed";
                   const isPending = record.status === "pending";
-                  const isActive = isBorrowed || isPending;
-                  const isOverdue = isActive && record.fine > 0;
+                  const isActiveBorrow = isBorrowed || isPending;
+
+                  const linkedFine = finesByBorrowId[record.id];
+                  const fineAmountFromRecord = normalizeFine(
+                    (record as any).fine
+                  );
+                  const finalFineAmount = linkedFine
+                    ? normalizeFine(linkedFine.amount)
+                    : fineAmountFromRecord;
+
+                  const isOverdue =
+                    isActiveBorrow && finalFineAmount > 0;
 
                   return (
                     <TableRow
@@ -424,16 +520,44 @@ export default function StudentCirculationPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {peso(record.fine)}
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span>{peso(finalFineAmount)}</span>
+                          {linkedFine && linkedFine.status === "active" && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                              Active fine (unpaid)
+                            </span>
+                          )}
+                          {linkedFine &&
+                            linkedFine.status === "pending_verification" && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100 border border-amber-300/40">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-200" />
+                                Payment pending verification
+                              </span>
+                            )}
+                          {linkedFine && linkedFine.status === "paid" && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                              Fine paid
+                            </span>
+                          )}
+                          {linkedFine && linkedFine.status === "cancelled" && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                              Fine cancelled
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-y-1">
+                        {/* Borrow-related actions */}
                         {record.status === "borrowed" ? (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
                                 type="button"
                                 size="sm"
-                                className="bg-purple-600 hover:bg-purple-700 text-white"
+                                className="bg-purple-600 hover:bg-purple-700 text-white w-full md:w-auto"
                                 disabled={returnBusyId === record.id}
                               >
                                 {returnBusyId === record.id ? (
@@ -491,13 +615,14 @@ export default function StudentCirculationPage() {
                                   </span>
                                   .
                                 </p>
-                                {record.fine > 0 && (
+                                {finalFineAmount > 0 && (
                                   <p className="text-red-300">
-                                    You currently have{" "}
+                                    If you returned the book today, your
+                                    estimated overdue fine would be{" "}
                                     <span className="font-semibold">
-                                      {peso(record.fine)}
-                                    </span>{" "}
-                                    in overdue fines for this book.
+                                      {peso(finalFineAmount)}
+                                    </span>
+                                    .
                                   </p>
                                 )}
                               </div>
@@ -532,7 +657,7 @@ export default function StudentCirculationPage() {
                             size="sm"
                             variant="outline"
                             disabled
-                            className="border-amber-400/50 text-amber-200/80"
+                            className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
                           >
                             Pending verification
                           </Button>
@@ -542,10 +667,145 @@ export default function StudentCirculationPage() {
                             size="sm"
                             variant="outline"
                             disabled
-                            className="border-white/20 text-white/60"
+                            className="border-white/20 text-white/60 w-full md:w-auto"
                           >
                             Already returned
                           </Button>
+                        )}
+
+                        {/* Fine-related actions (for returned records with active fine) */}
+                        {record.status === "returned" && linkedFine && (
+                          <>
+                            {linkedFine.status === "active" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white w-full md:w-auto inline-flex items-center gap-1"
+                                    disabled={payBusyId === linkedFine.id}
+                                  >
+                                    {payBusyId === linkedFine.id ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Paying…
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CreditCard className="h-4 w-4" />
+                                        Pay fine
+                                      </>
+                                    )}
+                                  </Button>
+                                </AlertDialogTrigger>
+
+                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      Pay fine for this book?
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription className="text-white/70">
+                                      You&apos;re about to pay the active fine for{" "}
+                                      <span className="font-semibold text-white">
+                                        “
+                                        {record.bookTitle ??
+                                          `Book #${record.bookId}`}”
+                                      </span>
+                                      .
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+
+                                  <div className="mt-3 text-sm text-white/80 space-y-1">
+                                    <p>
+                                      <span className="text-white/60">
+                                        Borrow ID:
+                                      </span>{" "}
+                                      {record.id}
+                                    </p>
+                                    <p>
+                                      <span className="text-white/60">
+                                        Final fine amount:
+                                      </span>{" "}
+                                      <span className="font-semibold text-red-300">
+                                        {peso(finalFineAmount)}
+                                      </span>
+                                    </p>
+                                    <p className="text-xs text-white/70 pt-1">
+                                      Once you confirm, this fine will be marked as{" "}
+                                      <span className="font-semibold">
+                                        Pending verification
+                                      </span>
+                                      . A librarian will verify your payment and then
+                                      mark it as{" "}
+                                      <span className="font-semibold text-emerald-200">
+                                        Paid
+                                      </span>
+                                      .
+                                    </p>
+                                  </div>
+
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel
+                                      className="border-white/20 text-white hover:bg-black/20"
+                                      disabled={payBusyId === linkedFine.id}
+                                    >
+                                      Cancel
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                      disabled={payBusyId === linkedFine.id}
+                                      onClick={() => void handlePayFine(linkedFine)}
+                                    >
+                                      {payBusyId === linkedFine.id ? (
+                                        <span className="inline-flex items-center gap-2">
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                          Paying…
+                                        </span>
+                                      ) : (
+                                        "Confirm payment"
+                                      )}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+
+                            {linkedFine.status === "pending_verification" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled
+                                className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
+                              >
+                                Payment pending verification
+                              </Button>
+                            )}
+
+                            {linkedFine.status === "paid" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled
+                                className="border-emerald-400/50 text-emerald-200/90 w-full md:w-auto"
+                              >
+                                Fine paid
+                              </Button>
+                            )}
+
+                            {linkedFine.status === "cancelled" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled
+                                className="border-slate-400/50 text-slate-200/90 w-full md:w-auto"
+                              >
+                                Fine cancelled
+                              </Button>
+                            )}
+                          </>
                         )}
                       </TableCell>
                     </TableRow>

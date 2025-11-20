@@ -53,31 +53,21 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 
+// ✅ Reuse shared damage report types from lib
+import type {
+    DamageReportDTO,
+    DamageStatus,
+    DamageSeverity,
+} from "@/lib/damageReports";
+
 /* ----------------------------- Types ----------------------------- */
 
-type DamageStatus = "pending" | "assessed" | "paid";
-type Severity = "minor" | "moderate" | "major";
+// Local alias for clarity inside this page
+type Severity = DamageSeverity;
 
-export type DamageReportDTO = {
-    id: string;
-    userId: string | number;
-    studentEmail: string | null;
-    studentId: string | null;
-    studentName?: string | null;
-    bookId: string | number;
-    bookTitle: string | null;
-
-    // Core damage info
-    damageType: string; // e.g., Torn Pages, Water Damage
-    severity: Severity; // minor | moderate | major
-    status: DamageStatus; // pending | assessed | paid
-    fee?: number; // optional display
-    notes?: string | null; // optional display
-    reportedAt?: string; // optional display
-
-    // Uploaded pictures
-    photoUrl?: string | null; // legacy single URL
-    photoUrls?: string[] | null; // new multi-image support
+// Local row type: we extend the shared DTO with optional legacy `photoUrl`
+type DamageReportRow = DamageReportDTO & {
+    photoUrl?: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -138,7 +128,7 @@ function SeverityBadge({ severity }: { severity: Severity }) {
     );
 }
 
-function formatDamageInfo(r: DamageReportDTO) {
+function formatDamageInfo(r: DamageReportRow) {
     return (
         <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -190,8 +180,8 @@ function suggestedFineFromSeverity(severity: Severity): number {
     }
 }
 
-// Light client-side fetcher (kept local so we don't add new lib files)
-async function fetchDamageReports(): Promise<DamageReportDTO[]> {
+// Light client-side fetcher (kept local so we don't add new lib functions)
+async function fetchDamageReports(): Promise<DamageReportRow[]> {
     let resp: Response;
     try {
         resp = await fetch(`${API_BASE}/api/damage-reports`, {
@@ -231,7 +221,7 @@ async function fetchDamageReports(): Promise<DamageReportDTO[]> {
     }
 
     const data = (isJson ? await resp.json() : null) as JsonOk<{
-        reports: DamageReportDTO[];
+        reports: DamageReportRow[];
     }>;
     return data.reports ?? [];
 }
@@ -240,9 +230,9 @@ async function fetchDamageReports(): Promise<DamageReportDTO[]> {
 async function patchDamageReport(
     id: string | number,
     patch: Partial<
-        Pick<DamageReportDTO, "status" | "fee" | "notes" | "severity">
+        Pick<DamageReportRow, "status" | "fee" | "notes" | "severity">
     >
-): Promise<DamageReportDTO> {
+): Promise<DamageReportRow> {
     let resp: Response;
     try {
         resp = await fetch(
@@ -286,7 +276,7 @@ async function patchDamageReport(
     }
 
     const data = (isJson ? await resp.json() : null) as JsonOk<{
-        report: DamageReportDTO;
+        report: DamageReportRow;
     }>;
     return data.report;
 }
@@ -343,7 +333,7 @@ export default function LibrarianDamageReportsPage() {
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
 
-    const [rows, setRows] = React.useState<DamageReportDTO[]>([]);
+    const [rows, setRows] = React.useState<DamageReportRow[]>([]);
     const [search, setSearch] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState<"all" | DamageStatus>(
         "all"
@@ -360,7 +350,7 @@ export default function LibrarianDamageReportsPage() {
 
     // Assessment dialog state
     const [assessOpen, setAssessOpen] = React.useState(false);
-    const [assessReport, setAssessReport] = React.useState<DamageReportDTO | null>(
+    const [assessReport, setAssessReport] = React.useState<DamageReportRow | null>(
         null
     );
     const [assessSeverity, setAssessSeverity] = React.useState<Severity>("minor");
@@ -399,7 +389,7 @@ export default function LibrarianDamageReportsPage() {
         }
     }
 
-    async function handleStatusStep(report: DamageReportDTO) {
+    async function handleStatusStep(report: DamageReportRow) {
         // pending -> assessed -> paid
         let next: DamageStatus | null = null;
         if (report.status === "pending") next = "assessed";
@@ -435,7 +425,7 @@ export default function LibrarianDamageReportsPage() {
         }
     }
 
-    async function handleDelete(report: DamageReportDTO) {
+    async function handleDelete(report: DamageReportRow) {
         const idStr = String(report.id);
         setDeletingId(idStr);
 
@@ -493,7 +483,7 @@ export default function LibrarianDamageReportsPage() {
 
     /* ---------------------- Assessment dialog helpers ---------------------- */
 
-    function openAssessDialog(report: DamageReportDTO) {
+    function openAssessDialog(report: DamageReportRow) {
         setAssessReport(report);
 
         const initialSeverity = report.severity ?? "minor";
@@ -1143,14 +1133,17 @@ export default function LibrarianDamageReportsPage() {
             </Dialog>
 
             {/* Assessment dialog */}
-            <Dialog open={assessOpen} onOpenChange={(open) => {
-                if (!open) {
-                    closeAssessDialog();
-                } else if (assessReport) {
-                    // keep as-is if reopened while state still there
-                    setAssessOpen(true);
-                }
-            }}>
+            <Dialog
+                open={assessOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        closeAssessDialog();
+                    } else if (assessReport) {
+                        // keep as-is if reopened while state still there
+                        setAssessOpen(true);
+                    }
+                }}
+            >
                 <DialogContent className="max-w-2xl bg-slate-900 text-white border-white/10">
                     <DialogHeader>
                         <DialogTitle className="text-sm">

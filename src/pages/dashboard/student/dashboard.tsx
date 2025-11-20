@@ -183,23 +183,22 @@ export default function StudentDashboardPage() {
         [activeRecords],
     )
 
-    // This is now aligned with the circulation page logic:
-    // it sums fines for all active (borrowed + pending) records.
+    // Active fines = unpaid fines on active (borrowed + pending) records.
     const activeFineTotal = React.useMemo(
         () =>
             activeRecords.reduce((sum, r) => {
                 const fine = normalizeFine((r as any).fine)
-                return sum + fine
+                return fine > 0 ? sum + fine : sum
             }, 0),
         [activeRecords],
     )
 
-    // All recorded fines (any status) – mirrors what the librarian dashboard sees
+    // All recorded fines (any status, positive amounts only) – historical total.
     const totalFineAll = React.useMemo(
         () =>
             records.reduce((sum, r) => {
                 const fine = normalizeFine((r as any).fine)
-                return sum + fine
+                return fine > 0 ? sum + fine : sum
             }, 0),
         [records],
     )
@@ -413,7 +412,7 @@ export default function StudentDashboardPage() {
                                     </span>
                                 </p>
                                 <p>
-                                    Potential fines (active):{" "}
+                                    Active fines (unpaid):{" "}
                                     <span className="font-semibold text-amber-300">
                                         {peso(activeFineTotal)}
                                     </span>
@@ -428,6 +427,11 @@ export default function StudentDashboardPage() {
                                     <span className="font-semibold text-amber-200">
                                         {peso(totalFineAll)}
                                     </span>
+                                </p>
+                                <p className="text-[11px] text-white/60">
+                                    Active fines are fines on books that are still{" "}
+                                    <span className="font-semibold">borrowed or pending</span>{" "}
+                                    and have not yet been paid.
                                 </p>
                             </>
                         )}
