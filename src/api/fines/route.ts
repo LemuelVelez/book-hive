@@ -13,5 +13,6 @@ export const FINES_ROUTES = {
     pay: (id: string | number) =>
         api(`/fines/${encodeURIComponent(String(id))}/pay`), // POST (student pay -> pending_verification)
     uploadProofs: (id: string | number) =>
-        api(`/fines/${encodeURIComponent(String(id))}/proofs`), // POST (upload proof images + metadata)
+        api(`/fines/${encodeURIComponent(String(id))}/proofs`), // GET/POST (upload + list proof images)
+    paymentConfig: api("/fines/payment-config"), // GET/POST (global e-wallet phone + QR config)
 } as const;

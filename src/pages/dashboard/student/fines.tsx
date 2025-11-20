@@ -34,14 +34,20 @@ import {
     AlertTriangle,
     XCircle,
     CreditCard,
+    QrCode,
+    UploadCloud,
+    Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
     fetchMyFines,
     requestFinePayment,
+    fetchPaymentConfig,
+    uploadFineProofImage,
     type FineDTO,
     type FineStatus,
+    type PaymentConfigDTO,
 } from "@/lib/fines";
 
 import {
@@ -104,6 +110,18 @@ export default function StudentFinesPage() {
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
     const [payBusyId, setPayBusyId] = React.useState<string | null>(null);
 
+    // Global payment config (e-wallet phone + QR)
+    const [paymentConfig, setPaymentConfig] =
+        React.useState<PaymentConfigDTO | null>(null);
+    const [paymentConfigLoading, setPaymentConfigLoading] =
+        React.useState<boolean>(false);
+
+    // Selected payment screenshot (per fine)
+    const [selectedProofFile, setSelectedProofFile] =
+        React.useState<File | null>(null);
+    const [selectedProofFineId, setSelectedProofFineId] =
+        React.useState<string | null>(null);
+
     const loadFines = React.useCallback(async () => {
         setError(null);
         setLoading(true);
@@ -122,6 +140,23 @@ export default function StudentFinesPage() {
     React.useEffect(() => {
         void loadFines();
     }, [loadFines]);
+
+    React.useEffect(() => {
+        const run = async () => {
+            setPaymentConfigLoading(true);
+            try {
+                const cfg = await fetchPaymentConfig();
+                setPaymentConfig(cfg);
+            } catch (err: any) {
+                const msg =
+                    err?.message || "Failed to load library payment information.";
+                toast.error("Could not load payment details", { description: msg });
+            } finally {
+                setPaymentConfigLoading(false);
+            }
+        };
+        void run();
+    }, []);
 
     async function handleRefresh() {
         setRefreshing(true);
@@ -182,6 +217,23 @@ export default function StudentFinesPage() {
             setFines((prev) =>
                 prev.map((f) => (f.id === updated.id ? updated : f))
             );
+
+            // Upload proof screenshot if selected for this fine
+            if (selectedProofFile && selectedProofFineId === fine.id) {
+                try {
+                    await uploadFineProofImage(fine.id, selectedProofFile, {
+                        kind: "student_payment",
+                    });
+                } catch (err: any) {
+                    const msg =
+                        err?.message ||
+                        "Your payment was submitted but the screenshot upload failed. You can try again or contact the librarian.";
+                    toast.error("Payment proof upload failed", { description: msg });
+                } finally {
+                    setSelectedProofFile(null);
+                    setSelectedProofFineId(null);
+                }
+            }
 
             toast.success("Payment submitted", {
                 description:
@@ -471,7 +523,7 @@ export default function StudentFinesPage() {
                                                             </Button>
                                                         </AlertDialogTrigger>
 
-                                                        <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                        <AlertDialogContent className="bg-slate-900 border-white/10 text-white max-h-[90vh] overflow-y-auto">
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>
                                                                     Pay this fine now?
@@ -493,11 +545,9 @@ export default function StudentFinesPage() {
                                                                 </AlertDialogDescription>
                                                             </AlertDialogHeader>
 
-                                                            <div className="mt-3 text-sm text-white/80 space-y-1">
+                                                            <div className="mt-3 text-sm text-white/80 space-y-3">
                                                                 <p>
-                                                                    <span className="text-white/60">
-                                                                        Fine ID:
-                                                                    </span>{" "}
+                                                                    <span className="text-white/60">Fine ID:</span>{" "}
                                                                     {fine.id}
                                                                 </p>
                                                                 {fine.borrowRecordId && (
@@ -508,7 +558,121 @@ export default function StudentFinesPage() {
                                                                         {fine.borrowRecordId}
                                                                     </p>
                                                                 )}
-                                                                <p className="text-xs text-white/70 pt-1">
+
+                                                                {/* Payment details from librarian */}
+                                                                <div className="mt-2 rounded-md border border-dashed border-emerald-500/40 bg-emerald-500/5 p-3 text-xs space-y-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <CreditCard className="h-4 w-4 text-emerald-300" />
+                                                                        <span className="font-semibold text-emerald-200">
+                                                                            Send payment via e-wallet
+                                                                        </span>
+                                                                    </div>
+
+                                                                    {paymentConfigLoading ? (
+                                                                        <p className="flex items-center gap-2 text-white/70">
+                                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                                            Loading payment details…
+                                                                        </p>
+                                                                    ) : paymentConfig &&
+                                                                        (paymentConfig.eWalletPhone ||
+                                                                            paymentConfig.qrCodeUrl) ? (
+                                                                        <>
+                                                                            {paymentConfig.eWalletPhone && (
+                                                                                <p>
+                                                                                    <span className="text-white/60">
+                                                                                        E-wallet number:
+                                                                                    </span>{" "}
+                                                                                    <span className="font-mono text-sm">
+                                                                                        {paymentConfig.eWalletPhone}
+                                                                                    </span>
+                                                                                </p>
+                                                                            )}
+                                                                            {paymentConfig.qrCodeUrl && (
+                                                                                <div className="mt-2 flex flex-col sm:flex-row gap-3 sm:items-start">
+                                                                                    <div className="flex-1 text-[11px] text-white/70 space-y-1">
+                                                                                        <p className="flex items-center gap-1">
+                                                                                            <QrCode className="h-3 w-3" />
+                                                                                            <span>
+                                                                                                Scan this QR in your e-wallet
+                                                                                                app, then take a screenshot of
+                                                                                                the successful payment.
+                                                                                            </span>
+                                                                                        </p>
+                                                                                        <Button
+                                                                                            type="button"
+                                                                                            size="sm"
+                                                                                            variant="outline"
+                                                                                            className="mt-1 text-xs"
+                                                                                            asChild
+                                                                                        >
+                                                                                            <a
+                                                                                                href={paymentConfig.qrCodeUrl}
+                                                                                                target="_blank"
+                                                                                                rel="noreferrer"
+                                                                                                download
+                                                                                            >
+                                                                                                <Download className="h-3 w-3 mr-1" />
+                                                                                                Download QR image
+                                                                                            </a>
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                    <div className="w-28 h-28 rounded border border-white/15 bg-black/30 flex items-center justify-center overflow-hidden">
+                                                                                        <img
+                                                                                            src={paymentConfig.qrCodeUrl}
+                                                                                            alt="E-wallet QR code"
+                                                                                            className="max-h-full max-w-full object-contain"
+                                                                                        />
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
+                                                                        <p className="text-amber-200/90">
+                                                                            Payment details have not been configured
+                                                                            yet. Please contact the librarian or pay
+                                                                            in person at the library counter.
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Upload screenshot */}
+                                                                <div className="space-y-1">
+                                                                    <label className="text-xs text-white/80 flex items-center gap-1">
+                                                                        <UploadCloud className="h-3 w-3" />
+                                                                        Upload payment screenshot (optional but
+                                                                        recommended)
+                                                                    </label>
+                                                                    <Input
+                                                                        type="file"
+                                                                        accept="image/*"
+                                                                        className="bg-slate-900/70 border-white/20 text-xs text-white file:text-xs file:text-white file:bg-slate-700 file:border-0 file:px-3 file:py-1 file:mr-3 file:rounded"
+                                                                        onChange={(e) => {
+                                                                            const file = e.target.files?.[0] ?? null;
+                                                                            setSelectedProofFineId(fine.id);
+                                                                            setSelectedProofFile(file);
+                                                                        }}
+                                                                    />
+                                                                    {selectedProofFile &&
+                                                                        selectedProofFineId === fine.id && (
+                                                                            <p className="text-[11px] text-white/60">
+                                                                                Selected:{" "}
+                                                                                <span className="font-semibold">
+                                                                                    {selectedProofFile.name}
+                                                                                </span>
+                                                                            </p>
+                                                                        )}
+                                                                    <p className="text-[11px] text-white/50">
+                                                                        The librarian will use this screenshot to
+                                                                        verify your payment before marking the fine
+                                                                        as{" "}
+                                                                        <span className="font-semibold text-emerald-200">
+                                                                            Paid
+                                                                        </span>
+                                                                        .
+                                                                    </p>
+                                                                </div>
+
+                                                                <p className="text-[11px] text-white/70 pt-1">
                                                                     Once you confirm, this fine will be marked as{" "}
                                                                     <span className="font-semibold">
                                                                         Pending verification
