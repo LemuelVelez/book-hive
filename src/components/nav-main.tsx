@@ -15,6 +15,7 @@ import {
     ListChecks,
     MessageSquare,
     ShieldAlert,
+    ReceiptText,
 } from "lucide-react"
 
 type Item = {
@@ -68,6 +69,11 @@ export function NavMain() {
                 to: "/dashboard/circulation",
             },
             {
+                label: "Fines",
+                icon: ReceiptText,
+                to: "/dashboard/fines",
+            },
+            {
                 label: "Insights Hub",
                 icon: MessageSquare,
                 to: "/dashboard/insights",
@@ -91,6 +97,11 @@ export function NavMain() {
                 label: "Borrow Records",
                 icon: ListChecks,
                 to: "/dashboard/librarian/borrow-records",
+            },
+            {
+                label: "Fines",
+                icon: ReceiptText,
+                to: "/dashboard/librarian/fines",
             },
             {
                 label: "Damage Reports",
@@ -145,8 +156,7 @@ export function NavMain() {
 
                             const isActive = item.exact
                                 ? pathname === item.to
-                                : pathname === item.to ||
-                                pathname.startsWith(item.to + "/")
+                                : pathname === item.to || pathname.startsWith(item.to + "/")
 
                             return (
                                 <SidebarMenuItem

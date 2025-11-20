@@ -9,9 +9,15 @@ import { RequireRole } from '@/components/roleguard'
 // Lazy-loaded pages for code-splitting
 const LandingPage = lazy(() => import('./pages/landing'))
 const AuthPage = lazy(() => import('./pages/auth/auth'))
-const ForgotPasswordPage = lazy(() => import('./pages/auth/forgot-password'))
-const ResetPasswordPage = lazy(() => import('./pages/auth/reset-password'))
-const VerifyEmailPage = lazy(() => import('./pages/auth/verify-email'))
+const ForgotPasswordPage = lazy(
+  () => import('./pages/auth/forgot-password')
+)
+const ResetPasswordPage = lazy(
+  () => import('./pages/auth/reset-password')
+)
+const VerifyEmailPage = lazy(
+  () => import('./pages/auth/verify-email')
+)
 const VerifyEmailCallbackPage = lazy(
   () => import('./pages/auth/verify-email-callback')
 )
@@ -23,13 +29,14 @@ const StudentDashboard = lazy(
 const StudentBooksPage = lazy(
   () => import('./pages/dashboard/student/book')
 )
-// ✅ Student Circulation page
 const StudentCirculationPage = lazy(
   () => import('./pages/dashboard/student/circulation')
 )
-// ✅ Student Insights Hub page
 const StudentInsightsHubPage = lazy(
   () => import('./pages/dashboard/student/insightsHub')
+)
+const StudentFinesPage = lazy(
+  () => import('./pages/dashboard/student/fines')
 )
 
 const LibrarianDashboard = lazy(
@@ -38,21 +45,20 @@ const LibrarianDashboard = lazy(
 const LibrarianBooksPage = lazy(
   () => import('./pages/dashboard/librarian/books')
 )
-// ✅ Librarian Users page
 const LibrarianUsersPage = lazy(
   () => import('./pages/dashboard/librarian/users')
 )
-// ✅ Librarian Borrow Records page
 const LibrarianBorrowRecordsPage = lazy(
   () => import('./pages/dashboard/librarian/borrowRecords')
 )
-// ✅ Librarian Feedbacks page
 const LibrarianFeedbacksPage = lazy(
   () => import('./pages/dashboard/librarian/feedbacks')
 )
-// ✅ Librarian Damage Reports page
 const LibrarianDamageReportsPage = lazy(
   () => import('./pages/dashboard/librarian/damageReports')
+)
+const LibrarianFinesPage = lazy(
+  () => import('./pages/dashboard/librarian/fines')
 )
 
 const FacultyDashboard = lazy(
@@ -145,6 +151,16 @@ function App() {
             }
           />
 
+          {/* ✅ Student / Other fines page */}
+          <Route
+            path="/dashboard/fines"
+            element={
+              <RequireRole allow={['student', 'other']}>
+                <StudentFinesPage />
+              </RequireRole>
+            }
+          />
+
           {/* ✅ Student / Other Insights Hub page */}
           <Route
             path="/dashboard/insights"
@@ -190,6 +206,16 @@ function App() {
             element={
               <RequireRole allow={['librarian']}>
                 <LibrarianBorrowRecordsPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Librarian Fines */}
+          <Route
+            path="/dashboard/librarian/fines"
+            element={
+              <RequireRole allow={['librarian']}>
+                <LibrarianFinesPage />
               </RequireRole>
             }
           />

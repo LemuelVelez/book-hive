@@ -95,14 +95,14 @@ async function requestJSON<T = unknown>(
                     message = (data as any).message;
                 }
             } catch {
-                /* empty */
+                /* ignore */
             }
         } else {
             try {
                 const text = await resp.text();
                 if (text) message = text;
             } catch {
-                /* empty */
+                /* ignore */
             }
         }
         throw new Error(message);
@@ -113,9 +113,46 @@ async function requestJSON<T = unknown>(
 
 /* ----------------------- Public Fines API ----------------------- */
 
+/**
+ * List fines for the current authenticated user (student / other).
+ */
 export async function fetchMyFines(): Promise<FineDTO[]> {
     type Resp = JsonOk<{ fines: FineDTO[] }>;
     const res = await requestJSON<Resp>(FINES_ROUTES.my, { method: "GET" });
+    return res.fines;
+}
+
+/**
+ * List fines (librarian/admin).
+ * Optional filters:
+ *   - userId: limit to a specific user
+ *   - status: active | pending_verification | paid | cancelled
+ */
+export type FetchFinesParams = Partial<{
+    userId: string | number;
+    status: FineStatus;
+}>;
+
+export async function fetchFines(params?: FetchFinesParams): Promise<FineDTO[]> {
+    type Resp = JsonOk<{ fines: FineDTO[] }>;
+
+    let url = FINES_ROUTES.list;
+
+    if (params) {
+        const search = new URLSearchParams();
+        if (params.userId !== undefined && params.userId !== null && params.userId !== "") {
+            search.set("userId", String(params.userId));
+        }
+        if (params.status) {
+            search.set("status", params.status);
+        }
+        const qs = search.toString();
+        if (qs) {
+            url += `?${qs}`;
+        }
+    }
+
+    const res = await requestJSON<Resp>(url, { method: "GET" });
     return res.fines;
 }
 
@@ -134,8 +171,7 @@ export async function requestFinePayment(
 }
 
 /**
- * Librarian/Admin action: general fine update (not used on student side,
- * but provided for completeness).
+ * Librarian/Admin action: general fine update.
  */
 export type UpdateFinePayload = Partial<{
     status: FineStatus;

@@ -11,5 +11,7 @@ export const FINES_ROUTES = {
     update: (id: string | number) =>
         api(`/fines/${encodeURIComponent(String(id))}`), // PATCH (librarian/admin)
     pay: (id: string | number) =>
-        api(`/fines/${encodeURIComponent(String(id))}/pay`), // POST (student pay)
+        api(`/fines/${encodeURIComponent(String(id))}/pay`), // POST (student pay -> pending_verification)
+    uploadProofs: (id: string | number) =>
+        api(`/fines/${encodeURIComponent(String(id))}/proofs`), // POST (upload proof images + metadata)
 } as const;

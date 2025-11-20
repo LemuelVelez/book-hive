@@ -265,6 +265,16 @@ export default function StudentCirculationPage() {
     }
   }
 
+  // Reusable scrollbar styling for dark, thin horizontal scrollbars
+  const cellScrollbarClasses =
+    "overflow-x-auto whitespace-nowrap " +
+    "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
+    "[&::-webkit-scrollbar]:h-1.5 " +
+    "[&::-webkit-scrollbar-track]:bg-transparent " +
+    "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
+    "[&::-webkit-scrollbar-thumb]:rounded-full " +
+    "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
+
   return (
     <DashboardLayout title="My Circulation">
       {/* Header */}
@@ -519,7 +529,12 @@ export default function StudentCirculationPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell
+                        className={
+                          "text-right align-top w-[100px] max-w-[100px] " +
+                          cellScrollbarClasses
+                        }
+                      >
                         <div className="flex flex-col items-start gap-0.5">
                           <span>{peso(finalFineAmount)}</span>
                           {linkedFine && linkedFine.status === "active" && (
@@ -549,7 +564,12 @@ export default function StudentCirculationPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right space-y-1">
+                      <TableCell
+                        className={
+                          "text-right align-top w-[100px] max-w-[100px] " +
+                          cellScrollbarClasses
+                        }
+                      >
                         {/* Borrow-related actions */}
                         {record.status === "borrowed" ? (
                           <AlertDialog>
@@ -667,7 +687,7 @@ export default function StudentCirculationPage() {
                             size="sm"
                             variant="outline"
                             disabled
-                            className="border-white/20 text-white/60 w-full md:w-auto"
+                            className="border-white/20 text-white/60 w-full md:w-auto mx-1"
                           >
                             Already returned
                           </Button>
