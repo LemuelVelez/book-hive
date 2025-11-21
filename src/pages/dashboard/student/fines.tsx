@@ -64,10 +64,103 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+import {
+    fetchMyDamageReports,
+    type DamageReportDTO,
+} from "@/lib/damageReports";
+
 type StatusFilter = "all" | FineStatus;
 
 // How the student actually paid when uploading a receipt
 type PaymentMethod = "gcash" | "maya" | "bank_transfer" | "other";
+
+/* -------------------- Damage-report helpers (book titles) -------------------- */
+
+type DamageReportRow = DamageReportDTO & {
+    photoUrl?: string | null;
+};
+
+/**
+ * For students, use their own damage reports API to enrich fines with
+ * book titles and damage info, instead of calling the librarian-only
+ * /api/damage-reports endpoint (which was causing HTTP 403).
+ */
+async function fetchDamageReportsForFines(): Promise<DamageReportRow[]> {
+    const reports = await fetchMyDamageReports();
+    if (!Array.isArray(reports)) return [];
+    return reports as DamageReportRow[];
+}
+
+/**
+ * Enrich fines with book & damage info from linked damage reports so that
+ * students see the actual book titles instead of only a generic "General fine".
+ */
+function enrichFinesWithDamageReports(
+    fines: FineDTO[],
+    reports: DamageReportRow[]
+): FineDTO[] {
+    if (!fines?.length || !reports?.length) return fines;
+
+    const damageMap = new Map<string, DamageReportRow>();
+    for (const r of reports) {
+        damageMap.set(String(r.id), r);
+    }
+
+    return fines.map((fine) => {
+        const anyFine = fine as any;
+        const drKey =
+            anyFine.damageReportId ??
+            anyFine.damageId ??
+            anyFine.damageReportID ??
+            null;
+
+        if (drKey == null) return fine;
+
+        const dr = damageMap.get(String(drKey));
+        if (!dr) return fine;
+
+        const currentTitle =
+            typeof fine.bookTitle === "string" ? fine.bookTitle.trim() : "";
+
+        // If the fine only has a generic book title (or none), prefer the actual
+        // book title from the damage report.
+        const merged: FineDTO = {
+            ...fine,
+            bookTitle:
+                currentTitle &&
+                    currentTitle.length > 0 &&
+                    currentTitle.toLowerCase() !== "general fine"
+                    ? fine.bookTitle
+                    : (dr.bookTitle ?? fine.bookTitle),
+            bookId: (fine.bookId ?? dr.bookId) as any,
+        };
+
+        const mergedAny = merged as any;
+
+        if (mergedAny.damageReportId == null) {
+            mergedAny.damageReportId = dr.id;
+        }
+
+        const existingDamageDesc =
+            mergedAny.damageDescription ||
+            mergedAny.damageDetails ||
+            mergedAny.damageType;
+
+        if (!existingDamageDesc) {
+            const notes = dr.notes && String(dr.notes).trim();
+            const damageType =
+                (dr as any).damageType && String((dr as any).damageType).trim();
+
+            if (notes) {
+                mergedAny.damageDescription = notes;
+            } else if (damageType) {
+                mergedAny.damageDescription = damageType;
+            }
+        }
+
+        return merged;
+    });
+}
 
 /**
  * Turn the UI payment-method choice into a compact `kind` string
@@ -165,6 +258,45 @@ function isDamageFine(fine: FineDTO): boolean {
     );
 }
 
+/**
+ * Decide what to show as the primary label in the
+ * "Book / Damage info" column for a fine.
+ *
+ * - Prefer the actual book title if it's not just "General fine"
+ * - Otherwise use the more descriptive reason, if available
+ * - Fall back to a generic "General fine" message with borrow ID
+ */
+function getFinePrimaryLabel(fine: FineDTO): string {
+    const rawTitle = fine.bookTitle;
+    const title = typeof rawTitle === "string" ? rawTitle.trim() : "";
+
+    const rawReason = (fine as any).reason;
+    const reason = typeof rawReason === "string" ? rawReason.trim() : "";
+
+    // If the title is a real book name, use it
+    if (title && title.toLowerCase() !== "general fine") {
+        return title;
+    }
+
+    // If we only have a generic "General fine" but reason is more specific,
+    // show the reason instead (often includes the actual book or context).
+    if (reason) {
+        return reason;
+    }
+
+    // Fall back to the title even if it's "General fine"
+    if (title) {
+        return title;
+    }
+
+    // Last-resort generic text including borrow ID if present
+    if ((fine as any).borrowRecordId != null) {
+        return `General fine for borrow #${(fine as any).borrowRecordId}`;
+    }
+
+    return "General fine";
+}
+
 // Reusable scrollbar styling for dark, thin *vertical* scrollbars (dialog content)
 const dialogScrollbarClasses =
     "overflow-y-auto " +
@@ -229,8 +361,28 @@ export default function StudentFinesPage() {
         setError(null);
         setLoading(true);
         try {
-            const data = await fetchMyFines();
-            setFines(data);
+            const [fineData, damageReports] = await Promise.all([
+                fetchMyFines(),
+                (async () => {
+                    try {
+                        return await fetchDamageReportsForFines();
+                    } catch (err: any) {
+                        console.error(
+                            "Failed to load damage reports for student fines:",
+                            err
+                        );
+                        toast.error("Some damage fine details may be incomplete", {
+                            description:
+                                err?.message ||
+                                "Book titles for certain damage-related fines may not be shown.",
+                        });
+                        return [] as DamageReportRow[];
+                    }
+                })(),
+            ]);
+
+            const enriched = enrichFinesWithDamageReports(fineData, damageReports);
+            setFines(enriched);
         } catch (err: any) {
             const msg = err?.message || "Failed to load fines.";
             setError(msg);
@@ -281,9 +433,10 @@ export default function StudentFinesPage() {
         if (q) {
             rows = rows.filter((f) => {
                 const anyFine = f as any;
-                const haystack = `${f.id} ${f.reason ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.damageReportId ?? anyFine.damageReportId ?? ""
-                    } ${anyFine.damageDescription ?? ""} ${anyFine.damageType ?? ""} ${anyFine.damageDetails ?? ""
-                    }`.toLowerCase();
+                const haystack = `${f.id} ${f.reason ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""
+                    } ${f.damageReportId ?? anyFine.damageReportId ?? ""
+                    } ${anyFine.damageDescription ?? ""} ${anyFine.damageType ?? ""
+                    } ${anyFine.damageDetails ?? ""}`.toLowerCase();
                 return haystack.includes(q);
             });
         }
@@ -614,7 +767,9 @@ export default function StudentFinesPage() {
                             <Skeleton className="h-9 w-full" />
                         </div>
                     ) : error ? (
-                        <div className="py-6 text-center text-sm text-red-300">{error}</div>
+                        <div className="py-6 text-center text-sm text-red-300">
+                            {error}
+                        </div>
                     ) : filtered.length === 0 ? (
                         <div className="py-10 text-center text-sm text-white/70">
                             You have no fines that match your filters.
@@ -675,6 +830,12 @@ export default function StudentFinesPage() {
                                         anyFine.damageType;
                                     const damage = isDamageFine(fine);
 
+                                    const primaryLabel = getFinePrimaryLabel(fine);
+                                    const reasonText =
+                                        typeof fine.reason === "string"
+                                            ? fine.reason.trim()
+                                            : "";
+
                                     return (
                                         <TableRow
                                             key={fine.id}
@@ -686,21 +847,15 @@ export default function StudentFinesPage() {
                                             <TableCell className="text-sm">
                                                 <div className="flex flex-col gap-0.5">
                                                     <span className="font-medium">
-                                                        {fine.bookTitle ? (
-                                                            fine.bookTitle
-                                                        ) : (
-                                                            <span className="opacity-70">
-                                                                General fine
-                                                                {fine.borrowRecordId &&
-                                                                    ` for borrow #${fine.borrowRecordId}`}
+                                                        {primaryLabel}
+                                                    </span>
+
+                                                    {reasonText &&
+                                                        reasonText !== primaryLabel && (
+                                                            <span className="text-xs text-white/70">
+                                                                {reasonText}
                                                             </span>
                                                         )}
-                                                    </span>
-                                                    {fine.reason && (
-                                                        <span className="text-xs text-white/70">
-                                                            {fine.reason}
-                                                        </span>
-                                                    )}
 
                                                     {damage && (
                                                         <span className="text-[11px] text-rose-200/90 flex items-center gap-1">
@@ -735,7 +890,8 @@ export default function StudentFinesPage() {
                                                         {fine.borrowReturnDate && (
                                                             <>
                                                                 {" "}
-                                                                · Returned {fmtDate(fine.borrowReturnDate)}
+                                                                · Returned{" "}
+                                                                {fmtDate(fine.borrowReturnDate)}
                                                             </>
                                                         )}
                                                     </span>
@@ -759,7 +915,9 @@ export default function StudentFinesPage() {
                                                             if (open) {
                                                                 // Reset dialog-specific state when opened
                                                                 setSelectedPaymentMethod("gcash");
-                                                                setSelectedPaymentMethodFineId(fine.id);
+                                                                setSelectedPaymentMethodFineId(
+                                                                    fine.id
+                                                                );
                                                                 setSelectedProofFineId(fine.id);
                                                                 setSelectedProofFile(null);
                                                                 setSelectedProofPreviewUrl((prev) => {
@@ -771,13 +929,23 @@ export default function StudentFinesPage() {
                                                                 if (selectedProofFineId === fine.id) {
                                                                     setSelectedProofFineId(null);
                                                                     setSelectedProofFile(null);
-                                                                    setSelectedProofPreviewUrl((prev) => {
-                                                                        if (prev) URL.revokeObjectURL(prev);
-                                                                        return null;
-                                                                    });
+                                                                    setSelectedProofPreviewUrl(
+                                                                        (prev) => {
+                                                                            if (prev)
+                                                                                URL.revokeObjectURL(
+                                                                                    prev
+                                                                                );
+                                                                            return null;
+                                                                        }
+                                                                    );
                                                                 }
-                                                                if (selectedPaymentMethodFineId === fine.id) {
-                                                                    setSelectedPaymentMethodFineId(null);
+                                                                if (
+                                                                    selectedPaymentMethodFineId ===
+                                                                    fine.id
+                                                                ) {
+                                                                    setSelectedPaymentMethodFineId(
+                                                                        null
+                                                                    );
                                                                 }
                                                             }
                                                         }}
@@ -892,7 +1060,9 @@ export default function StudentFinesPage() {
                                                                                         E-wallet number:
                                                                                     </span>{" "}
                                                                                     <span className="font-mono text-sm">
-                                                                                        {paymentConfig.eWalletPhone}
+                                                                                        {
+                                                                                            paymentConfig.eWalletPhone
+                                                                                        }
                                                                                     </span>
                                                                                 </p>
                                                                             )}
@@ -915,7 +1085,9 @@ export default function StudentFinesPage() {
                                                                                             asChild
                                                                                         >
                                                                                             <a
-                                                                                                href={paymentConfig.qrCodeUrl}
+                                                                                                href={
+                                                                                                    paymentConfig.qrCodeUrl
+                                                                                                }
                                                                                                 target="_blank"
                                                                                                 rel="noreferrer"
                                                                                                 download
@@ -952,13 +1124,16 @@ export default function StudentFinesPage() {
                                                                     </label>
                                                                     <Select
                                                                         value={
-                                                                            selectedPaymentMethodFineId === fine.id
+                                                                            selectedPaymentMethodFineId ===
+                                                                                fine.id
                                                                                 ? selectedPaymentMethod
                                                                                 : "gcash"
                                                                         }
                                                                         onValueChange={(v) => {
                                                                             const next = v as PaymentMethod;
-                                                                            setSelectedPaymentMethodFineId(fine.id);
+                                                                            setSelectedPaymentMethodFineId(
+                                                                                fine.id
+                                                                            );
                                                                             setSelectedPaymentMethod(next);
                                                                         }}
                                                                     >
@@ -994,22 +1169,33 @@ export default function StudentFinesPage() {
                                                                         accept="image/*"
                                                                         className="bg-slate-900/70 border-white/20 text-xs text-white file:text-xs file:text-white file:bg-slate-700 file:border-0 file:px-3 file:py-1 file:mr-3 file:rounded"
                                                                         onChange={(e) => {
-                                                                            const file = e.target.files?.[0] ?? null;
+                                                                            const file =
+                                                                                e.target.files?.[0] ?? null;
                                                                             setSelectedProofFineId(fine.id);
                                                                             setSelectedProofFile(file);
 
                                                                             if (file) {
-                                                                                setSelectedProofPreviewUrl((prev) => {
-                                                                                    if (prev)
-                                                                                        URL.revokeObjectURL(prev);
-                                                                                    return URL.createObjectURL(file);
-                                                                                });
+                                                                                setSelectedProofPreviewUrl(
+                                                                                    (prev) => {
+                                                                                        if (prev)
+                                                                                            URL.revokeObjectURL(
+                                                                                                prev
+                                                                                            );
+                                                                                        return URL.createObjectURL(
+                                                                                            file
+                                                                                        );
+                                                                                    }
+                                                                                );
                                                                             } else {
-                                                                                setSelectedProofPreviewUrl((prev) => {
-                                                                                    if (prev)
-                                                                                        URL.revokeObjectURL(prev);
-                                                                                    return null;
-                                                                                });
+                                                                                setSelectedProofPreviewUrl(
+                                                                                    (prev) => {
+                                                                                        if (prev)
+                                                                                            URL.revokeObjectURL(
+                                                                                                prev
+                                                                                            );
+                                                                                        return null;
+                                                                                    }
+                                                                                );
                                                                             }
                                                                         }}
                                                                     />
@@ -1019,7 +1205,9 @@ export default function StudentFinesPage() {
                                                                                 {selectedProofPreviewUrl && (
                                                                                     <div className="w-24 h-24 rounded border border-white/15 bg-black/30 flex items-center justify-center overflow-hidden">
                                                                                         <img
-                                                                                            src={selectedProofPreviewUrl}
+                                                                                            src={
+                                                                                                selectedProofPreviewUrl
+                                                                                            }
                                                                                             alt="Selected payment receipt preview"
                                                                                             className="max-h-full max-w-full object-contain"
                                                                                         />
@@ -1117,13 +1305,23 @@ export default function StudentFinesPage() {
                                                                 if (selectedProofFineId === fine.id) {
                                                                     setSelectedProofFineId(null);
                                                                     setSelectedProofFile(null);
-                                                                    setSelectedProofPreviewUrl((prev) => {
-                                                                        if (prev) URL.revokeObjectURL(prev);
-                                                                        return null;
-                                                                    });
+                                                                    setSelectedProofPreviewUrl(
+                                                                        (prev) => {
+                                                                            if (prev)
+                                                                                URL.revokeObjectURL(
+                                                                                    prev
+                                                                                );
+                                                                            return null;
+                                                                        }
+                                                                    );
                                                                 }
-                                                                if (selectedPaymentMethodFineId === fine.id) {
-                                                                    setSelectedPaymentMethodFineId(null);
+                                                                if (
+                                                                    selectedPaymentMethodFineId ===
+                                                                    fine.id
+                                                                ) {
+                                                                    setSelectedPaymentMethodFineId(
+                                                                        null
+                                                                    );
                                                                 }
                                                             }
                                                         }}
@@ -1271,13 +1469,16 @@ export default function StudentFinesPage() {
                                                                     </label>
                                                                     <Select
                                                                         value={
-                                                                            selectedPaymentMethodFineId === fine.id
+                                                                            selectedPaymentMethodFineId ===
+                                                                                fine.id
                                                                                 ? selectedPaymentMethod
                                                                                 : "gcash"
                                                                         }
                                                                         onValueChange={(v) => {
                                                                             const next = v as PaymentMethod;
-                                                                            setSelectedPaymentMethodFineId(fine.id);
+                                                                            setSelectedPaymentMethodFineId(
+                                                                                fine.id
+                                                                            );
                                                                             setSelectedPaymentMethod(next);
                                                                         }}
                                                                     >
@@ -1316,22 +1517,33 @@ export default function StudentFinesPage() {
                                                                         accept="image/*"
                                                                         className="bg-slate-900/70 border-white/20 text-xs text-white file:text-xs file:text-white file:bg-slate-700 file:border-0 file:px-3 file:py-1 file:mr-3 file:rounded"
                                                                         onChange={(e) => {
-                                                                            const file = e.target.files?.[0] ?? null;
+                                                                            const file =
+                                                                                e.target.files?.[0] ?? null;
                                                                             setSelectedProofFineId(fine.id);
                                                                             setSelectedProofFile(file);
 
                                                                             if (file) {
-                                                                                setSelectedProofPreviewUrl((prev) => {
-                                                                                    if (prev)
-                                                                                        URL.revokeObjectURL(prev);
-                                                                                    return URL.createObjectURL(file);
-                                                                                });
+                                                                                setSelectedProofPreviewUrl(
+                                                                                    (prev) => {
+                                                                                        if (prev)
+                                                                                            URL.revokeObjectURL(
+                                                                                                prev
+                                                                                            );
+                                                                                        return URL.createObjectURL(
+                                                                                            file
+                                                                                        );
+                                                                                    }
+                                                                                );
                                                                             } else {
-                                                                                setSelectedProofPreviewUrl((prev) => {
-                                                                                    if (prev)
-                                                                                        URL.revokeObjectURL(prev);
-                                                                                    return null;
-                                                                                });
+                                                                                setSelectedProofPreviewUrl(
+                                                                                    (prev) => {
+                                                                                        if (prev)
+                                                                                            URL.revokeObjectURL(
+                                                                                                prev
+                                                                                            );
+                                                                                        return null;
+                                                                                    }
+                                                                                );
                                                                             }
                                                                         }}
                                                                     />
@@ -1341,7 +1553,9 @@ export default function StudentFinesPage() {
                                                                                 {selectedProofPreviewUrl && (
                                                                                     <div className="w-24 h-24 rounded border border-white/15 bg-black/30 flex items-center justify-center overflow-hidden">
                                                                                         <img
-                                                                                            src={selectedProofPreviewUrl}
+                                                                                            src={
+                                                                                                selectedProofPreviewUrl
+                                                                                            }
                                                                                             alt="New receipt preview"
                                                                                             className="max-h-full max-w-full object-contain"
                                                                                         />
