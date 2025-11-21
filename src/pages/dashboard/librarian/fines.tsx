@@ -777,7 +777,7 @@ export default function LibrarianFinesPage() {
                                             </TableCell>
                                             <TableCell
                                                 className={
-                                                    "text-right align-top w-[130px] max-w-[140px] space-y-1 " +
+                                                    "text-right w-[130px] max-w-[140px] " +
                                                     cellScrollbarClasses
                                                 }
                                             >
