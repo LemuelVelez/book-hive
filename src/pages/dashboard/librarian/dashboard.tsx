@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  ReceiptText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API_BASE } from "@/api/auth/route";
@@ -84,6 +85,19 @@ type UsersOverview = {
   byRole: Record<Role, number>;
 };
 
+type FineStatus = "active" | "pending_verification" | "paid" | "cancelled";
+
+type FinesOverview = {
+  total: number;
+  active: number;
+  pendingVerification: number;
+  paid: number;
+  cancelled: number;
+  totalAmount: number;
+  activeAmount: number;
+  pendingAmount: number;
+};
+
 /* -------------------------- Default states ------------------------- */
 
 const EMPTY_BOOKS_OVERVIEW: BooksOverview = {
@@ -124,7 +138,18 @@ const EMPTY_USERS_OVERVIEW: UsersOverview = {
   },
 };
 
-/* ------------------------ Local summarizers ------------------------ */
+const EMPTY_FINES_OVERVIEW: FinesOverview = {
+  total: 0,
+  active: 0,
+  pendingVerification: 0,
+  paid: 0,
+  cancelled: 0,
+  totalAmount: 0,
+  activeAmount: 0,
+  pendingAmount: 0,
+};
+
+/* ------------------------ Local helpers ------------------------ */
 
 function summarizeBooks(books: BookDTO[]): BooksOverview {
   const total = books.length;
@@ -189,6 +214,19 @@ function summarizeFeedbacks(feedbacks: FeedbackDTO[]): FeedbackOverview {
     avgRating,
     buckets,
   };
+}
+
+function peso(n: number): string {
+  if (typeof n !== "number" || Number.isNaN(n)) n = 0;
+  try {
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return `₱${n.toFixed(2)}`;
+  }
 }
 
 /* --------------------- API helpers (overview) ---------------------- */
@@ -272,6 +310,62 @@ async function fetchUsersOverview(): Promise<UsersOverview> {
   };
 }
 
+/**
+ * Fines overview for librarian dashboard.
+ * Fetches all fines from /api/fines and aggregates by status + amounts.
+ */
+async function fetchFinesOverview(): Promise<FinesOverview> {
+  const endpoint = `${API_BASE}/api/fines`;
+  const res = await fetch(endpoint, {
+    method: "GET",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!res.ok) {
+    const text = (await res.text().catch(() => "")) || `HTTP ${res.status}`;
+    throw new Error(`Failed to fetch fines from ${endpoint}. ${text}`);
+  }
+
+  const data: any = await res.json().catch(() => null);
+  const list: any[] = Array.isArray(data?.fines)
+    ? data.fines
+    : Array.isArray(data)
+      ? data
+      : [];
+
+  const summary: FinesOverview = {
+    total: list.length,
+    active: 0,
+    pendingVerification: 0,
+    paid: 0,
+    cancelled: 0,
+    totalAmount: 0,
+    activeAmount: 0,
+    pendingAmount: 0,
+  };
+
+  for (const item of list) {
+    const status = String(item?.status ?? "").toLowerCase() as FineStatus;
+    const amount = Number(item?.amount ?? 0);
+    const amt = !Number.isNaN(amount) && amount > 0 ? amount : 0;
+
+    if (status === "active") summary.active += 1;
+    else if (status === "pending_verification")
+      summary.pendingVerification += 1;
+    else if (status === "paid") summary.paid += 1;
+    else if (status === "cancelled") summary.cancelled += 1;
+
+    if (amt > 0) {
+      summary.totalAmount += amt;
+      if (status === "active") summary.activeAmount += amt;
+      if (status === "pending_verification") summary.pendingAmount += amt;
+    }
+  }
+
+  return summary;
+}
+
 /* --------------------------- Page component ------------------------ */
 
 export default function LibrarianDashboard() {
@@ -289,18 +383,21 @@ export default function LibrarianDashboard() {
     React.useState<FeedbackOverview>(EMPTY_FEEDBACK_OVERVIEW);
   const [usersOverview, setUsersOverview] =
     React.useState<UsersOverview>(EMPTY_USERS_OVERVIEW);
+  const [finesOverview, setFinesOverview] =
+    React.useState<FinesOverview>(EMPTY_FINES_OVERVIEW);
 
   const loadOverview = React.useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
-      const [booksList, borrowList, feedbackList, damage, users] =
+      const [booksList, borrowList, feedbackList, damage, users, fines] =
         await Promise.all([
           fetchBooks(),
           fetchBorrowRecords(),
           fetchFeedbacks(),
           fetchDamageOverview(),
           fetchUsersOverview(),
+          fetchFinesOverview(),
         ]);
 
       setBooksOverview(summarizeBooks(booksList));
@@ -308,6 +405,7 @@ export default function LibrarianDashboard() {
       setFeedbackOverview(summarizeFeedbacks(feedbackList));
       setDamageOverview(damage);
       setUsersOverview(users);
+      setFinesOverview(fines);
     } catch (err: any) {
       const msg =
         err?.message || "Failed to load overview data. Please try again.";
@@ -371,7 +469,7 @@ export default function LibrarianDashboard() {
           </h2>
           <p className="text-xs text-white/70">
             Snapshot of the library catalog, borrowing activity, damage
-            reports, feedbacks, and user roles.
+            reports, fines, feedbacks, and user roles.
           </p>
         </div>
 
@@ -403,8 +501,8 @@ export default function LibrarianDashboard() {
       {loading ? (
         <>
           {/* Skeleton cards */}
-          <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, i) => (
+          <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
               <Card
                 key={i}
                 className="bg-slate-800/60 border-white/10"
@@ -431,8 +529,8 @@ export default function LibrarianDashboard() {
         </>
       ) : (
         <>
-          {/* Top stats grid: Books, Borrows, Damage, Feedbacks, Users */}
-          <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+          {/* Top stats grid: Books, Borrows, Fines, Damage, Feedbacks, Users */}
+          <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-6">
             {/* Books */}
             <Card className="bg-slate-800/60 border-white/10">
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
@@ -509,7 +607,7 @@ export default function LibrarianDashboard() {
                   <p className="text-[11px] text-white/60">
                     Recorded fines:{" "}
                     <span className="font-medium text-amber-200">
-                      ₱{borrowOverview.totalFine.toFixed(2)}
+                      {peso(borrowOverview.totalFine)}
                     </span>
                   </p>
                 )}
@@ -518,6 +616,71 @@ export default function LibrarianDashboard() {
                   className="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-200 hover:text-sky-100"
                 >
                   Open borrow records
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            {/* Fines */}
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">
+                    Fines
+                  </CardTitle>
+                  <p className="text-[11px] text-white/60">
+                    Active &amp; pending payments
+                  </p>
+                </div>
+                <div className="rounded-full border border-amber-400/40 bg-amber-500/15 p-2">
+                  <ReceiptText className="h-4 w-4 text-amber-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-semibold">
+                  {finesOverview.total}
+                  <span className="ml-1 text-xs text-white/60">
+                    fines
+                  </span>
+                </div>
+                <p className="text-[11px] text-white/70">
+                  <span className="inline-flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-amber-300" />
+                    {finesOverview.active} active
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <Clock3 className="h-3 w-3 text-yellow-300" />
+                    {finesOverview.pendingVerification} pending verification
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
+                    {finesOverview.paid} paid
+                  </span>
+                </p>
+                {finesOverview.totalAmount > 0 && (
+                  <p className="text-[11px] text-white/60">
+                    Active:{" "}
+                    <span className="font-medium text-amber-200">
+                      {peso(finesOverview.activeAmount)}
+                    </span>{" "}
+                    · Pending:{" "}
+                    <span className="font-medium text-yellow-200">
+                      {peso(finesOverview.pendingAmount)}
+                    </span>
+                    <br />
+                    Total recorded:{" "}
+                    <span className="font-medium text-emerald-200">
+                      {peso(finesOverview.totalAmount)}
+                    </span>
+                  </p>
+                )}
+                <Link
+                  to="/dashboard/librarian/fines"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-amber-200 hover:text-amber-100"
+                >
+                  Open fines &amp; payments
                   <ArrowRight className="h-3 w-3" />
                 </Link>
               </CardContent>
@@ -792,6 +955,21 @@ export default function LibrarianDashboard() {
                     </span>
                   </div>
                   <ArrowRight className="h-4 w-4 text-sky-200" />
+                </Link>
+
+                <Link
+                  to="/dashboard/librarian/fines"
+                  className="flex items-center justify-between rounded-md border border-white/10 bg-black/10 px-3 py-2 hover:border-amber-400/70 hover:bg-amber-500/10"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">
+                      Review fines &amp; payments
+                    </span>
+                    <span className="text-[11px] text-white/60">
+                      Track active fines and verify student payments.
+                    </span>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-amber-200" />
                 </Link>
 
                 <Link
