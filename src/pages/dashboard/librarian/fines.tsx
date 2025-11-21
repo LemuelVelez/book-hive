@@ -126,6 +126,38 @@ function statusWeight(status: FineStatus): number {
     }
 }
 
+/**
+ * Turn the raw `kind` string stored with each payment proof
+ * into something readable for librarians.
+ */
+function formatProofKind(kind: string | null | undefined): string {
+    if (!kind) return "Not specified";
+    const k = kind.toLowerCase();
+
+    if (k === "student_payment") {
+        return "Student payment (method not specified)";
+    }
+
+    if (k === "student_payment:gcash" || k === "gcash") {
+        return "Online – GCash";
+    }
+
+    if (k === "student_payment:maya" || k === "maya") {
+        return "Online – Maya";
+    }
+
+    if (k === "student_payment:bank_transfer" || k === "bank_transfer") {
+        return "Online – Bank transfer / deposit";
+    }
+
+    if (k === "student_payment:other" || k === "other") {
+        return "Online – Other method";
+    }
+
+    // Fallback – show the raw value if it's something custom
+    return kind;
+}
+
 export default function LibrarianFinesPage() {
     const [fines, setFines] = React.useState<FineDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -250,9 +282,8 @@ export default function LibrarianFinesPage() {
         const q = search.trim().toLowerCase();
         if (q) {
             rows = rows.filter((f) => {
-                const haystack = `${f.id} ${f.studentName ?? ""} ${f.studentEmail ?? ""
-                    } ${f.studentId ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.reason ?? ""
-                    }`.toLowerCase();
+                const haystack = `${f.id} ${f.studentName ?? ""} ${f.studentEmail ?? ""} ${f.studentId ?? ""
+                    } ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.reason ?? ""}`.toLowerCase();
                 return haystack.includes(q);
             });
         }
@@ -491,7 +522,8 @@ export default function LibrarianFinesPage() {
                             />
                             {qrFile && (
                                 <p className="text-[11px] text-white/60">
-                                    Selected new QR: <span className="font-semibold">{qrFile.name}</span>
+                                    Selected new QR:{" "}
+                                    <span className="font-semibold">{qrFile.name}</span>
                                 </p>
                             )}
                             {paymentConfig?.qrCodeUrl && (
@@ -525,12 +557,15 @@ export default function LibrarianFinesPage() {
                                     </div>
                                 </div>
                             )}
-                            {!paymentConfig?.qrCodeUrl && !qrFile && !paymentSettingsLoading && (
-                                <p className="text-[11px] text-amber-200/90">
-                                    No QR code uploaded yet. Students will still see the e-wallet
-                                    number, but uploading a QR makes it easier for them to pay.
-                                </p>
-                            )}
+                            {!paymentConfig?.qrCodeUrl &&
+                                !qrFile &&
+                                !paymentSettingsLoading && (
+                                    <p className="text-[11px] text-amber-200/90">
+                                        No QR code uploaded yet. Students will still see the e-wallet
+                                        number, but uploading a QR makes it easier for them to pay
+                                        online.
+                                    </p>
+                                )}
                         </div>
                     </div>
                 </CardContent>
@@ -545,8 +580,8 @@ export default function LibrarianFinesPage() {
                             Fines &amp; payment verification
                         </h2>
                         <p className="text-xs text-white/70">
-                            Review all fines across users, confirm payments, and keep
-                            circulation balances accurate.
+                            Review all fines across users, confirm payments (online or over the
+                            counter), and keep circulation balances accurate.
                         </p>
                         <p className="mt-1 text-[11px] text-amber-200/90">
                             Use this page to verify{" "}
@@ -556,7 +591,9 @@ export default function LibrarianFinesPage() {
                             <span className="font-semibold text-emerald-200">Paid</span>, or
                             you can revert it back to{" "}
                             <span className="font-semibold">Active</span> or{" "}
-                            <span className="font-semibold">Cancelled</span> if needed.
+                            <span className="font-semibold">Cancelled</span> if needed. You can
+                            also mark fines as paid directly for{" "}
+                            <span className="font-semibold">over-the-counter</span> payments.
                         </p>
                     </div>
                 </div>
@@ -710,7 +747,9 @@ export default function LibrarianFinesPage() {
                                             <TableCell className="text-sm">
                                                 <div className="flex flex-col gap-0.5">
                                                     <span className="font-medium">
-                                                        {fine.studentName || fine.studentEmail || "—"}
+                                                        {fine.studentName ||
+                                                            fine.studentEmail ||
+                                                            "—"}
                                                     </span>
                                                     {(fine.studentId || fine.studentEmail) && (
                                                         <span className="text-xs text-white/70">
@@ -753,7 +792,9 @@ export default function LibrarianFinesPage() {
                                                             {fine.borrowReturnDate && (
                                                                 <>
                                                                     {" "}
-                                                                    · Returned {fmtDate(fine.borrowReturnDate)}
+                                                                    · Returned {fmtDate(
+                                                                        fine.borrowReturnDate
+                                                                    )}
                                                                 </>
                                                             )}
                                                         </span>
@@ -781,79 +822,18 @@ export default function LibrarianFinesPage() {
                                                     cellScrollbarClasses
                                                 }
                                             >
-                                                {/* Actions for pending_verification */}
-                                                {fine.status === "pending_verification" && (
-                                                    <>
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    className="mx-1 bg-emerald-600 hover:bg-emerald-700 text-white w-full md:w-auto"
-                                                                    disabled={busy}
-                                                                >
-                                                                    {busy ? (
-                                                                        <span className="inline-flex items-center gap-2">
-                                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                                            Saving…
-                                                                        </span>
-                                                                    ) : (
-                                                                        "Confirm payment"
-                                                                    )}
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>
-                                                                        Confirm payment for this fine?
-                                                                    </AlertDialogTitle>
-                                                                    <AlertDialogDescription className="text-white/70">
-                                                                        This will mark the fine for{" "}
-                                                                        <span className="font-semibold">
-                                                                            {fine.studentName ||
-                                                                                fine.studentEmail ||
-                                                                                `User #${fine.userId}`}
-                                                                        </span>{" "}
-                                                                        as{" "}
-                                                                        <span className="font-semibold text-emerald-200">
-                                                                            Paid
-                                                                        </span>
-                                                                        .
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <div className="mt-3 text-sm text-white/80 space-y-1">
-                                                                    <p>
-                                                                        <span className="text-white/60">Amount:</span>{" "}
-                                                                        <span className="font-semibold text-red-300">
-                                                                            {peso(amount)}
-                                                                        </span>
-                                                                    </p>
-                                                                    {fine.bookTitle && (
-                                                                        <p>
-                                                                            <span className="text-white/60">
-                                                                                Book:
-                                                                            </span>{" "}
-                                                                            {fine.bookTitle}
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel
-                                                                        className="border-white/20 text-white hover:bg-black/20"
-                                                                        disabled={busy}
-                                                                    >
-                                                                        Cancel
-                                                                    </AlertDialogCancel>
-                                                                    <AlertDialogAction
+                                                {/* Horizontal actions with spacing and scroll */}
+                                                <div className="inline-flex items-center justify-end gap-2 min-w-max">
+                                                    {/* Actions for pending_verification */}
+                                                    {fine.status === "pending_verification" && (
+                                                        <>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
                                                                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
                                                                         disabled={busy}
-                                                                        onClick={() =>
-                                                                            void handleUpdateStatus(fine, "paid", {
-                                                                                successTitle: "Payment verified",
-                                                                                successDescription:
-                                                                                    "The fine has been marked as paid.",
-                                                                            })
-                                                                        }
                                                                     >
                                                                         {busy ? (
                                                                             <span className="inline-flex items-center gap-2">
@@ -861,63 +841,91 @@ export default function LibrarianFinesPage() {
                                                                                 Saving…
                                                                             </span>
                                                                         ) : (
-                                                                            "Confirm"
+                                                                            "Confirm payment"
                                                                         )}
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>
+                                                                            Confirm payment for this fine?
+                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogDescription className="text-white/70">
+                                                                            This will mark the fine for{" "}
+                                                                            <span className="font-semibold">
+                                                                                {fine.studentName ||
+                                                                                    fine.studentEmail ||
+                                                                                    `User #${fine.userId}`}
+                                                                            </span>{" "}
+                                                                            as{" "}
+                                                                            <span className="font-semibold text-emerald-200">
+                                                                                Paid
+                                                                            </span>
+                                                                            .
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <div className="mt-3 text-sm text-white/80 space-y-1">
+                                                                        <p>
+                                                                            <span className="text-white/60">
+                                                                                Amount:
+                                                                            </span>{" "}
+                                                                            <span className="font-semibold text-red-300">
+                                                                                {peso(amount)}
+                                                                            </span>
+                                                                        </p>
+                                                                        {fine.bookTitle && (
+                                                                            <p>
+                                                                                <span className="text-white/60">
+                                                                                    Book:
+                                                                                </span>{" "}
+                                                                                {fine.bookTitle}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel
+                                                                            className="border-white/20 text-white hover:bg-black/20"
+                                                                            disabled={busy}
+                                                                        >
+                                                                            Cancel
+                                                                        </AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                            disabled={busy}
+                                                                            onClick={() =>
+                                                                                void handleUpdateStatus(
+                                                                                    fine,
+                                                                                    "paid",
+                                                                                    {
+                                                                                        successTitle:
+                                                                                            "Payment verified",
+                                                                                        successDescription:
+                                                                                            "The fine has been marked as paid.",
+                                                                                    }
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            {busy ? (
+                                                                                <span className="inline-flex items-center gap-2">
+                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                    Saving…
+                                                                                </span>
+                                                                            ) : (
+                                                                                "Confirm"
+                                                                            )}
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
 
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
-                                                                    disabled={busy}
-                                                                >
-                                                                    {busy ? (
-                                                                        <span className="inline-flex items-center gap-2">
-                                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                                            Saving…
-                                                                        </span>
-                                                                    ) : (
-                                                                        "Reject payment"
-                                                                    )}
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>
-                                                                        Reject this payment?
-                                                                    </AlertDialogTitle>
-                                                                    <AlertDialogDescription className="text-white/70">
-                                                                        This will move the fine back to{" "}
-                                                                        <span className="font-semibold">
-                                                                            Active (unpaid)
-                                                                        </span>
-                                                                        . Use this when the reported payment
-                                                                        cannot be verified.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel
-                                                                        className="border-white/20 text-white hover:bg-black/20"
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="border-amber-400/50 text-amber-200/80"
                                                                         disabled={busy}
-                                                                    >
-                                                                        Cancel
-                                                                    </AlertDialogCancel>
-                                                                    <AlertDialogAction
-                                                                        className="bg-amber-600 hover:bg-amber-700 text-white"
-                                                                        disabled={busy}
-                                                                        onClick={() =>
-                                                                            void handleUpdateStatus(fine, "active", {
-                                                                                successTitle: "Payment rejected",
-                                                                                successDescription:
-                                                                                    "The fine has been moved back to Active.",
-                                                                            })
-                                                                        }
                                                                     >
                                                                         {busy ? (
                                                                             <span className="inline-flex items-center gap-2">
@@ -925,164 +933,161 @@ export default function LibrarianFinesPage() {
                                                                                 Saving…
                                                                             </span>
                                                                         ) : (
-                                                                            "Move back to Active"
+                                                                            "Reject payment"
                                                                         )}
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>
+                                                                            Reject this payment?
+                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogDescription className="text-white/70">
+                                                                            This will move the fine back to{" "}
+                                                                            <span className="font-semibold">
+                                                                                Active (unpaid)
+                                                                            </span>
+                                                                            . Use this when the reported payment
+                                                                            cannot be verified.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel
+                                                                            className="border-white/20 text-white hover:bg-black/20"
+                                                                            disabled={busy}
+                                                                        >
+                                                                            Cancel
+                                                                        </AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            className="bg-amber-600 hover:bg-amber-700 text-white"
+                                                                            disabled={busy}
+                                                                            onClick={() =>
+                                                                                void handleUpdateStatus(
+                                                                                    fine,
+                                                                                    "active",
+                                                                                    {
+                                                                                        successTitle:
+                                                                                            "Payment rejected",
+                                                                                        successDescription:
+                                                                                            "The fine has been moved back to Active.",
+                                                                                    }
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            {busy ? (
+                                                                                <span className="inline-flex items-center gap-2">
+                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                    Saving…
+                                                                                </span>
+                                                                            ) : (
+                                                                                "Move back to Active"
+                                                                            )}
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
 
-                                                        {/* View proofs */}
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="w-full md:w-auto border-emerald-400/60 text-emerald-200/80"
-                                                                    onClick={() => void handleLoadProofs(fine.id)}
-                                                                >
-                                                                    {proofsLoadingForId === fine.id ? (
-                                                                        <span className="inline-flex items-center gap-2">
-                                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                                            Loading proofs…
-                                                                        </span>
-                                                                    ) : (
-                                                                        "View proof images"
-                                                                    )}
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent className="bg-slate-900 border-white/10 text-white max-h-[80vh] overflow-y-auto">
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>
-                                                                        Payment proof for fine {fine.id}
-                                                                    </AlertDialogTitle>
-                                                                    <AlertDialogDescription className="text-white/70">
-                                                                        Screenshots or receipts uploaded by the
-                                                                        student will appear below. Use these to
-                                                                        verify the payment before confirming.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <div className="mt-3 space-y-3">
-                                                                    {proofsLoadingForId === fine.id ? (
-                                                                        <div className="flex items-center justify-center py-6 text-sm text-white/70">
-                                                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                                                            Loading proofs…
-                                                                        </div>
-                                                                    ) : proofsForFine.length ? (
-                                                                        proofsForFine.map((proof) => (
-                                                                            <div
-                                                                                key={proof.id}
-                                                                                className="border border-white/15 rounded-md p-2 bg-black/20"
-                                                                            >
-                                                                                <div className="flex items-center justify-between text-[11px] text-white/60 mb-2">
-                                                                                    <span>Proof #{proof.id}</span>
-                                                                                    <span>{fmtDateTime(proof.uploadedAt)}</span>
-                                                                                </div>
-                                                                                <div className="w-full flex justify-center">
-                                                                                    <img
-                                                                                        src={proof.imageUrl}
-                                                                                        alt={`Payment proof ${proof.id}`}
-                                                                                        className="max-h-80 w-auto object-contain rounded"
-                                                                                    />
-                                                                                </div>
-                                                                                <div className="mt-2">
-                                                                                    <a
-                                                                                        href={proof.imageUrl}
-                                                                                        target="_blank"
-                                                                                        rel="noreferrer"
-                                                                                        className="text-xs underline text-emerald-300 hover:text-emerald-200"
-                                                                                    >
-                                                                                        Open full image
-                                                                                    </a>
-                                                                                </div>
+                                                            {/* View proofs */}
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="border-emerald-400/60 text-emerald-200/80"
+                                                                        onClick={() => void handleLoadProofs(fine.id)}
+                                                                    >
+                                                                        {proofsLoadingForId === fine.id ? (
+                                                                            <span className="inline-flex items-center gap-2">
+                                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                Loading proofs…
+                                                                            </span>
+                                                                        ) : (
+                                                                            "View proof images"
+                                                                        )}
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white max-h-[80vh] overflow-y-auto">
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>
+                                                                            Payment proof for fine {fine.id}
+                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogDescription className="text-white/70">
+                                                                            Screenshots or receipts uploaded by the
+                                                                            student will appear below. Use these to
+                                                                            verify the payment before confirming.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <div className="mt-3 space-y-3">
+                                                                        {proofsLoadingForId === fine.id ? (
+                                                                            <div className="flex items-center justify-center py-6 text-sm text-white/70">
+                                                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                                                Loading proofs…
                                                                             </div>
-                                                                        ))
-                                                                    ) : (
-                                                                        <p className="text-sm text-amber-200/90">
-                                                                            No payment screenshots have been uploaded
-                                                                            for this fine yet.
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogAction className="bg-slate-700 hover:bg-slate-600 text-white">
-                                                                        Close
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </>
-                                                )}
+                                                                        ) : proofsForFine.length ? (
+                                                                            proofsForFine.map((proof) => (
+                                                                                <div
+                                                                                    key={proof.id}
+                                                                                    className="border border-white/15 rounded-md p-2 bg-black/20"
+                                                                                >
+                                                                                    <div className="flex items-center justify-between text-[11px] text-white/60 mb-1">
+                                                                                        <span>Proof #{proof.id}</span>
+                                                                                        <span>
+                                                                                            {fmtDateTime(proof.uploadedAt)}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div className="text-[11px] text-emerald-200 mb-2">
+                                                                                        Payment method:{" "}
+                                                                                        <span className="font-semibold">
+                                                                                            {formatProofKind(proof.kind)}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div className="w-full flex justify-center">
+                                                                                        <img
+                                                                                            src={proof.imageUrl}
+                                                                                            alt={`Payment proof ${proof.id}`}
+                                                                                            className="max-h-80 w-auto object-contain rounded"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <div className="mt-2">
+                                                                                        <a
+                                                                                            href={proof.imageUrl}
+                                                                                            target="_blank"
+                                                                                            rel="noreferrer"
+                                                                                            className="text-xs underline text-emerald-300 hover:text-emerald-200"
+                                                                                        >
+                                                                                            Open full image
+                                                                                        </a>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))
+                                                                        ) : (
+                                                                            <p className="text-sm text-amber-200/90">
+                                                                                No payment screenshots have been uploaded
+                                                                                for this fine yet.
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogAction className="bg-slate-700 hover:bg-slate-600 text-white">
+                                                                            Close
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </>
+                                                    )}
 
-                                                {/* Actions for active fines */}
-                                                {fine.status === "active" && (
-                                                    <>
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white w-full md:w-auto"
-                                                                    disabled={busy}
-                                                                >
-                                                                    {busy ? (
-                                                                        <span className="inline-flex items-center gap-2">
-                                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                                            Saving…
-                                                                        </span>
-                                                                    ) : (
-                                                                        "Mark as paid"
-                                                                    )}
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>
-                                                                        Mark this fine as paid?
-                                                                    </AlertDialogTitle>
-                                                                    <AlertDialogDescription className="text-white/70">
-                                                                        Use this when payment is taken in-person and
-                                                                        you want to record the fine as{" "}
-                                                                        <span className="font-semibold text-emerald-200">
-                                                                            Paid
-                                                                        </span>
-                                                                        .
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <div className="mt-3 text-sm text-white/80 space-y-1">
-                                                                    <p>
-                                                                        <span className="text-white/60">Amount:</span>{" "}
-                                                                        <span className="font-semibold text-red-300">
-                                                                            {peso(amount)}
-                                                                        </span>
-                                                                    </p>
-                                                                    {fine.bookTitle && (
-                                                                        <p>
-                                                                            <span className="text-white/60">
-                                                                                Book:
-                                                                            </span>{" "}
-                                                                            {fine.bookTitle}
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel
-                                                                        className="border-white/20 text-white hover:bg-black/20"
-                                                                        disabled={busy}
-                                                                    >
-                                                                        Cancel
-                                                                    </AlertDialogCancel>
-                                                                    <AlertDialogAction
+                                                    {/* Actions for active fines (over-the-counter payments) */}
+                                                    {fine.status === "active" && (
+                                                        <>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
                                                                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
                                                                         disabled={busy}
-                                                                        onClick={() =>
-                                                                            void handleUpdateStatus(fine, "paid", {
-                                                                                successTitle: "Fine marked as paid",
-                                                                                successDescription:
-                                                                                    "The fine has been recorded as paid.",
-                                                                            })
-                                                                        }
                                                                     >
                                                                         {busy ? (
                                                                             <span className="inline-flex items-center gap-2">
@@ -1090,63 +1095,83 @@ export default function LibrarianFinesPage() {
                                                                                 Saving…
                                                                             </span>
                                                                         ) : (
-                                                                            "Confirm"
+                                                                            "Mark as paid (OTC)"
                                                                         )}
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>
+                                                                            Mark this fine as paid (over the counter)?
+                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogDescription className="text-white/70">
+                                                                            Use this when payment is taken in-person at
+                                                                            the library counter and you want to record the
+                                                                            fine as{" "}
+                                                                            <span className="font-semibold text-emerald-200">
+                                                                                Paid
+                                                                            </span>
+                                                                            .
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <div className="mt-3 text-sm text-white/80 space-y-1">
+                                                                        <p>
+                                                                            <span className="text-white/60">
+                                                                                Amount:
+                                                                            </span>{" "}
+                                                                            <span className="font-semibold text-red-300">
+                                                                                {peso(amount)}
+                                                                            </span>
+                                                                        </p>
+                                                                        {fine.bookTitle && (
+                                                                            <p>
+                                                                                <span className="text-white/60">
+                                                                                    Book:
+                                                                                </span>{" "}
+                                                                                {fine.bookTitle}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel
+                                                                            className="border-white/20 text-white hover:bg-black/20"
+                                                                            disabled={busy}
+                                                                        >
+                                                                            Cancel
+                                                                        </AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                            disabled={busy}
+                                                                            onClick={() =>
+                                                                                void handleUpdateStatus(fine, "paid", {
+                                                                                    successTitle:
+                                                                                        "Fine marked as paid (over the counter)",
+                                                                                    successDescription:
+                                                                                        "The fine has been recorded as paid via over-the-counter payment.",
+                                                                                })
+                                                                            }
+                                                                        >
+                                                                            {busy ? (
+                                                                                <span className="inline-flex items-center gap-2">
+                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                    Saving…
+                                                                                </span>
+                                                                            ) : (
+                                                                                "Confirm"
+                                                                            )}
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
 
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="border-slate-400/50 text-slate-100 w-full md:w-auto"
-                                                                    disabled={busy}
-                                                                >
-                                                                    {busy ? (
-                                                                        <span className="inline-flex items-center gap-2">
-                                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                                            Saving…
-                                                                        </span>
-                                                                    ) : (
-                                                                        "Cancel fine"
-                                                                    )}
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>
-                                                                        Cancel this fine?
-                                                                    </AlertDialogTitle>
-                                                                    <AlertDialogDescription className="text-white/70">
-                                                                        This will mark the fine as{" "}
-                                                                        <span className="font-semibold">
-                                                                            Cancelled
-                                                                        </span>{" "}
-                                                                        and set its resolved date to now. Use this
-                                                                        when the fine has been waived.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel
-                                                                        className="border-white/20 text-white hover:bg-black/20"
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="border-slate-400/50 text-slate-100"
                                                                         disabled={busy}
-                                                                    >
-                                                                        Keep fine
-                                                                    </AlertDialogCancel>
-                                                                    <AlertDialogAction
-                                                                        className="bg-slate-500 hover:bg-slate-600 text-white"
-                                                                        disabled={busy}
-                                                                        onClick={() =>
-                                                                            void handleUpdateStatus(fine, "cancelled", {
-                                                                                successTitle: "Fine cancelled",
-                                                                                successDescription:
-                                                                                    "The fine has been cancelled.",
-                                                                            })
-                                                                        }
                                                                     >
                                                                         {busy ? (
                                                                             <span className="inline-flex items-center gap-2">
@@ -1156,26 +1181,73 @@ export default function LibrarianFinesPage() {
                                                                         ) : (
                                                                             "Cancel fine"
                                                                         )}
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </>
-                                                )}
-
-                                                {/* No actions for paid/cancelled */}
-                                                {(fine.status === "paid" ||
-                                                    fine.status === "cancelled") && (
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            disabled
-                                                            className="border-white/20 text-white/60 w-full md:w-auto"
-                                                        >
-                                                            No actions available
-                                                        </Button>
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>
+                                                                            Cancel this fine?
+                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogDescription className="text-white/70">
+                                                                            This will mark the fine as{" "}
+                                                                            <span className="font-semibold">
+                                                                                Cancelled
+                                                                            </span>{" "}
+                                                                            and set its resolved date to now. Use this
+                                                                            when the fine has been waived.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel
+                                                                            className="border-white/20 text-white hover:bg-black/20"
+                                                                            disabled={busy}
+                                                                        >
+                                                                            Keep fine
+                                                                        </AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            className="bg-slate-500 hover:bg-slate-600 text-white"
+                                                                            disabled={busy}
+                                                                            onClick={() =>
+                                                                                void handleUpdateStatus(
+                                                                                    fine,
+                                                                                    "cancelled",
+                                                                                    {
+                                                                                        successTitle: "Fine cancelled",
+                                                                                        successDescription:
+                                                                                            "The fine has been cancelled.",
+                                                                                    }
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            {busy ? (
+                                                                                <span className="inline-flex items-center gap-2">
+                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                    Saving…
+                                                                                </span>
+                                                                            ) : (
+                                                                                "Cancel fine"
+                                                                            )}
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </>
                                                     )}
+
+                                                    {/* No actions for paid/cancelled */}
+                                                    {(fine.status === "paid" ||
+                                                        fine.status === "cancelled") && (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                disabled
+                                                                className="border-white/20 text-white/60"
+                                                            >
+                                                                No actions
+                                                            </Button>
+                                                        )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     );

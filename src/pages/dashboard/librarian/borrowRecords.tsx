@@ -313,6 +313,16 @@ export default function LibrarianBorrowRecordsPage() {
     });
   }, [records, statusFilter, search]);
 
+  // Reusable scrollbar styling for dark, thin horizontal scrollbars
+  const cellScrollbarClasses =
+    "overflow-x-auto whitespace-nowrap " +
+    "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
+    "[&::-webkit-scrollbar]:h-1.5 " +
+    "[&::-webkit-scrollbar-track]:bg-transparent] " +
+    "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
+    "[&::-webkit-scrollbar-thumb]:rounded-full " +
+    "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
+
   return (
     <DashboardLayout title="Borrow Records">
       {/* Header: vertical on mobile, horizontal on desktop */}
@@ -503,7 +513,12 @@ export default function LibrarianBorrowRecordsPage() {
                         <TableCell className="text-sm opacity-90">
                           {fmtDate(rec.returnDate)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          className={
+                            "text-right w-[100px] max-w-[100px] " +
+                            cellScrollbarClasses
+                          }
+                        >
                           {isReturned ? (
                             <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
                               <span className="inline-flex items-center gap-1">
@@ -534,8 +549,14 @@ export default function LibrarianBorrowRecordsPage() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right text-sm">
-                          <div className="flex flex-col items-end gap-0.5">
+                        {/* ₱Fine cell with scrollbar */}
+                        <TableCell
+                          className={
+                            "text-right text-sm w-[150px] max-w-40 " +
+                            cellScrollbarClasses
+                          }
+                        >
+                          <div className="inline-flex flex-col items-end gap-0.5">
                             <span>{peso(fineAmount)}</span>
                             {isBorrowed || isPending ? (
                               isOverdue && autoFine > 0 ? (
@@ -552,9 +573,15 @@ export default function LibrarianBorrowRecordsPage() {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        {/* Actions cell with scrollbar */}
+                        <TableCell
+                          className={
+                            "text-right w-[180px] max-w-[190px] " +
+                            cellScrollbarClasses
+                          }
+                        >
                           {isBorrowed || isPending ? (
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="inline-flex flex-col items-end gap-1">
                               {/*✏️ Edit due date button with Lucide Edit icon */}
                               <Button
                                 type="button"

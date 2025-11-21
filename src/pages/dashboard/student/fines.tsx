@@ -64,6 +64,30 @@ import {
 
 type StatusFilter = "all" | FineStatus;
 
+// How the student actually paid when uploading a receipt
+type PaymentMethod = "gcash" | "maya" | "bank_transfer" | "other";
+
+/**
+ * Turn the UI payment-method choice into a compact `kind` string
+ * that is stored together with the proof image. The librarian will
+ * later see this value when verifying proofs.
+ */
+function buildProofKindForMethod(method: PaymentMethod | null | undefined): string {
+    if (!method) return "student_payment";
+    switch (method) {
+        case "gcash":
+            return "student_payment:gcash";
+        case "maya":
+            return "student_payment:maya";
+        case "bank_transfer":
+            return "student_payment:bank_transfer";
+        case "other":
+            return "student_payment:other";
+        default:
+            return "student_payment";
+    }
+}
+
 /**
  * Format date as YYYY-MM-DD in *local* timezone
  * to avoid off-by-one issues from UTC conversions.
@@ -100,6 +124,16 @@ function normalizeFine(value: any): number {
     return Number.isNaN(num) ? 0 : num;
 }
 
+// Reusable scrollbar styling for dark, thin *vertical* scrollbars (dialog content)
+const dialogScrollbarClasses =
+    "overflow-y-auto " +
+    "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
+    "[&::-webkit-scrollbar]:w-1.5 " +
+    "[&::-webkit-scrollbar-track]:bg-transparent " +
+    "[&::-webkit-scrollbar-thumb]:bg-slate-400 " +
+    "[&::-webkit-scrollbar-thumb]:rounded-full " +
+    "[&::-webkit-scrollbar-thumb:hover]:bg-slate-300";
+
 export default function StudentFinesPage() {
     const [fines, setFines] = React.useState<FineDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -120,6 +154,12 @@ export default function StudentFinesPage() {
     const [selectedProofFile, setSelectedProofFile] =
         React.useState<File | null>(null);
     const [selectedProofFineId, setSelectedProofFineId] =
+        React.useState<string | null>(null);
+
+    // Payment method the student used when paying online
+    const [selectedPaymentMethod, setSelectedPaymentMethod] =
+        React.useState<PaymentMethod>("gcash");
+    const [selectedPaymentMethodFineId, setSelectedPaymentMethodFineId] =
         React.useState<string | null>(null);
 
     const loadFines = React.useCallback(async () => {
@@ -221,8 +261,14 @@ export default function StudentFinesPage() {
             // Upload proof screenshot if selected for this fine
             if (selectedProofFile && selectedProofFineId === fine.id) {
                 try {
+                    const methodForThisFine =
+                        selectedPaymentMethodFineId === fine.id
+                            ? selectedPaymentMethod
+                            : null;
+
                     await uploadFineProofImage(fine.id, selectedProofFile, {
-                        kind: "student_payment",
+                        // This `kind` is what the librarian will see under the proof
+                        kind: buildProofKindForMethod(methodForThisFine),
                     });
                 } catch (err: any) {
                     const msg =
@@ -232,6 +278,7 @@ export default function StudentFinesPage() {
                 } finally {
                     setSelectedProofFile(null);
                     setSelectedProofFineId(null);
+                    setSelectedPaymentMethodFineId(null);
                 }
             }
 
@@ -314,6 +361,12 @@ export default function StudentFinesPage() {
                             <span className="font-semibold">Pending verification</span> until
                             a librarian confirms the payment and marks it as{" "}
                             <span className="font-semibold">Paid</span>.
+                        </p>
+                        <p className="mt-1 text-[11px] text-emerald-200/90">
+                            You can also choose to pay{" "}
+                            <span className="font-semibold">over the counter</span> at the
+                            library. In that case, the librarian will mark your fine as paid
+                            directly in the system.
                         </p>
                     </div>
                 </div>
@@ -501,7 +554,26 @@ export default function StudentFinesPage() {
                                             </TableCell>
                                             <TableCell className="text-right space-y-1">
                                                 {fine.status === "active" && (
-                                                    <AlertDialog>
+                                                    <AlertDialog
+                                                        onOpenChange={(open) => {
+                                                            if (open) {
+                                                                // Reset dialog-specific state when opened
+                                                                setSelectedPaymentMethod("gcash");
+                                                                setSelectedPaymentMethodFineId(fine.id);
+                                                                setSelectedProofFineId(fine.id);
+                                                                setSelectedProofFile(null);
+                                                            } else {
+                                                                // Clear when closed
+                                                                if (selectedProofFineId === fine.id) {
+                                                                    setSelectedProofFineId(null);
+                                                                    setSelectedProofFile(null);
+                                                                }
+                                                                if (selectedPaymentMethodFineId === fine.id) {
+                                                                    setSelectedPaymentMethodFineId(null);
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
                                                         <AlertDialogTrigger asChild>
                                                             <Button
                                                                 type="button"
@@ -523,7 +595,12 @@ export default function StudentFinesPage() {
                                                             </Button>
                                                         </AlertDialogTrigger>
 
-                                                        <AlertDialogContent className="bg-slate-900 border-white/10 text-white max-h-[90vh] overflow-y-auto">
+                                                        <AlertDialogContent
+                                                            className={
+                                                                "bg-slate-900 border-white/10 text-white max-h-[90vh] " +
+                                                                dialogScrollbarClasses
+                                                            }
+                                                        >
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>
                                                                     Pay this fine now?
@@ -635,12 +712,50 @@ export default function StudentFinesPage() {
                                                                     )}
                                                                 </div>
 
-                                                                {/* Upload screenshot */}
+                                                                {/* Payment method selection */}
+                                                                <div className="space-y-1">
+                                                                    <label className="text-xs text-white/80 flex items-center gap-1">
+                                                                        <CreditCard className="h-3 w-3" />
+                                                                        Payment method used
+                                                                    </label>
+                                                                    <Select
+                                                                        value={
+                                                                            selectedPaymentMethodFineId === fine.id
+                                                                                ? selectedPaymentMethod
+                                                                                : "gcash"
+                                                                        }
+                                                                        onValueChange={(v) => {
+                                                                            const next = v as PaymentMethod;
+                                                                            setSelectedPaymentMethodFineId(fine.id);
+                                                                            setSelectedPaymentMethod(next);
+                                                                        }}
+                                                                    >
+                                                                        <SelectTrigger className="h-8 w-full bg-slate-900/70 border-white/20 text-xs text-white">
+                                                                            <SelectValue placeholder="Select a payment method" />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent className="bg-slate-900 text-white border-white/10 text-xs">
+                                                                            <SelectItem value="gcash">GCash</SelectItem>
+                                                                            <SelectItem value="maya">Maya</SelectItem>
+                                                                            <SelectItem value="bank_transfer">
+                                                                                Bank transfer / deposit
+                                                                            </SelectItem>
+                                                                            <SelectItem value="other">
+                                                                                Other online method
+                                                                            </SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <p className="text-[11px] text-white/50">
+                                                                        This information is saved together with your
+                                                                        receipt so the librarian can see how you paid.
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* Upload screenshot / receipt */}
                                                                 <div className="space-y-1">
                                                                     <label className="text-xs text-white/80 flex items-center gap-1">
                                                                         <UploadCloud className="h-3 w-3" />
-                                                                        Upload payment screenshot (optional but
-                                                                        recommended)
+                                                                        Upload payment receipt / screenshot (optional
+                                                                        but recommended)
                                                                     </label>
                                                                     <Input
                                                                         type="file"
@@ -662,9 +777,9 @@ export default function StudentFinesPage() {
                                                                             </p>
                                                                         )}
                                                                     <p className="text-[11px] text-white/50">
-                                                                        The librarian will use this screenshot to
-                                                                        verify your payment before marking the fine
-                                                                        as{" "}
+                                                                        The librarian will use this receipt and your
+                                                                        selected payment method to verify your payment
+                                                                        before marking the fine as{" "}
                                                                         <span className="font-semibold text-emerald-200">
                                                                             Paid
                                                                         </span>
@@ -704,7 +819,7 @@ export default function StudentFinesPage() {
                                                                             Paying…
                                                                         </span>
                                                                     ) : (
-                                                                        "Confirm payment"
+                                                                        "Confirm online payment"
                                                                     )}
                                                                 </AlertDialogAction>
                                                             </AlertDialogFooter>
