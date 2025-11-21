@@ -318,7 +318,7 @@ export default function LibrarianBorrowRecordsPage() {
     "overflow-x-auto whitespace-nowrap " +
     "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
     "[&::-webkit-scrollbar]:h-1.5 " +
-    "[&::-webkit-scrollbar-track]:bg-transparent] " +
+    "[&::-webkit-scrollbar-track]:bg-transparent " +
     "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
     "[&::-webkit-scrollbar-thumb]:rounded-full " +
     "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
@@ -552,7 +552,7 @@ export default function LibrarianBorrowRecordsPage() {
                         {/* ₱Fine cell with scrollbar */}
                         <TableCell
                           className={
-                            "text-right text-sm w-[150px] max-w-40 " +
+                            "text-right text-sm w-[100px] max-w-[100px] " +
                             cellScrollbarClasses
                           }
                         >
@@ -573,10 +573,10 @@ export default function LibrarianBorrowRecordsPage() {
                             ) : null}
                           </div>
                         </TableCell>
-                        {/* Actions cell with scrollbar */}
+                        {/* Actions cell with horizontal scrollbar */}
                         <TableCell
                           className={
-                            "text-right w-[180px] max-w-[190px] " +
+                            "text-right w-[100px] max-w-[100px] " +
                             cellScrollbarClasses
                           }
                         >
