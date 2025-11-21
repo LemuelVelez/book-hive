@@ -43,6 +43,10 @@ import {
     fetchMyDamageReports,
     type DamageReportDTO,
 } from "@/lib/damageReports"
+import {
+    fetchMyFines,
+    type FineDTO,
+} from "@/lib/fines"
 
 import {
     ResponsiveContainer,
@@ -115,6 +119,7 @@ export default function StudentDashboardPage() {
     const [records, setRecords] = React.useState<BorrowRecordDTO[]>([])
     const [feedbacks, setFeedbacks] = React.useState<FeedbackDTO[]>([])
     const [damageReports, setDamageReports] = React.useState<DamageReportDTO[]>([])
+    const [fines, setFines] = React.useState<FineDTO[]>([])
 
     const [loading, setLoading] = React.useState(true)
     const [refreshing, setRefreshing] = React.useState(false)
@@ -124,19 +129,25 @@ export default function StudentDashboardPage() {
         setError(null)
         setLoading(true)
         try {
-            const [booksData, recordsData, feedbacksData, damageData] =
-                await Promise.all([
-                    fetchBooks(),
-                    fetchMyBorrowRecords(),
-                    fetchMyFeedbacks(),
-                    fetchMyDamageReports(),
-                ])
+            const [
+                booksData,
+                recordsData,
+                feedbacksData,
+                damageData,
+                finesData,
+            ] = await Promise.all([
+                fetchBooks(),
+                fetchMyBorrowRecords(),
+                fetchMyFeedbacks(),
+                fetchMyDamageReports(),
+                fetchMyFines(),
+            ])
 
-            // Use the records as-is from the API; we normalize fines only when computing
             setBooks(booksData)
             setRecords(recordsData)
             setFeedbacks(feedbacksData)
             setDamageReports(damageData)
+            setFines(finesData)
         } catch (err: any) {
             const msg =
                 err?.message ||
@@ -176,32 +187,38 @@ export default function StudentDashboardPage() {
         [records],
     )
 
-    // Overdue = active record with a positive fine
+    // Overdue (for chart) = active record with a positive fine (historical)
     const overdueCount = React.useMemo(
         () =>
             activeRecords.filter((r) => normalizeFine((r as any).fine) > 0).length,
         [activeRecords],
     )
 
-    // Active fines = unpaid fines on active (borrowed + pending) records.
-    const activeFineTotal = React.useMemo(
-        () =>
-            activeRecords.reduce((sum, r) => {
-                const fine = normalizeFine((r as any).fine)
-                return fine > 0 ? sum + fine : sum
-            }, 0),
-        [activeRecords],
-    )
+    // Fines metrics come from the dedicated fines table so they stay in sync
+    const {
+        activeFineTotal,
+        pendingFineTotal,
+        totalFineAll,
+    } = React.useMemo(() => {
+        let active = 0
+        let pending = 0
+        let total = 0
 
-    // All recorded fines (any status, positive amounts only) – historical total.
-    const totalFineAll = React.useMemo(
-        () =>
-            records.reduce((sum, r) => {
-                const fine = normalizeFine((r as any).fine)
-                return fine > 0 ? sum + fine : sum
-            }, 0),
-        [records],
-    )
+        for (const f of fines) {
+            const amt = normalizeFine((f as any).amount)
+            if (amt <= 0) continue
+
+            total += amt
+            if ((f as any).status === "active") active += amt
+            if ((f as any).status === "pending_verification") pending += amt
+        }
+
+        return {
+            activeFineTotal: active,
+            pendingFineTotal: pending,
+            totalFineAll: total,
+        }
+    }, [fines])
 
     const totalFeedbacks = feedbacks.length
     const totalDamageReports = damageReports.length
@@ -423,15 +440,21 @@ export default function StudentDashboardPage() {
                                     )}
                                 </p>
                                 <p>
+                                    Payments pending verification:{" "}
+                                    <span className="font-semibold text-emerald-200">
+                                        {peso(pendingFineTotal)}
+                                    </span>
+                                </p>
+                                <p>
                                     All recorded fines:{" "}
                                     <span className="font-semibold text-amber-200">
                                         {peso(totalFineAll)}
                                     </span>
                                 </p>
                                 <p className="text-[11px] text-white/60">
-                                    Active fines are fines on books that are still{" "}
-                                    <span className="font-semibold">borrowed or pending</span>{" "}
-                                    and have not yet been paid.
+                                    Active and pending amounts are taken from your{" "}
+                                    <span className="font-semibold">Fines</span> page, so they
+                                    stay in sync after you submit payments.
                                 </p>
                             </>
                         )}

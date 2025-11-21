@@ -45,9 +45,11 @@ import {
     requestFinePayment,
     fetchPaymentConfig,
     uploadFineProofImage,
+    fetchFineProofs,
     type FineDTO,
     type FineStatus,
     type PaymentConfigDTO,
+    type FineProofDTO,
 } from "@/lib/fines";
 
 import {
@@ -86,6 +88,25 @@ function buildProofKindForMethod(method: PaymentMethod | null | undefined): stri
         default:
             return "student_payment";
     }
+}
+
+/**
+ * Infer a PaymentMethod from a stored proof.kind string.
+ * Used to pre-select the payment method when viewing/updating
+ * an existing pending payment.
+ */
+function paymentMethodFromProofKind(
+    kind: string | null | undefined
+): PaymentMethod | null {
+    if (!kind) return null;
+    const k = kind.toLowerCase();
+
+    if (k.includes("gcash")) return "gcash";
+    if (k.includes("maya")) return "maya";
+    if (k.includes("bank")) return "bank_transfer";
+    if (k.includes("other")) return "other";
+
+    return null;
 }
 
 /**
@@ -144,22 +165,44 @@ export default function StudentFinesPage() {
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
     const [payBusyId, setPayBusyId] = React.useState<string | null>(null);
 
+    // Busy while uploading an additional proof for a pending fine
+    const [pendingUpdateBusyId, setPendingUpdateBusyId] =
+        React.useState<string | null>(null);
+
     // Global payment config (e-wallet phone + QR)
     const [paymentConfig, setPaymentConfig] =
         React.useState<PaymentConfigDTO | null>(null);
     const [paymentConfigLoading, setPaymentConfigLoading] =
         React.useState<boolean>(false);
 
-    // Selected payment screenshot (per fine)
+    // Selected payment screenshot (for either active or pending dialog)
     const [selectedProofFile, setSelectedProofFile] =
         React.useState<File | null>(null);
     const [selectedProofFineId, setSelectedProofFineId] =
         React.useState<string | null>(null);
+    const [selectedProofPreviewUrl, setSelectedProofPreviewUrl] =
+        React.useState<string | null>(null);
+
+    // Clean up object URL on unmount
+    React.useEffect(() => {
+        return () => {
+            if (selectedProofPreviewUrl) {
+                URL.revokeObjectURL(selectedProofPreviewUrl);
+            }
+        };
+    }, [selectedProofPreviewUrl]);
 
     // Payment method the student used when paying online
     const [selectedPaymentMethod, setSelectedPaymentMethod] =
         React.useState<PaymentMethod>("gcash");
     const [selectedPaymentMethodFineId, setSelectedPaymentMethodFineId] =
+        React.useState<string | null>(null);
+
+    // Previously uploaded proofs (for preview while pending_verification)
+    const [proofsByFineId, setProofsByFineId] = React.useState<
+        Record<string, FineProofDTO[]>
+    >({});
+    const [proofsLoadingForId, setProofsLoadingForId] =
         React.useState<string | null>(null);
 
     const loadFines = React.useCallback(async () => {
@@ -250,6 +293,15 @@ export default function StudentFinesPage() {
             return;
         }
 
+        // Require receipt / screenshot before proceeding
+        if (!selectedProofFile || selectedProofFineId !== fine.id) {
+            toast.error("Payment receipt required", {
+                description:
+                    "Please upload a screenshot or photo of your payment before confirming.",
+            });
+            return;
+        }
+
         setPayBusyId(fine.id);
         try {
             const updated = await requestFinePayment(fine.id);
@@ -258,28 +310,30 @@ export default function StudentFinesPage() {
                 prev.map((f) => (f.id === updated.id ? updated : f))
             );
 
-            // Upload proof screenshot if selected for this fine
-            if (selectedProofFile && selectedProofFineId === fine.id) {
-                try {
-                    const methodForThisFine =
-                        selectedPaymentMethodFineId === fine.id
-                            ? selectedPaymentMethod
-                            : null;
+            // Upload proof screenshot (required and already checked)
+            try {
+                const methodForThisFine =
+                    selectedPaymentMethodFineId === fine.id
+                        ? selectedPaymentMethod
+                        : null;
 
-                    await uploadFineProofImage(fine.id, selectedProofFile, {
-                        // This `kind` is what the librarian will see under the proof
-                        kind: buildProofKindForMethod(methodForThisFine),
-                    });
-                } catch (err: any) {
-                    const msg =
-                        err?.message ||
-                        "Your payment was submitted but the screenshot upload failed. You can try again or contact the librarian.";
-                    toast.error("Payment proof upload failed", { description: msg });
-                } finally {
-                    setSelectedProofFile(null);
-                    setSelectedProofFineId(null);
-                    setSelectedPaymentMethodFineId(null);
-                }
+                await uploadFineProofImage(fine.id, selectedProofFile, {
+                    // This `kind` is what the librarian will see under the proof
+                    kind: buildProofKindForMethod(methodForThisFine),
+                });
+            } catch (err: any) {
+                const msg =
+                    err?.message ||
+                    "Your payment was submitted but the screenshot upload failed. Please contact the librarian.";
+                toast.error("Payment proof upload failed", { description: msg });
+            } finally {
+                setSelectedProofFile(null);
+                setSelectedProofFineId(null);
+                setSelectedPaymentMethodFineId(null);
+                setSelectedProofPreviewUrl((prev) => {
+                    if (prev) URL.revokeObjectURL(prev);
+                    return null;
+                });
             }
 
             toast.success("Payment submitted", {
@@ -293,6 +347,80 @@ export default function StudentFinesPage() {
             toast.error("Payment failed", { description: msg });
         } finally {
             setPayBusyId(null);
+        }
+    }
+
+    async function handleLoadProofs(fineId: string) {
+        setProofsLoadingForId(fineId);
+        try {
+            const proofs = await fetchFineProofs(fineId);
+            setProofsByFineId((prev) => ({
+                ...prev,
+                [fineId]: proofs,
+            }));
+
+            // Pre-select payment method based on the latest proof, if any
+            if (proofs.length > 0) {
+                const latest = [...proofs].sort((a, b) => {
+                    if (!a.uploadedAt || !b.uploadedAt) return 0;
+                    return b.uploadedAt.localeCompare(a.uploadedAt);
+                })[0];
+                const inferred = paymentMethodFromProofKind(latest.kind);
+                if (inferred) {
+                    setSelectedPaymentMethodFineId(fineId);
+                    setSelectedPaymentMethod(inferred);
+                }
+            }
+        } catch (err: any) {
+            const msg =
+                err?.message || "Failed to load payment proof images for this fine.";
+            toast.error("Could not load proofs", { description: msg });
+        } finally {
+            setProofsLoadingForId(null);
+        }
+    }
+
+    async function handleUploadAdditionalProof(fine: FineDTO) {
+        if (!selectedProofFile || selectedProofFineId !== fine.id) {
+            toast.error("No receipt selected", {
+                description: "Please choose an image file to upload.",
+            });
+            return;
+        }
+
+        setPendingUpdateBusyId(fine.id);
+        try {
+            const methodForThisFine =
+                selectedPaymentMethodFineId === fine.id
+                    ? selectedPaymentMethod
+                    : null;
+
+            await uploadFineProofImage(fine.id, selectedProofFile, {
+                kind: buildProofKindForMethod(methodForThisFine),
+            });
+
+            toast.success("Receipt updated", {
+                description:
+                    "Your new receipt has been uploaded. The librarian will see it when verifying your payment.",
+            });
+
+            // Clear local selection
+            setSelectedProofFile(null);
+            setSelectedProofFineId(null);
+            setSelectedProofPreviewUrl((prev) => {
+                if (prev) URL.revokeObjectURL(prev);
+                return null;
+            });
+
+            // Reload proofs so the new one appears in the preview list
+            await handleLoadProofs(fine.id);
+        } catch (err: any) {
+            const msg =
+                err?.message ||
+                "Failed to upload the new receipt. Please try again or contact the librarian.";
+            toast.error("Upload failed", { description: msg });
+        } finally {
+            setPendingUpdateBusyId(null);
         }
     }
 
@@ -498,6 +626,10 @@ export default function StudentFinesPage() {
                             <TableBody>
                                 {filtered.map((fine) => {
                                     const amount = normalizeFine(fine.amount);
+                                    const hasRequiredProof =
+                                        selectedProofFineId === fine.id && !!selectedProofFile;
+                                    const proofsForFine: FineProofDTO[] =
+                                        proofsByFineId[fine.id] || [];
 
                                     return (
                                         <TableRow
@@ -553,6 +685,7 @@ export default function StudentFinesPage() {
                                                 {peso(amount)}
                                             </TableCell>
                                             <TableCell className="text-right space-y-1">
+                                                {/* Active: initial payment with required receipt */}
                                                 {fine.status === "active" && (
                                                     <AlertDialog
                                                         onOpenChange={(open) => {
@@ -562,11 +695,19 @@ export default function StudentFinesPage() {
                                                                 setSelectedPaymentMethodFineId(fine.id);
                                                                 setSelectedProofFineId(fine.id);
                                                                 setSelectedProofFile(null);
+                                                                setSelectedProofPreviewUrl((prev) => {
+                                                                    if (prev) URL.revokeObjectURL(prev);
+                                                                    return null;
+                                                                });
                                                             } else {
                                                                 // Clear when closed
                                                                 if (selectedProofFineId === fine.id) {
                                                                     setSelectedProofFineId(null);
                                                                     setSelectedProofFile(null);
+                                                                    setSelectedProofPreviewUrl((prev) => {
+                                                                        if (prev) URL.revokeObjectURL(prev);
+                                                                        return null;
+                                                                    });
                                                                 }
                                                                 if (selectedPaymentMethodFineId === fine.id) {
                                                                     setSelectedPaymentMethodFineId(null);
@@ -754,8 +895,8 @@ export default function StudentFinesPage() {
                                                                 <div className="space-y-1">
                                                                     <label className="text-xs text-white/80 flex items-center gap-1">
                                                                         <UploadCloud className="h-3 w-3" />
-                                                                        Upload payment receipt / screenshot (optional
-                                                                        but recommended)
+                                                                        Upload payment receipt / screenshot{" "}
+                                                                        <span className="text-red-300">*</span>
                                                                     </label>
                                                                     <Input
                                                                         type="file"
@@ -765,17 +906,57 @@ export default function StudentFinesPage() {
                                                                             const file = e.target.files?.[0] ?? null;
                                                                             setSelectedProofFineId(fine.id);
                                                                             setSelectedProofFile(file);
+
+                                                                            if (file) {
+                                                                                setSelectedProofPreviewUrl((prev) => {
+                                                                                    if (prev)
+                                                                                        URL.revokeObjectURL(prev);
+                                                                                    return URL.createObjectURL(file);
+                                                                                });
+                                                                            } else {
+                                                                                setSelectedProofPreviewUrl((prev) => {
+                                                                                    if (prev)
+                                                                                        URL.revokeObjectURL(prev);
+                                                                                    return null;
+                                                                                });
+                                                                            }
                                                                         }}
                                                                     />
                                                                     {selectedProofFile &&
                                                                         selectedProofFineId === fine.id && (
-                                                                            <p className="text-[11px] text-white/60">
-                                                                                Selected:{" "}
-                                                                                <span className="font-semibold">
-                                                                                    {selectedProofFile.name}
-                                                                                </span>
-                                                                            </p>
+                                                                            <div className="mt-2 flex items-start gap-3">
+                                                                                {selectedProofPreviewUrl && (
+                                                                                    <div className="w-24 h-24 rounded border border-white/15 bg-black/30 flex items-center justify-center overflow-hidden">
+                                                                                        <img
+                                                                                            src={selectedProofPreviewUrl}
+                                                                                            alt="Selected payment receipt preview"
+                                                                                            className="max-h-full max-w-full object-contain"
+                                                                                        />
+                                                                                    </div>
+                                                                                )}
+                                                                                <div className="text-[11px] text-white/60 space-y-1">
+                                                                                    <p className="break-all">
+                                                                                        <span className="font-semibold">
+                                                                                            Selected file:
+                                                                                        </span>{" "}
+                                                                                        {selectedProofFile.name}
+                                                                                    </p>
+                                                                                    <p>
+                                                                                        To modify, just choose another
+                                                                                        image using the upload field above.
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
                                                                         )}
+                                                                    <p className="text-[11px] text-amber-200/90">
+                                                                        Uploading a clear screenshot or photo of your
+                                                                        successful payment is{" "}
+                                                                        <span className="font-semibold">
+                                                                            required
+                                                                        </span>{" "}
+                                                                        before your payment can be submitted for
+                                                                        verification.
+                                                                    </p>
                                                                     <p className="text-[11px] text-white/50">
                                                                         The librarian will use this receipt and your
                                                                         selected payment method to verify your payment
@@ -810,7 +991,9 @@ export default function StudentFinesPage() {
                                                                 </AlertDialogCancel>
                                                                 <AlertDialogAction
                                                                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                                                    disabled={payBusyId === fine.id}
+                                                                    disabled={
+                                                                        payBusyId === fine.id || !hasRequiredProof
+                                                                    }
                                                                     onClick={() => void handlePayFine(fine)}
                                                                 >
                                                                     {payBusyId === fine.id ? (
@@ -827,16 +1010,289 @@ export default function StudentFinesPage() {
                                                     </AlertDialog>
                                                 )}
 
+                                                {/* Pending verification: view + update proofs & method */}
                                                 {fine.status === "pending_verification" && (
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled
-                                                        className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
+                                                    <AlertDialog
+                                                        onOpenChange={(open) => {
+                                                            if (open) {
+                                                                setSelectedProofFineId(fine.id);
+                                                                setSelectedProofFile(null);
+                                                                setSelectedProofPreviewUrl((prev) => {
+                                                                    if (prev) URL.revokeObjectURL(prev);
+                                                                    return null;
+                                                                });
+                                                                void handleLoadProofs(fine.id);
+                                                            } else {
+                                                                if (selectedProofFineId === fine.id) {
+                                                                    setSelectedProofFineId(null);
+                                                                    setSelectedProofFile(null);
+                                                                    setSelectedProofPreviewUrl((prev) => {
+                                                                        if (prev) URL.revokeObjectURL(prev);
+                                                                        return null;
+                                                                    });
+                                                                }
+                                                                if (selectedPaymentMethodFineId === fine.id) {
+                                                                    setSelectedPaymentMethodFineId(null);
+                                                                }
+                                                            }
+                                                        }}
                                                     >
-                                                        Payment pending verification
-                                                    </Button>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="border-amber-400/50 text-amber-200/90 w-full md:w-auto"
+                                                            >
+                                                                Payment pending – view / update
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent
+                                                            className={
+                                                                "bg-slate-900 border-white/10 text-white max-h-[90vh] " +
+                                                                dialogScrollbarClasses
+                                                            }
+                                                        >
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>
+                                                                    Payment pending verification
+                                                                </AlertDialogTitle>
+                                                                <AlertDialogDescription className="text-white/70">
+                                                                    Your payment for this fine has been submitted and
+                                                                    is waiting for a librarian to verify it. You can
+                                                                    review the receipts you uploaded and upload a new
+                                                                    one if needed.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+
+                                                            <div className="mt-3 text-sm text-white/80 space-y-3">
+                                                                <p>
+                                                                    <span className="text-white/60">Fine ID:</span>{" "}
+                                                                    {fine.id}
+                                                                </p>
+                                                                {fine.borrowRecordId && (
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Borrow ID:
+                                                                        </span>{" "}
+                                                                        {fine.borrowRecordId}
+                                                                    </p>
+                                                                )}
+                                                                <p>
+                                                                    <span className="text-white/60">Amount:</span>{" "}
+                                                                    <span className="font-semibold text-red-300">
+                                                                        {peso(amount)}
+                                                                    </span>
+                                                                </p>
+                                                                {fine.bookTitle && (
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Book:
+                                                                        </span>{" "}
+                                                                        {fine.bookTitle}
+                                                                    </p>
+                                                                )}
+
+                                                                {/* Existing proofs */}
+                                                                <div className="mt-2 rounded-md border border-dashed border-emerald-500/40 bg-emerald-500/5 p-3 text-xs space-y-2">
+                                                                    <div className="font-semibold text-emerald-200 mb-1">
+                                                                        Your uploaded receipts
+                                                                    </div>
+                                                                    {proofsLoadingForId === fine.id ? (
+                                                                        <div className="flex items-center gap-2 text-white/70">
+                                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                                            Loading your receipts…
+                                                                        </div>
+                                                                    ) : proofsForFine.length ? (
+                                                                        <div className="space-y-3">
+                                                                            {proofsForFine.map((proof) => (
+                                                                                <div
+                                                                                    key={proof.id}
+                                                                                    className="border border-white/15 rounded-md p-2 bg-black/20"
+                                                                                >
+                                                                                    <div className="flex items-center justify-between text-[11px] text-white/60 mb-1">
+                                                                                        <span>
+                                                                                            Receipt #{proof.id}
+                                                                                        </span>
+                                                                                        <span>
+                                                                                            {proof.uploadedAt
+                                                                                                ? new Date(
+                                                                                                    proof.uploadedAt
+                                                                                                ).toLocaleString()
+                                                                                                : "—"}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div className="w-full flex justify-center">
+                                                                                        <img
+                                                                                            src={proof.imageUrl}
+                                                                                            alt={`Uploaded receipt ${proof.id}`}
+                                                                                            className="max-h-64 w-auto object-contain rounded"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <div className="mt-2">
+                                                                                        <a
+                                                                                            href={proof.imageUrl}
+                                                                                            target="_blank"
+                                                                                            rel="noreferrer"
+                                                                                            className="text-xs underline text-emerald-300 hover:text-emerald-200"
+                                                                                        >
+                                                                                            Open full image
+                                                                                        </a>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <p className="text-amber-200/90">
+                                                                            No receipts are recorded yet for this fine.
+                                                                            You can upload one below.
+                                                                        </p>
+                                                                    )}
+                                                                    <p className="text-[11px] text-white/60 pt-1">
+                                                                        The librarian will see all of your uploaded
+                                                                        receipts when verifying your payment.
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* Payment method for new upload */}
+                                                                <div className="space-y-1">
+                                                                    <label className="text-xs text-white/80 flex items-center gap-1">
+                                                                        <CreditCard className="h-3 w-3" />
+                                                                        Payment method to save with new receipt
+                                                                    </label>
+                                                                    <Select
+                                                                        value={
+                                                                            selectedPaymentMethodFineId === fine.id
+                                                                                ? selectedPaymentMethod
+                                                                                : "gcash"
+                                                                        }
+                                                                        onValueChange={(v) => {
+                                                                            const next = v as PaymentMethod;
+                                                                            setSelectedPaymentMethodFineId(fine.id);
+                                                                            setSelectedPaymentMethod(next);
+                                                                        }}
+                                                                    >
+                                                                        <SelectTrigger className="h-8 w-full bg-slate-900/70 border-white/20 text-xs text-white">
+                                                                            <SelectValue placeholder="Select a payment method" />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent className="bg-slate-900 text-white border-white/10 text-xs">
+                                                                            <SelectItem value="gcash">GCash</SelectItem>
+                                                                            <SelectItem value="maya">Maya</SelectItem>
+                                                                            <SelectItem value="bank_transfer">
+                                                                                Bank transfer / deposit
+                                                                            </SelectItem>
+                                                                            <SelectItem value="other">
+                                                                                Other online method
+                                                                            </SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <p className="text-[11px] text-white/50">
+                                                                        This applies to the{" "}
+                                                                        <span className="font-semibold">
+                                                                            new
+                                                                        </span>{" "}
+                                                                        receipt you upload. The librarian will see the
+                                                                        method together with the image.
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* Upload NEW screenshot / receipt while pending */}
+                                                                <div className="space-y-1">
+                                                                    <label className="text-xs text-white/80 flex items-center gap-1">
+                                                                        <UploadCloud className="h-3 w-3" />
+                                                                        Upload a new receipt / screenshot
+                                                                    </label>
+                                                                    <Input
+                                                                        type="file"
+                                                                        accept="image/*"
+                                                                        className="bg-slate-900/70 border-white/20 text-xs text-white file:text-xs file:text-white file:bg-slate-700 file:border-0 file:px-3 file:py-1 file:mr-3 file:rounded"
+                                                                        onChange={(e) => {
+                                                                            const file = e.target.files?.[0] ?? null;
+                                                                            setSelectedProofFineId(fine.id);
+                                                                            setSelectedProofFile(file);
+
+                                                                            if (file) {
+                                                                                setSelectedProofPreviewUrl((prev) => {
+                                                                                    if (prev)
+                                                                                        URL.revokeObjectURL(prev);
+                                                                                    return URL.createObjectURL(file);
+                                                                                });
+                                                                            } else {
+                                                                                setSelectedProofPreviewUrl((prev) => {
+                                                                                    if (prev)
+                                                                                        URL.revokeObjectURL(prev);
+                                                                                    return null;
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    {selectedProofFile &&
+                                                                        selectedProofFineId === fine.id && (
+                                                                            <div className="mt-2 flex items-start gap-3">
+                                                                                {selectedProofPreviewUrl && (
+                                                                                    <div className="w-24 h-24 rounded border border-white/15 bg-black/30 flex items-center justify-center overflow-hidden">
+                                                                                        <img
+                                                                                            src={selectedProofPreviewUrl}
+                                                                                            alt="New receipt preview"
+                                                                                            className="max-h-full max-w-full object-contain"
+                                                                                        />
+                                                                                    </div>
+                                                                                )}
+                                                                                <div className="text-[11px] text-white/60 space-y-1">
+                                                                                    <p className="break-all">
+                                                                                        <span className="font-semibold">
+                                                                                            Selected file:
+                                                                                        </span>{" "}
+                                                                                        {selectedProofFile.name}
+                                                                                    </p>
+                                                                                    <p>
+                                                                                        To change it again, choose another
+                                                                                        image using the upload field above.
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    <p className="text-[11px] text-white/50">
+                                                                        Upload a new image if your previous receipt was
+                                                                        incorrect, unclear, or if you used the wrong
+                                                                        payment method. The fine will remain{" "}
+                                                                        <span className="font-semibold">
+                                                                            Pending verification
+                                                                        </span>{" "}
+                                                                        until a librarian reviews it.
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel className="border-white/20 text-white hover:bg-black/20">
+                                                                    Close
+                                                                </AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                    disabled={
+                                                                        pendingUpdateBusyId === fine.id ||
+                                                                        !(
+                                                                            selectedProofFineId === fine.id &&
+                                                                            selectedProofFile
+                                                                        )
+                                                                    }
+                                                                    onClick={() =>
+                                                                        void handleUploadAdditionalProof(fine)
+                                                                    }
+                                                                >
+                                                                    {pendingUpdateBusyId === fine.id ? (
+                                                                        <span className="inline-flex items-center gap-2">
+                                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                                            Uploading…
+                                                                        </span>
+                                                                    ) : (
+                                                                        "Upload new receipt"
+                                                                    )}
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
                                                 )}
 
                                                 {fine.status === "paid" && (
