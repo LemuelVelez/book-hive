@@ -21,6 +21,7 @@ import {
     BookOpen,
     Layers,
     MessageSquare,
+    ReceiptText,
     RefreshCcw,
     Loader2,
     Clock3,
@@ -95,6 +96,25 @@ function normalizeFine(value: any): number {
     if (value === null || value === undefined) return 0
     const num = typeof value === "number" ? value : Number(value)
     return Number.isNaN(num) ? 0 : num
+}
+
+/**
+ * Best-effort helper to detect if a fine is related to a damage report.
+ * Mirrors the logic used on the My Fines page so the overview stays in sync.
+ */
+function isDamageFine(fine: FineDTO): boolean {
+    const anyFine = fine as any
+    const reason = (fine.reason || "").toLowerCase()
+
+    return Boolean(
+        fine.damageReportId ||
+        anyFine.damageId ||
+        anyFine.damageType ||
+        anyFine.damageDescription ||
+        anyFine.damageDetails ||
+        reason.includes("damage") ||
+        reason.includes("lost book"),
+    )
 }
 
 function isActiveStatus(status: any): boolean {
@@ -199,24 +219,74 @@ export default function StudentDashboardPage() {
         activeFineTotal,
         pendingFineTotal,
         totalFineAll,
+        paidFineTotal,
+        cancelledFineTotal,
+        damageFineTotal,
+        activeFineCount,
+        pendingFineCount,
+        paidFineCount,
+        cancelledFineCount,
+        damageFineCount,
     } = React.useMemo(() => {
         let active = 0
         let pending = 0
         let total = 0
+        let paid = 0
+        let cancelled = 0
+        let damageAmount = 0
+
+        let activeCount = 0
+        let pendingCount = 0
+        let paidCount = 0
+        let cancelledCount = 0
+        let damageCount = 0
 
         for (const f of fines) {
             const amt = normalizeFine((f as any).amount)
-            if (amt <= 0) continue
+            if (amt > 0) {
+                total += amt
+            }
 
-            total += amt
-            if ((f as any).status === "active") active += amt
-            if ((f as any).status === "pending_verification") pending += amt
+            const status = (f as any).status
+            switch (status) {
+                case "active":
+                    active += amt
+                    activeCount += 1
+                    break
+                case "pending_verification":
+                    pending += amt
+                    pendingCount += 1
+                    break
+                case "paid":
+                    paid += amt
+                    paidCount += 1
+                    break
+                case "cancelled":
+                    cancelled += amt
+                    cancelledCount += 1
+                    break
+                default:
+                    break
+            }
+
+            if (isDamageFine(f)) {
+                if (amt > 0) damageAmount += amt
+                damageCount += 1
+            }
         }
 
         return {
             activeFineTotal: active,
             pendingFineTotal: pending,
             totalFineAll: total,
+            paidFineTotal: paid,
+            cancelledFineTotal: cancelled,
+            damageFineTotal: damageAmount,
+            activeFineCount: activeCount,
+            pendingFineCount: pendingCount,
+            paidFineCount: paidCount,
+            cancelledFineCount: cancelledCount,
+            damageFineCount: damageCount,
         }
     }, [fines])
 
@@ -292,8 +362,8 @@ export default function StudentDashboardPage() {
                             My Library overview
                         </h2>
                         <p className="text-xs text-white/70">
-                            Quick snapshot of your books, circulation, feedback, and damage
-                            reports.
+                            Quick snapshot of your books, circulation, fines, feedback, and
+                            damage reports.
                         </p>
                     </div>
                 </div>
@@ -338,6 +408,17 @@ export default function StudentDashboardPage() {
                                 <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
                             </Link>
                         </Button>
+                        <Button
+                            asChild
+                            size="sm"
+                            variant="outline"
+                            className="w-full sm:w-auto border-rose-400/50 text-rose-100 hover:bg-rose-500/10 justify-center"
+                        >
+                            <Link to="/dashboard/fines">
+                                My fines
+                                <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                            </Link>
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -347,7 +428,7 @@ export default function StudentDashboardPage() {
             )}
 
             {/* Top summary cards */}
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-6">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
                 {/* Books summary */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -429,32 +510,15 @@ export default function StudentDashboardPage() {
                                     </span>
                                 </p>
                                 <p>
-                                    Active fines (unpaid):{" "}
+                                    Currently overdue (from active borrows):{" "}
                                     <span className="font-semibold text-amber-300">
-                                        {peso(activeFineTotal)}
-                                    </span>
-                                    {overdueCount > 0 && (
-                                        <span className="ml-1 text-[11px] text-red-300">
-                                            ({overdueCount} overdue)
-                                        </span>
-                                    )}
-                                </p>
-                                <p>
-                                    Payments pending verification:{" "}
-                                    <span className="font-semibold text-emerald-200">
-                                        {peso(pendingFineTotal)}
-                                    </span>
-                                </p>
-                                <p>
-                                    All recorded fines:{" "}
-                                    <span className="font-semibold text-amber-200">
-                                        {peso(totalFineAll)}
+                                        {overdueCount}
                                     </span>
                                 </p>
                                 <p className="text-[11px] text-white/60">
-                                    Active and pending amounts are taken from your{" "}
-                                    <span className="font-semibold">Fines</span> page, so they
-                                    stay in sync after you submit payments.
+                                    Overdue status here is based on your borrow records. The
+                                    exact fine amounts and payment status are shown on your{" "}
+                                    <span className="font-semibold">Fines</span> page.
                                 </p>
                             </>
                         )}
@@ -472,6 +536,122 @@ export default function StudentDashboardPage() {
                     </CardContent>
                 </Card>
 
+                {/* Fines & payments summary (overview of My Fines page) */}
+                <Card className="bg-slate-800/60 border-white/10">
+                    <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                        <div className="space-y-1">
+                            <CardTitle className="text-sm font-semibold">
+                                Fines &amp; payments
+                            </CardTitle>
+                            <p className="text-[11px] text-white/60">
+                                Live snapshot from{" "}
+                                <span className="font-medium">My Fines</span>.
+                            </p>
+                        </div>
+                        <div className="rounded-full bg-rose-500/20 p-2">
+                            <ReceiptText className="h-4 w-4 text-rose-200" />
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                        {loading ? (
+                            <>
+                                <Skeleton className="h-5 w-32" />
+                                <Skeleton className="h-4 w-40" />
+                                <Skeleton className="h-4 w-44" />
+                            </>
+                        ) : fines.length === 0 ? (
+                            <p className="text-xs text-white/70">
+                                You don&apos;t have any fines on record.
+                            </p>
+                        ) : (
+                            <>
+                                <p>
+                                    Total fines recorded:{" "}
+                                    <span className="font-semibold text-amber-200">
+                                        {fines.length}
+                                    </span>{" "}
+                                    <span className="ml-1 text-xs text-white/70">
+                                        ({peso(totalFineAll)})
+                                    </span>
+                                </p>
+                                <p>
+                                    Active (unpaid):{" "}
+                                    <span className="font-semibold text-amber-300">
+                                        {peso(activeFineTotal)}
+                                    </span>
+                                    {activeFineCount > 0 && (
+                                        <span className="ml-1 text-[11px] text-white/70">
+                                            ({activeFineCount}{" "}
+                                            {activeFineCount === 1 ? "fine" : "fines"})
+                                        </span>
+                                    )}
+                                </p>
+                                <p>
+                                    Pending verification:{" "}
+                                    <span className="font-semibold text-emerald-200">
+                                        {peso(pendingFineTotal)}
+                                    </span>
+                                    {pendingFineCount > 0 && (
+                                        <span className="ml-1 text-[11px] text-white/70">
+                                            ({pendingFineCount}{" "}
+                                            {pendingFineCount === 1 ? "fine" : "fines"})
+                                        </span>
+                                    )}
+                                </p>
+                                <p className="text-xs">
+                                    Paid so far:{" "}
+                                    <span className="font-semibold text-emerald-300">
+                                        {peso(paidFineTotal)}
+                                    </span>
+                                    {paidFineCount > 0 && (
+                                        <span className="ml-1 text-[11px] text-white/70">
+                                            ({paidFineCount}{" "}
+                                            {paidFineCount === 1 ? "fine" : "fines"})
+                                        </span>
+                                    )}
+                                </p>
+                                {cancelledFineCount > 0 && (
+                                    <p className="text-xs">
+                                        Cancelled:{" "}
+                                        <span className="font-semibold text-slate-200">
+                                            {peso(cancelledFineTotal)}
+                                        </span>
+                                        <span className="ml-1 text-[11px] text-white/70">
+                                            ({cancelledFineCount}{" "}
+                                            {cancelledFineCount === 1 ? "fine" : "fines"})
+                                        </span>
+                                    </p>
+                                )}
+                                {damageFineCount > 0 && (
+                                    <p className="text-[11px] text-rose-200">
+                                        Damage-related fines:{" "}
+                                        <span className="font-semibold">
+                                            {damageFineCount}
+                                        </span>{" "}
+                                        ({peso(damageFineTotal)})
+                                    </p>
+                                )}
+                                <p className="text-[11px] text-white/60">
+                                    Use the fines page to upload receipts, track online
+                                    payments, and see full details for overdue or damage
+                                    fines.
+                                </p>
+                            </>
+                        )}
+                        <Button
+                            asChild
+                            size="sm"
+                            variant="ghost"
+                            className="px-0 text-xs text-rose-200 hover:text-rose-100 hover:bg-transparent"
+                        >
+                            <Link to="/dashboard/fines">
+                                Manage fines &amp; receipts
+                                <ArrowRight className="h-3 w-3 ml-1" />
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+
                 {/* Insights summary */}
                 <Card className="bg-slate-800/60 border-white/10 hidden xl:block">
                     <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -480,7 +660,7 @@ export default function StudentDashboardPage() {
                                 Insights Hub
                             </CardTitle>
                             <p className="text-[11px] text-white/60">
-                                From feedback & damage reports.
+                                From feedback &amp; damage reports.
                             </p>
                         </div>
                         <div className="rounded-full bg-amber-500/20 p-2">
