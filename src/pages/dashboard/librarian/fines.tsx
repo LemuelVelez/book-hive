@@ -47,6 +47,7 @@ import {
     XCircle,
     QrCode,
     Download,
+    Edit,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -169,6 +170,10 @@ export default function LibrarianFinesPage() {
         React.useState<StatusFilter>("unresolved");
     const [updateBusyId, setUpdateBusyId] = React.useState<string | null>(null);
 
+    // For editing fine amount
+    const [editAmountFineId, setEditAmountFineId] = React.useState<string | null>(null);
+    const [editAmountValue, setEditAmountValue] = React.useState<string>("0.00");
+
     // Payment settings (global e-wallet + QR)
     const [paymentConfig, setPaymentConfig] =
         React.useState<PaymentConfigDTO | null>(null);
@@ -282,8 +287,9 @@ export default function LibrarianFinesPage() {
         const q = search.trim().toLowerCase();
         if (q) {
             rows = rows.filter((f) => {
-                const haystack = `${f.id} ${f.studentName ?? ""} ${f.studentEmail ?? ""} ${f.studentId ?? ""
-                    } ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.reason ?? ""}`.toLowerCase();
+                const haystack = `${f.id} ${f.studentName ?? ""} ${f.studentEmail ?? ""
+                    } ${f.studentId ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.reason ?? ""
+                    }`.toLowerCase();
                 return haystack.includes(q);
             });
         }
@@ -357,6 +363,47 @@ export default function LibrarianFinesPage() {
             });
         } catch (err: any) {
             const msg = err?.message || "Failed to update fine.";
+            toast.error("Update failed", { description: msg });
+        } finally {
+            setUpdateBusyId(null);
+        }
+    }
+
+    async function handleUpdateAmount(fine: FineDTO) {
+        // Use the editing value for this fine if present
+        const raw =
+            editAmountFineId === fine.id
+                ? editAmountValue
+                : normalizeFine(fine.amount).toFixed(2);
+
+        const trimmed = raw.trim();
+        const parsed = trimmed === "" ? 0 : Number(trimmed);
+
+        if (Number.isNaN(parsed) || parsed < 0) {
+            toast.error("Invalid amount", {
+                description: "Fine amount must be a non-negative number.",
+            });
+            return;
+        }
+
+        setUpdateBusyId(fine.id);
+        try {
+            const updated = await updateFine(fine.id, { amount: parsed });
+
+            setFines((prev) =>
+                prev.map((f) => (f.id === updated.id ? updated : f))
+            );
+
+            toast.success("Fine amount updated", {
+                description: `New amount: ${peso(
+                    typeof updated.amount === "number" ? updated.amount : parsed
+                )}.`,
+            });
+
+            setEditAmountFineId(null);
+            setEditAmountValue("0.00");
+        } catch (err: any) {
+            const msg = err?.message || "Failed to update fine amount.";
             toast.error("Update failed", { description: msg });
         } finally {
             setUpdateBusyId(null);
@@ -579,7 +626,7 @@ export default function LibrarianFinesPage() {
                         <h2 className="text-lg font-semibold leading-tight">
                             Fines &amp; payment verification
                         </h2>
-                        <p className="text-xs text-white/70">
+                        <p className="text-xs text.white/70">
                             Review all fines across users, confirm payments (online or over the
                             counter), and keep circulation balances accurate.
                         </p>
@@ -699,7 +746,8 @@ export default function LibrarianFinesPage() {
                             <TableCaption className="text-xs text-white/60">
                                 Showing {filtered.length}{" "}
                                 {filtered.length === 1 ? "fine" : "fines"}. Use the actions on
-                                each row to confirm payments or adjust statuses as needed.
+                                each row to confirm payments, adjust statuses, or correct fine
+                                amounts as needed.
                             </TableCaption>
                             <TableHeader>
                                 <TableRow className="border-white/10">
@@ -808,7 +856,126 @@ export default function LibrarianFinesPage() {
                                             </TableCell>
                                             <TableCell>{renderStatusBadge(fine.status)}</TableCell>
                                             <TableCell className="text-sm">
-                                                {peso(amount)}
+                                                <div className="inline-flex items-center gap-2">
+                                                    <span>{peso(amount)}</span>
+                                                    <AlertDialog
+                                                        onOpenChange={(open) => {
+                                                            if (open) {
+                                                                setEditAmountFineId(fine.id);
+                                                                setEditAmountValue(
+                                                                    normalizeFine(fine.amount).toFixed(2)
+                                                                );
+                                                            } else if (editAmountFineId === fine.id) {
+                                                                setEditAmountFineId(null);
+                                                                setEditAmountValue("0.00");
+                                                            }
+                                                        }}
+                                                    >
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button
+                                                                type="button"
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                className="h-7 w-7 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
+                                                                aria-label="Edit fine amount"
+                                                            >
+                                                                <Edit className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>
+                                                                    Edit fine amount
+                                                                </AlertDialogTitle>
+                                                                <AlertDialogDescription className="text-white/70">
+                                                                    Adjust the amount for this fine. This is useful
+                                                                    if the original amount was entered incorrectly.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <div className="mt-3 text-sm text-white/80 space-y-2">
+                                                                <p>
+                                                                    <span className="text-white/60">
+                                                                        Fine ID:
+                                                                    </span>{" "}
+                                                                    {fine.id}
+                                                                </p>
+                                                                <p>
+                                                                    <span className="text-white/60">
+                                                                        User:
+                                                                    </span>{" "}
+                                                                    {fine.studentName ||
+                                                                        fine.studentEmail ||
+                                                                        fine.studentId ||
+                                                                        `User #${fine.userId}`}
+                                                                </p>
+                                                                {fine.bookTitle && (
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Book:
+                                                                        </span>{" "}
+                                                                        {fine.bookTitle}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <div className="mt-4 space-y-2">
+                                                                <label className="text-xs font-medium text-white/80">
+                                                                    New amount
+                                                                </label>
+                                                                <div className="relative w-full">
+                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
+                                                                        ₱
+                                                                    </span>
+                                                                    <Input
+                                                                        type="number"
+                                                                        min={0}
+                                                                        step="0.01"
+                                                                        value={
+                                                                            editAmountFineId === fine.id
+                                                                                ? editAmountValue
+                                                                                : normalizeFine(
+                                                                                    fine.amount
+                                                                                ).toFixed(2)
+                                                                        }
+                                                                        onChange={(e) =>
+                                                                            setEditAmountValue(e.target.value)
+                                                                        }
+                                                                        className="pl-6 bg-slate-900/70 border-white/20 text-white"
+                                                                    />
+                                                                </div>
+                                                                <p className="text-[11px] text-white/60">
+                                                                    This changes only the{" "}
+                                                                    <span className="font-semibold">
+                                                                        amount of the fine
+                                                                    </span>
+                                                                    . Payment status (Active, Pending verification,
+                                                                    Paid, Cancelled) stays the same.
+                                                                </p>
+                                                            </div>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel
+                                                                    className="border-white/20 text-white hover:bg-black/20"
+                                                                    disabled={busy}
+                                                                >
+                                                                    Cancel
+                                                                </AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                    disabled={busy}
+                                                                    onClick={() => void handleUpdateAmount(fine)}
+                                                                >
+                                                                    {busy ? (
+                                                                        <span className="inline-flex items-center gap-2">
+                                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                                            Saving…
+                                                                        </span>
+                                                                    ) : (
+                                                                        "Save amount"
+                                                                    )}
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-xs opacity-80">
                                                 {fmtDate(fine.createdAt)}

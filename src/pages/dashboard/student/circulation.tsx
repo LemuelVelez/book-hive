@@ -32,7 +32,6 @@ import {
   Clock3,
   CheckCircle2,
   AlertTriangle,
-  CreditCard,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,7 +43,6 @@ import {
 
 import {
   fetchMyFines,
-  requestFinePayment,
   type FineDTO,
 } from "@/lib/fines";
 
@@ -108,7 +106,6 @@ export default function StudentCirculationPage() {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [returnBusyId, setReturnBusyId] = React.useState<string | null>(null);
-  const [payBusyId, setPayBusyId] = React.useState<string | null>(null);
 
   const loadAll = React.useCallback(async () => {
     setError(null);
@@ -232,39 +229,6 @@ export default function StudentCirculationPage() {
     }
   }
 
-  async function handlePayFine(fine: FineDTO) {
-    if (fine.status !== "active") {
-      toast.info("Fine cannot be paid right now", {
-        description:
-          fine.status === "pending_verification"
-            ? "This fine already has a payment pending verification."
-            : "This fine is no longer active.",
-      });
-      return;
-    }
-
-    setPayBusyId(fine.id);
-    try {
-      const updated = await requestFinePayment(fine.id);
-
-      setFines((prev) =>
-        prev.map((f) => (f.id === updated.id ? updated : f))
-      );
-
-      toast.success("Payment submitted", {
-        description:
-          "Your fine payment is now marked as pending verification. A librarian will confirm it and mark the fine as paid.",
-      });
-    } catch (err: any) {
-      const msg =
-        err?.message ||
-        "Could not submit your fine payment. Please try again later.";
-      toast.error("Payment failed", { description: msg });
-    } finally {
-      setPayBusyId(null);
-    }
-  }
-
   // Reusable scrollbar styling for dark, thin horizontal scrollbars
   const cellScrollbarClasses =
     "overflow-x-auto whitespace-nowrap " +
@@ -287,7 +251,7 @@ export default function StudentCirculationPage() {
             </h2>
             <p className="text-xs text-white/70">
               View all books you&apos;ve borrowed, track due dates and fines,
-              send online return requests, and pay active fines.
+              and send online return requests.
             </p>
             <p className="mt-1 text-[11px] text-amber-200/90">
               Books <span className="font-semibold">cannot be auto-returned</span>. When
@@ -298,10 +262,9 @@ export default function StudentCirculationPage() {
               changes to <span className="font-semibold">Returned</span>.
             </p>
             <p className="mt-1 text-[11px] text-emerald-200/90">
-              Paying a fine here will mark it as{" "}
-              <span className="font-semibold">Pending verification</span>. A
-              librarian will confirm the payment and switch it to{" "}
-              <span className="font-semibold">Paid</span>.
+              To <span className="font-semibold">pay any fines</span>, use your{" "}
+              <span className="font-semibold">Fines</span> page, where you can upload
+              payment receipts and track verification.
             </p>
           </div>
         </div>
@@ -395,8 +358,8 @@ export default function StudentCirculationPage() {
               <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
               Active fine
             </span>{" "}
-            tag indicate fines that are still active (unpaid) and can be paid
-            from this page.
+            tag indicate fines that are still active (unpaid). You can pay those
+            from your <span className="font-semibold">Fines</span> page.
           </p>
         </CardHeader>
 
@@ -422,10 +385,13 @@ export default function StudentCirculationPage() {
               <TableCaption className="text-xs text-white/60">
                 Showing {filtered.length}{" "}
                 {filtered.length === 1 ? "record" : "records"}. Returned rows
-                with an <span className="font-semibold text-amber-200">
+                with an{" "}
+                <span className="font-semibold text-amber-200">
                   Active fine
                 </span>{" "}
-                tag have unpaid fines you can pay here. Payments go into{" "}
+                tag have unpaid fines you can pay from your{" "}
+                <span className="font-semibold">Fines</span> page. Payments
+                there move into{" "}
                 <span className="font-semibold">Pending verification</span>{" "}
                 until a librarian confirms them.
               </TableCaption>
@@ -566,11 +532,11 @@ export default function StudentCirculationPage() {
                       </TableCell>
                       <TableCell
                         className={
-                          "text-right align-top w-[100px] max-w-[100px] " +
+                          "text-right align-top w-[120px] max-w-[120px] " +
                           cellScrollbarClasses
                         }
                       >
-                        {/* Borrow-related actions */}
+                        {/* Borrow-related actions only */}
                         {record.status === "borrowed" ? (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -691,141 +657,6 @@ export default function StudentCirculationPage() {
                           >
                             Already returned
                           </Button>
-                        )}
-
-                        {/* Fine-related actions (for returned records with active fine) */}
-                        {record.status === "returned" && linkedFine && (
-                          <>
-                            {linkedFine.status === "active" && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white w-full md:w-auto inline-flex items-center gap-1"
-                                    disabled={payBusyId === linkedFine.id}
-                                  >
-                                    {payBusyId === linkedFine.id ? (
-                                      <>
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Paying…
-                                      </>
-                                    ) : (
-                                      <>
-                                        <CreditCard className="h-4 w-4" />
-                                        Pay fine
-                                      </>
-                                    )}
-                                  </Button>
-                                </AlertDialogTrigger>
-
-                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      Pay fine for this book?
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription className="text-white/70">
-                                      You&apos;re about to pay the active fine for{" "}
-                                      <span className="font-semibold text-white">
-                                        “
-                                        {record.bookTitle ??
-                                          `Book #${record.bookId}`}”
-                                      </span>
-                                      .
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-
-                                  <div className="mt-3 text-sm text-white/80 space-y-1">
-                                    <p>
-                                      <span className="text-white/60">
-                                        Borrow ID:
-                                      </span>{" "}
-                                      {record.id}
-                                    </p>
-                                    <p>
-                                      <span className="text-white/60">
-                                        Final fine amount:
-                                      </span>{" "}
-                                      <span className="font-semibold text-red-300">
-                                        {peso(finalFineAmount)}
-                                      </span>
-                                    </p>
-                                    <p className="text-xs text-white/70 pt-1">
-                                      Once you confirm, this fine will be marked as{" "}
-                                      <span className="font-semibold">
-                                        Pending verification
-                                      </span>
-                                      . A librarian will verify your payment and then
-                                      mark it as{" "}
-                                      <span className="font-semibold text-emerald-200">
-                                        Paid
-                                      </span>
-                                      .
-                                    </p>
-                                  </div>
-
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel
-                                      className="border-white/20 text-white hover:bg-black/20"
-                                      disabled={payBusyId === linkedFine.id}
-                                    >
-                                      Cancel
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                      disabled={payBusyId === linkedFine.id}
-                                      onClick={() => void handlePayFine(linkedFine)}
-                                    >
-                                      {payBusyId === linkedFine.id ? (
-                                        <span className="inline-flex items-center gap-2">
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                          Paying…
-                                        </span>
-                                      ) : (
-                                        "Confirm payment"
-                                      )}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-
-                            {linkedFine.status === "pending_verification" && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled
-                                className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
-                              >
-                                Payment pending verification
-                              </Button>
-                            )}
-
-                            {linkedFine.status === "paid" && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled
-                                className="border-emerald-400/50 text-emerald-200/90 w-full md:w-auto"
-                              >
-                                Fine paid
-                              </Button>
-                            )}
-
-                            {linkedFine.status === "cancelled" && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled
-                                className="border-slate-400/50 text-slate-200/90 w-full md:w-auto"
-                              >
-                                Fine cancelled
-                              </Button>
-                            )}
-                          </>
                         )}
                       </TableCell>
                     </TableRow>
