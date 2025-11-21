@@ -246,11 +246,15 @@ export default function LibrarianDamageReportsPage() {
         }
     }
 
+    /**
+     * Quick status helper:
+     * - ONLY supports pending -> assessed now.
+     * - No more quick "Mark paid" step.
+     */
     async function handleStatusStep(report: DamageReportRow) {
-        // pending -> assessed -> paid
+        // pending -> assessed only
         let next: DamageStatus | null = null;
         if (report.status === "pending") next = "assessed";
-        else if (report.status === "assessed") next = "paid";
 
         if (!next || next === report.status) return;
 
@@ -319,11 +323,11 @@ export default function LibrarianDamageReportsPage() {
     const currentPhotoUrl =
         photoDialogImages.length > 0
             ? photoDialogImages[
-                  Math.min(
-                      Math.max(photoDialogIndex, 0),
-                      photoDialogImages.length - 1
-                  )
-              ]
+            Math.min(
+                Math.max(photoDialogIndex, 0),
+                photoDialogImages.length - 1
+            )
+            ]
             : "";
 
     function showPrevPhoto() {
@@ -392,12 +396,12 @@ export default function LibrarianDamageReportsPage() {
             current.map((r) =>
                 r.id === assessReport.id
                     ? {
-                          ...r,
-                          severity: assessSeverity,
-                          status: assessStatus,
-                          fee: parsed,
-                          notes: assessNotes.trim() || null,
-                      }
+                        ...r,
+                        severity: assessSeverity,
+                        status: assessStatus,
+                        fee: parsed,
+                        notes: assessNotes.trim() || null,
+                    }
                     : r
             )
         );
@@ -594,8 +598,8 @@ export default function LibrarianDamageReportsPage() {
                                                 r.photoUrls && r.photoUrls.length
                                                     ? r.photoUrls
                                                     : r.photoUrl
-                                                    ? [r.photoUrl]
-                                                    : []
+                                                        ? [r.photoUrl]
+                                                        : []
                                             ).filter(Boolean) as string[];
 
                                             const absPhotos = rawPhotos
@@ -608,11 +612,10 @@ export default function LibrarianDamageReportsPage() {
                                             const isRowDeleting = deletingId === String(r.id);
                                             const disableActions = isRowUpdating || isRowDeleting;
 
+                                            // Quick status label: only for pending now
                                             let statusActionLabel: string | null = null;
                                             if (r.status === "pending") {
                                                 statusActionLabel = "Mark assessed";
-                                            } else if (r.status === "assessed") {
-                                                statusActionLabel = "Mark paid";
                                             }
 
                                             return (
@@ -675,7 +678,7 @@ export default function LibrarianDamageReportsPage() {
                                                                 Assess &amp; set fine
                                                             </Button>
 
-                                                            {/* Quick status step (optional) */}
+                                                            {/* Quick status step (pending -> assessed only) */}
                                                             {statusActionLabel && (
                                                                 <Button
                                                                     type="button"
@@ -760,8 +763,8 @@ export default function LibrarianDamageReportsPage() {
                                         r.photoUrls && r.photoUrls.length
                                             ? r.photoUrls
                                             : r.photoUrl
-                                            ? [r.photoUrl]
-                                            : []
+                                                ? [r.photoUrl]
+                                                : []
                                     ).filter(Boolean) as string[];
 
                                     const absPhotos = rawPhotos
@@ -774,11 +777,10 @@ export default function LibrarianDamageReportsPage() {
                                     const isRowDeleting = deletingId === String(r.id);
                                     const disableActions = isRowUpdating || isRowDeleting;
 
+                                    // Quick status label: only for pending now
                                     let statusActionLabel: string | null = null;
                                     if (r.status === "pending") {
                                         statusActionLabel = "Mark assessed";
-                                    } else if (r.status === "assessed") {
-                                        statusActionLabel = "Mark paid";
                                     }
 
                                     return (
