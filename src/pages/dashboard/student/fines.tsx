@@ -145,6 +145,26 @@ function normalizeFine(value: any): number {
     return Number.isNaN(num) ? 0 : num;
 }
 
+/**
+ * Best-effort helper to detect if a fine is related to a damage report.
+ * This matches what the librarian sees and works whether the backend
+ * stores explicit damage fields or only a "damage" reason.
+ */
+function isDamageFine(fine: FineDTO): boolean {
+    const anyFine = fine as any;
+    const reason = (fine.reason || "").toLowerCase();
+
+    return Boolean(
+        anyFine.damageReportId ||
+        anyFine.damageId ||
+        anyFine.damageType ||
+        anyFine.damageDescription ||
+        anyFine.damageDetails ||
+        reason.includes("damage") ||
+        reason.includes("lost book")
+    );
+}
+
 // Reusable scrollbar styling for dark, thin *vertical* scrollbars (dialog content)
 const dialogScrollbarClasses =
     "overflow-y-auto " +
@@ -260,8 +280,10 @@ export default function StudentFinesPage() {
         const q = search.trim().toLowerCase();
         if (q) {
             rows = rows.filter((f) => {
+                const anyFine = f as any;
                 const haystack = `${f.id} ${f.reason ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""
-                    }`.toLowerCase();
+                    } ${anyFine.damageReportId ?? ""} ${anyFine.damageDescription ?? ""
+                    } ${anyFine.damageType ?? ""} ${anyFine.damageDetails ?? ""}`.toLowerCase();
                 return haystack.includes(q);
             });
         }
@@ -479,8 +501,11 @@ export default function StudentFinesPage() {
                             Fines &amp; payments
                         </h2>
                         <p className="text-xs text-white/70">
-                            Review all fines linked to your account, see which are unpaid,
-                            and track payment verification.
+                            Review all fines linked to your account{" "}
+                            <span className="font-semibold">
+                                (for overdue returns and book damage)
+                            </span>
+                            , see which are unpaid, and track payment verification.
                         </p>
                         <p className="mt-1 text-[11px] text-amber-200/90">
                             Fines marked as{" "}
@@ -495,6 +520,13 @@ export default function StudentFinesPage() {
                             <span className="font-semibold">over the counter</span> at the
                             library. In that case, the librarian will mark your fine as paid
                             directly in the system.
+                        </p>
+                        <p className="mt-1 text-[11px] text-rose-200/90">
+                            When the library assesses{" "}
+                            <span className="font-semibold">book damage</span> and sets a
+                            fee, it will also appear here as a{" "}
+                            <span className="font-semibold">Damage fine</span> and can be
+                            paid using the same online process.
                         </p>
                     </div>
                 </div>
@@ -545,7 +577,7 @@ export default function StudentFinesPage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search by book, reason, or ID…"
+                                    placeholder="Search by book, reason, damage, or ID…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>
@@ -596,8 +628,9 @@ export default function StudentFinesPage() {
                         <Table>
                             <TableCaption className="text-xs text-white/60">
                                 Showing {filtered.length}{" "}
-                                {filtered.length === 1 ? "fine" : "fines"}. Active fines can be
-                                paid from this page. Payments move into{" "}
+                                {filtered.length === 1 ? "fine" : "fines"}. Active fines (for
+                                overdue returns or book damage) can be paid from this page.
+                                Payments move into{" "}
                                 <span className="font-semibold">Pending verification</span>{" "}
                                 until a librarian validates them.
                             </TableCaption>
@@ -607,7 +640,7 @@ export default function StudentFinesPage() {
                                         Fine ID
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">
-                                        Book / Description
+                                        Book / Damage info
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">
                                         Borrow
@@ -630,6 +663,15 @@ export default function StudentFinesPage() {
                                         selectedProofFineId === fine.id && !!selectedProofFile;
                                     const proofsForFine: FineProofDTO[] =
                                         proofsByFineId[fine.id] || [];
+
+                                    const anyFine = fine as any;
+                                    const damageReportId: string | undefined =
+                                        anyFine.damageReportId || anyFine.damageId;
+                                    const damageDescription: string | undefined =
+                                        anyFine.damageDescription ||
+                                        anyFine.damageDetails ||
+                                        anyFine.damageType;
+                                    const damage = isDamageFine(fine);
 
                                     return (
                                         <TableRow
@@ -655,6 +697,25 @@ export default function StudentFinesPage() {
                                                     {fine.reason && (
                                                         <span className="text-xs text-white/70">
                                                             {fine.reason}
+                                                        </span>
+                                                    )}
+
+                                                    {damage && (
+                                                        <span className="text-[11px] text-rose-200/90 flex items-center gap-1">
+                                                            <AlertTriangle className="h-3 w-3" />
+                                                            <span className="font-semibold">
+                                                                Damage fine
+                                                            </span>
+                                                            {damageReportId && (
+                                                                <span className="opacity-90">
+                                                                    · Report #{damageReportId}
+                                                                </span>
+                                                            )}
+                                                            {damageDescription && (
+                                                                <span className="opacity-90">
+                                                                    · {damageDescription}
+                                                                </span>
+                                                            )}
                                                         </span>
                                                     )}
                                                 </div>
@@ -760,6 +821,16 @@ export default function StudentFinesPage() {
                                                                         </>
                                                                     )}
                                                                     .
+                                                                    {damage && (
+                                                                        <>
+                                                                            {" "}
+                                                                            This fine is related to a{" "}
+                                                                            <span className="font-semibold">
+                                                                                book damage report
+                                                                            </span>
+                                                                            .
+                                                                        </>
+                                                                    )}
                                                                 </AlertDialogDescription>
                                                             </AlertDialogHeader>
 
@@ -1090,6 +1161,15 @@ export default function StudentFinesPage() {
                                                                             Book:
                                                                         </span>{" "}
                                                                         {fine.bookTitle}
+                                                                    </p>
+                                                                )}
+                                                                {damage && (
+                                                                    <p className="text-xs text-rose-200/90">
+                                                                        This fine is linked to a{" "}
+                                                                        <span className="font-semibold">
+                                                                            book damage report
+                                                                        </span>
+                                                                        .
                                                                     </p>
                                                                 )}
 
