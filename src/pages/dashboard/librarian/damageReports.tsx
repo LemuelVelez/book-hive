@@ -53,11 +53,16 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 
-// ✅ Reuse shared damage report types from lib
+// ✅ Reuse shared damage report types + API helpers from lib
 import type {
     DamageReportDTO,
     DamageStatus,
     DamageSeverity,
+} from "@/lib/damageReports";
+import {
+    fetchDamageReports,
+    updateDamageReport,
+    deleteDamageReport,
 } from "@/lib/damageReports";
 
 /* ----------------------------- Types ----------------------------- */
@@ -69,8 +74,6 @@ type Severity = DamageSeverity;
 type DamageReportRow = DamageReportDTO & {
     photoUrl?: string | null;
 };
-
-type JsonOk<T> = { ok: true } & T;
 
 /* ------------------------ Helpers (local) ------------------------ */
 
@@ -180,152 +183,6 @@ function suggestedFineFromSeverity(severity: Severity): number {
     }
 }
 
-// Light client-side fetcher (kept local so we don't add new lib functions)
-async function fetchDamageReports(): Promise<DamageReportRow[]> {
-    let resp: Response;
-    try {
-        resp = await fetch(`${API_BASE}/api/damage-reports`, {
-            method: "GET",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-        });
-    } catch (e: any) {
-        const details = e?.message ? ` Details: ${e.message}` : "";
-        throw new Error(
-            `Cannot reach the API (${API_BASE}). Is the server running and allowing this origin?${details}`
-        );
-    }
-
-    const ct = resp.headers.get("content-type")?.toLowerCase() || "";
-    const isJson = ct.includes("application/json");
-
-    if (!resp.ok) {
-        if (isJson) {
-            try {
-                const data = (await resp.json()) as any;
-                if (data && typeof data === "object" && typeof data.message === "string") {
-                    throw new Error(data.message);
-                }
-            } catch {
-                /* ignore */
-            }
-        } else {
-            try {
-                const text = await resp.text();
-                if (text) throw new Error(text);
-            } catch {
-                /* ignore */
-            }
-        }
-        throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const data = (isJson ? await resp.json() : null) as JsonOk<{
-        reports: DamageReportRow[];
-    }>;
-    return data.reports ?? [];
-}
-
-/** PATCH damage report (e.g. update status, fee, severity, notes) */
-async function patchDamageReport(
-    id: string | number,
-    patch: Partial<
-        Pick<DamageReportRow, "status" | "fee" | "notes" | "severity">
-    >
-): Promise<DamageReportRow> {
-    let resp: Response;
-    try {
-        resp = await fetch(
-            `${API_BASE}/api/damage-reports/${encodeURIComponent(String(id))}`,
-            {
-                method: "PATCH",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(patch),
-            }
-        );
-    } catch (e: any) {
-        const details = e?.message ? ` Details: ${e.message}` : "";
-        throw new Error(
-            `Cannot reach the API (${API_BASE}). Is the server running and allowing this origin?${details}`
-        );
-    }
-
-    const ct = resp.headers.get("content-type")?.toLowerCase() || "";
-    const isJson = ct.includes("application/json");
-
-    if (!resp.ok) {
-        if (isJson) {
-            try {
-                const data = (await resp.json()) as any;
-                if (data && typeof data === "object" && typeof data.message === "string") {
-                    throw new Error(data.message);
-                }
-            } catch {
-                /* ignore */
-            }
-        } else {
-            try {
-                const text = await resp.text();
-                if (text) throw new Error(text);
-            } catch {
-                /* ignore */
-            }
-        }
-        throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const data = (isJson ? await resp.json() : null) as JsonOk<{
-        report: DamageReportRow;
-    }>;
-    return data.report;
-}
-
-/** DELETE damage report */
-async function deleteDamageReport(id: string | number): Promise<void> {
-    let resp: Response;
-    try {
-        resp = await fetch(
-            `${API_BASE}/api/damage-reports/${encodeURIComponent(String(id))}`,
-            {
-                method: "DELETE",
-                credentials: "include",
-            }
-        );
-    } catch (e: any) {
-        const details = e?.message ? ` Details: ${e.message}` : "";
-        throw new Error(
-            `Cannot reach the API (${API_BASE}). Is the server running and allowing this origin?${details}`
-        );
-    }
-
-    const ct = resp.headers.get("content-type")?.toLowerCase() || "";
-    const isJson = ct.includes("application/json");
-
-    if (!resp.ok) {
-        if (isJson) {
-            try {
-                const data = (await resp.json()) as any;
-                if (data && typeof data === "object" && typeof data.message === "string") {
-                    throw new Error(data.message);
-                }
-            } catch {
-                /* ignore */
-            }
-        } else {
-            try {
-                const text = await resp.text();
-                if (text) throw new Error(text);
-            } catch {
-                /* ignore */
-            }
-        }
-        throw new Error(`HTTP ${resp.status}`);
-    }
-
-    // If backend returns JSON we just ignore it here
-}
-
 /* --------------------------- Page Component --------------------------- */
 
 export default function LibrarianDamageReportsPage() {
@@ -366,7 +223,7 @@ export default function LibrarianDamageReportsPage() {
         setLoading(true);
         try {
             const data = await fetchDamageReports();
-            setRows(data);
+            setRows(data as DamageReportRow[]);
         } catch (err: any) {
             const msg = err?.message || "Failed to load damage reports.";
             setError(msg);
@@ -409,7 +266,9 @@ export default function LibrarianDamageReportsPage() {
         );
 
         try {
-            const updated = await patchDamageReport(report.id, { status: next });
+            const updated = (await updateDamageReport(report.id, {
+                status: next,
+            })) as DamageReportRow;
             setRows((current) =>
                 current.map((r) => (r.id === updated.id ? updated : r))
             );
@@ -460,11 +319,11 @@ export default function LibrarianDamageReportsPage() {
     const currentPhotoUrl =
         photoDialogImages.length > 0
             ? photoDialogImages[
-            Math.min(
-                Math.max(photoDialogIndex, 0),
-                photoDialogImages.length - 1
-            )
-            ]
+                  Math.min(
+                      Math.max(photoDialogIndex, 0),
+                      photoDialogImages.length - 1
+                  )
+              ]
             : "";
 
     function showPrevPhoto() {
@@ -533,23 +392,23 @@ export default function LibrarianDamageReportsPage() {
             current.map((r) =>
                 r.id === assessReport.id
                     ? {
-                        ...r,
-                        severity: assessSeverity,
-                        status: assessStatus,
-                        fee: parsed,
-                        notes: assessNotes.trim() || null,
-                    }
+                          ...r,
+                          severity: assessSeverity,
+                          status: assessStatus,
+                          fee: parsed,
+                          notes: assessNotes.trim() || null,
+                      }
                     : r
             )
         );
 
         try {
-            const updated = await patchDamageReport(assessReport.id, {
+            const updated = (await updateDamageReport(assessReport.id, {
                 severity: assessSeverity,
                 status: assessStatus,
                 fee: parsed,
                 notes: assessNotes.trim() || null,
-            });
+            })) as DamageReportRow;
 
             setRows((current) =>
                 current.map((r) => (r.id === updated.id ? updated : r))
@@ -735,8 +594,8 @@ export default function LibrarianDamageReportsPage() {
                                                 r.photoUrls && r.photoUrls.length
                                                     ? r.photoUrls
                                                     : r.photoUrl
-                                                        ? [r.photoUrl]
-                                                        : []
+                                                    ? [r.photoUrl]
+                                                    : []
                                             ).filter(Boolean) as string[];
 
                                             const absPhotos = rawPhotos
@@ -901,8 +760,8 @@ export default function LibrarianDamageReportsPage() {
                                         r.photoUrls && r.photoUrls.length
                                             ? r.photoUrls
                                             : r.photoUrl
-                                                ? [r.photoUrl]
-                                                : []
+                                            ? [r.photoUrl]
+                                            : []
                                     ).filter(Boolean) as string[];
 
                                     const absPhotos = rawPhotos

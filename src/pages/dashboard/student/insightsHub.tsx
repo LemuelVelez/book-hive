@@ -689,7 +689,7 @@ export default function StudentInsightsHubPage() {
                                                                 r.status === "paid"
                                                                     ? "bg-emerald-600/80 border-emerald-400/70"
                                                                     : r.status === "assessed"
-                                                                        ? "bg-amber-600/80 border-amber-400/70"
+                                                                        ? "text-white bg-amber-600/80 border-amber-400/70"
                                                                         : "text-white bg-slate-700/80 border-slate-500/70"
                                                             }
                                                         >

@@ -155,7 +155,7 @@ function isDamageFine(fine: FineDTO): boolean {
     const reason = (fine.reason || "").toLowerCase();
 
     return Boolean(
-        anyFine.damageReportId ||
+        fine.damageReportId ||
         anyFine.damageId ||
         anyFine.damageType ||
         anyFine.damageDescription ||
@@ -281,9 +281,9 @@ export default function StudentFinesPage() {
         if (q) {
             rows = rows.filter((f) => {
                 const anyFine = f as any;
-                const haystack = `${f.id} ${f.reason ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""
-                    } ${anyFine.damageReportId ?? ""} ${anyFine.damageDescription ?? ""
-                    } ${anyFine.damageType ?? ""} ${anyFine.damageDetails ?? ""}`.toLowerCase();
+                const haystack = `${f.id} ${f.reason ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.damageReportId ?? anyFine.damageReportId ?? ""
+                    } ${anyFine.damageDescription ?? ""} ${anyFine.damageType ?? ""} ${anyFine.damageDetails ?? ""
+                    }`.toLowerCase();
                 return haystack.includes(q);
             });
         }
@@ -643,7 +643,7 @@ export default function StudentFinesPage() {
                                         Book / Damage info
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">
-                                        Borrow
+                                        Borrow / Damage
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">
                                         Status
@@ -666,7 +666,9 @@ export default function StudentFinesPage() {
 
                                     const anyFine = fine as any;
                                     const damageReportId: string | undefined =
-                                        anyFine.damageReportId || anyFine.damageId;
+                                        fine.damageReportId ??
+                                        anyFine.damageId ??
+                                        anyFine.damageReportId;
                                     const damageDescription: string | undefined =
                                         anyFine.damageDescription ||
                                         anyFine.damageDetails ||
@@ -736,6 +738,10 @@ export default function StudentFinesPage() {
                                                                 · Returned {fmtDate(fine.borrowReturnDate)}
                                                             </>
                                                         )}
+                                                    </span>
+                                                ) : damageReportId ? (
+                                                    <span>
+                                                        Damage report #{damageReportId}
                                                     </span>
                                                 ) : (
                                                     <span className="opacity-60">—</span>
@@ -828,6 +834,12 @@ export default function StudentFinesPage() {
                                                                             <span className="font-semibold">
                                                                                 book damage report
                                                                             </span>
+                                                                            {damageReportId && (
+                                                                                <>
+                                                                                    {" "}
+                                                                                    (Report #{damageReportId})
+                                                                                </>
+                                                                            )}
                                                                             .
                                                                         </>
                                                                     )}
@@ -845,6 +857,14 @@ export default function StudentFinesPage() {
                                                                             Borrow ID:
                                                                         </span>{" "}
                                                                         {fine.borrowRecordId}
+                                                                    </p>
+                                                                )}
+                                                                {damageReportId && (
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Damage report:
+                                                                        </span>{" "}
+                                                                        #{damageReportId}
                                                                     </p>
                                                                 )}
 
@@ -1149,6 +1169,14 @@ export default function StudentFinesPage() {
                                                                         {fine.borrowRecordId}
                                                                     </p>
                                                                 )}
+                                                                {damageReportId && (
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Damage report:
+                                                                        </span>{" "}
+                                                                        #{damageReportId}
+                                                                    </p>
+                                                                )}
                                                                 <p>
                                                                     <span className="text-white/60">Amount:</span>{" "}
                                                                     <span className="font-semibold text-red-300">
@@ -1169,6 +1197,7 @@ export default function StudentFinesPage() {
                                                                         <span className="font-semibold">
                                                                             book damage report
                                                                         </span>
+                                                                        {damageReportId && <> (#{damageReportId})</>}
                                                                         .
                                                                     </p>
                                                                 )}

@@ -8,7 +8,13 @@ export type FineStatus = "active" | "pending_verification" | "paid" | "cancelled
 export type FineDTO = {
   id: string;
   userId: string;
+
+  // For normal fines created from borrow_records
   borrowRecordId: string | null;
+
+  // For fines generated from damage_reports (see backend syncFineForDamageReport)
+  damageReportId: string | null;
+
   amount: number;
   status: FineStatus;
   reason: string | null;

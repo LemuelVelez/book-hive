@@ -152,3 +152,47 @@ export async function createDamageReport(
 
     return res.report;
 }
+
+/**
+ * List all damage reports (librarian/admin).
+ */
+export async function fetchDamageReports(): Promise<DamageReportDTO[]> {
+    type Resp = JsonOk<{ reports: DamageReportDTO[] }>;
+    const res = await requestJSON<Resp>(DAMAGE_ROUTES.list, { method: "GET" });
+    return res.reports;
+}
+
+export type UpdateDamageReportPayload = Partial<{
+    status: DamageStatus;
+    severity: DamageSeverity;
+    fee: number;
+    notes: string | null;
+}>;
+
+/**
+ * Update a damage report (status, severity, fee, notes).
+ * Used by the librarian dashboard for assessments.
+ */
+export async function updateDamageReport(
+    id: string | number,
+    payload: UpdateDamageReportPayload
+): Promise<DamageReportDTO> {
+    type Resp = JsonOk<{ report: DamageReportDTO }>;
+    const res = await requestJSON<Resp>(DAMAGE_ROUTES.update(id), {
+        method: "PATCH",
+        body: payload,
+    });
+    return res.report;
+}
+
+/**
+ * Delete a damage report (librarian/admin).
+ */
+export async function deleteDamageReport(
+    id: string | number
+): Promise<void> {
+    type Resp = JsonOk<{ message?: string }>;
+    await requestJSON<Resp>(DAMAGE_ROUTES.delete(id), {
+        method: "DELETE",
+    });
+}

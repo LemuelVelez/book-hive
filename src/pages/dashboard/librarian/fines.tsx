@@ -63,11 +63,11 @@ import {
     type PaymentConfigDTO,
 } from "@/lib/fines";
 
-import { API_BASE } from "@/api/auth/route";
-import type {
-    DamageReportDTO,
-    DamageStatus,
-    DamageSeverity,
+import {
+    fetchDamageReports,
+    type DamageReportDTO,
+    type DamageStatus,
+    type DamageSeverity,
 } from "@/lib/damageReports";
 
 type StatusFilter = "all" | "unresolved" | FineStatus;
@@ -79,8 +79,6 @@ type Severity = DamageSeverity;
 type DamageReportRow = DamageReportDTO & {
     photoUrl?: string | null;
 };
-
-type JsonOk<T> = { ok: true } & T;
 
 type FineRow = FineDTO & {
     /** Where this row came from */
@@ -210,50 +208,10 @@ function suggestedFineFromSeverity(severity?: Severity | null): number {
 
 /* ------------------------ Damage → Fine helpers ------------------------ */
 
-/** Fetch damage reports (same API as in damageReports.tsx) */
+/** Fetch damage reports using the shared damageReports lib */
 async function fetchDamageReportsForFines(): Promise<DamageReportRow[]> {
-    let resp: Response;
-    try {
-        resp = await fetch(`${API_BASE}/api/damage-reports`, {
-            method: "GET",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-        });
-    } catch (e: any) {
-        const details = e?.message ? ` Details: ${e.message}` : "";
-        throw new Error(
-            `Cannot reach the API (${API_BASE}). Is the server running and allowing this origin?${details}`
-        );
-    }
-
-    const ct = resp.headers.get("content-type")?.toLowerCase() || "";
-    const isJson = ct.includes("application/json");
-
-    if (!resp.ok) {
-        if (isJson) {
-            try {
-                const data = (await resp.json()) as any;
-                if (data && typeof data === "object" && typeof data.message === "string") {
-                    throw new Error(data.message);
-                }
-            } catch {
-                /* ignore */
-            }
-        } else {
-            try {
-                const text = await resp.text();
-                if (text) throw new Error(text);
-            } catch {
-                /* ignore */
-            }
-        }
-        throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const data = (isJson ? await resp.json() : null) as JsonOk<{
-        reports: DamageReportRow[];
-    }>;
-    return data.reports ?? [];
+    const reports = await fetchDamageReports();
+    return reports as DamageReportRow[];
 }
 
 /**
@@ -276,7 +234,10 @@ function buildDamageFineRows(
             .map((f) => {
                 const anyFine = f as any;
                 const id =
-                    anyFine.damageReportId ?? anyFine.damageId ?? anyFine.damageReportID ?? null;
+                    anyFine.damageReportId ??
+                    anyFine.damageId ??
+                    anyFine.damageReportID ??
+                    null;
                 return id != null ? String(id) : "";
             })
             .filter(Boolean)
@@ -417,7 +378,8 @@ export default function LibrarianFinesPage() {
             // 1) Real fines from /api/fines (overdue, etc.)
             const fineData = await fetchFines();
 
-            // 2) Damage reports → virtual fines
+            // 2) Damage reports → virtual fines (for damage reports that don't yet
+            //    have a real Fine row created on the backend)
             let damageReports: DamageReportRow[] = [];
             try {
                 damageReports = await fetchDamageReportsForFines();
@@ -529,10 +491,11 @@ export default function LibrarianFinesPage() {
         if (q) {
             rows = rows.filter((f) => {
                 const anyFine = f as any;
-                const haystack = `${f.id} ${f.studentName ?? ""} ${f.studentEmail ?? ""} ${f.studentId ?? ""
-                    } ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.reason ?? ""} ${anyFine.damageReportId ?? ""
-                    } ${anyFine.damageDescription ?? ""} ${anyFine.damageType ?? ""} ${anyFine.damageDetails ?? ""
-                    } ${anyFine.damageNotes ?? ""}`.toLowerCase();
+                const haystack = `${f.id} ${f.studentName ?? ""} ${f.studentEmail ?? ""
+                    } ${f.studentId ?? ""} ${f.bookTitle ?? ""} ${f.bookId ?? ""} ${f.reason ?? ""
+                    } ${anyFine.damageReportId ?? ""} ${anyFine.damageDescription ?? ""
+                    } ${anyFine.damageType ?? ""} ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""
+                    }`.toLowerCase();
                 return haystack.includes(q);
             });
         }
@@ -876,9 +839,9 @@ export default function LibrarianFinesPage() {
                                 !qrFile &&
                                 !paymentSettingsLoading && (
                                     <p className="text-[11px] text-amber-200/90">
-                                        No QR code uploaded yet. Students will still see the e-wallet
-                                        number, but uploading a QR makes it easier for them to pay
-                                        online.
+                                        No QR code uploaded yet. Students will still see the
+                                        e-wallet number, but uploading a QR makes it easier for
+                                        them to pay online.
                                     </p>
                                 )}
                         </div>
@@ -1123,20 +1086,23 @@ export default function LibrarianFinesPage() {
                                                             {fine.borrowDueDate && (
                                                                 <>
                                                                     {" "}
-                                                                    · Due {fmtDate(fine.borrowDueDate)}
+                                                                    · Due{" "}
+                                                                    {fmtDate(fine.borrowDueDate)}
                                                                 </>
                                                             )}
                                                             {fine.borrowReturnDate && (
                                                                 <>
                                                                     {" "}
                                                                     · Returned{" "}
-                                                                    {fmtDate(fine.borrowReturnDate)}
+                                                                    {fmtDate(
+                                                                        fine.borrowReturnDate
+                                                                    )}
                                                                 </>
                                                             )}
                                                         </span>
                                                     )}
 
-                                                    {/* Damage-related info (from damageReports.tsx or backend) */}
+                                                    {/* Damage-related info (from damage reports or backend) */}
                                                     {(damageReportId ||
                                                         damageDescription ||
                                                         damage) && (
@@ -1265,7 +1231,8 @@ export default function LibrarianFinesPage() {
                                                                             min={0}
                                                                             step="0.01"
                                                                             value={
-                                                                                editAmountFineId === fine.id
+                                                                                editAmountFineId ===
+                                                                                    fine.id
                                                                                     ? editAmountValue
                                                                                     : normalizeFine(
                                                                                         fine.amount
@@ -1284,8 +1251,9 @@ export default function LibrarianFinesPage() {
                                                                         <span className="font-semibold">
                                                                             amount of the fine
                                                                         </span>
-                                                                        . Payment status (Active, Pending verification,
-                                                                        Paid, Cancelled) stays the same.
+                                                                        . Payment status (Active,
+                                                                        Pending verification, Paid,
+                                                                        Cancelled) stays the same.
                                                                     </p>
                                                                 </div>
                                                                 <AlertDialogFooter>
@@ -1299,7 +1267,9 @@ export default function LibrarianFinesPage() {
                                                                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
                                                                         disabled={busy}
                                                                         onClick={() =>
-                                                                            void handleUpdateAmount(fine)
+                                                                            void handleUpdateAmount(
+                                                                                fine
+                                                                            )
                                                                         }
                                                                     >
                                                                         {busy ? (
@@ -1321,7 +1291,9 @@ export default function LibrarianFinesPage() {
                                                 {fmtDate(fine.createdAt)}
                                             </TableCell>
                                             <TableCell className="text-xs opacity-80">
-                                                {fine.resolvedAt ? fmtDate(fine.resolvedAt) : "—"}
+                                                {fine.resolvedAt
+                                                    ? fmtDate(fine.resolvedAt)
+                                                    : "—"}
                                             </TableCell>
                                             <TableCell
                                                 className={
@@ -1358,10 +1330,12 @@ export default function LibrarianFinesPage() {
                                                                             <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
                                                                                 <AlertDialogHeader>
                                                                                     <AlertDialogTitle>
-                                                                                        Confirm payment for this fine?
+                                                                                        Confirm payment for this
+                                                                                        fine?
                                                                                     </AlertDialogTitle>
                                                                                     <AlertDialogDescription className="text-white/70">
-                                                                                        This will mark the fine for{" "}
+                                                                                        This will mark the fine
+                                                                                        for{" "}
                                                                                         <span className="font-semibold">
                                                                                             {fine.studentName ||
                                                                                                 fine.studentEmail ||
@@ -1400,12 +1374,16 @@ export default function LibrarianFinesPage() {
                                                                                                 {damageReportId && (
                                                                                                     <>
                                                                                                         Report #
-                                                                                                        {damageReportId}
+                                                                                                        {
+                                                                                                            damageReportId
+                                                                                                        }
                                                                                                         {damageDescription &&
                                                                                                             " · "}
                                                                                                     </>
                                                                                                 )}
-                                                                                                {damageDescription}
+                                                                                                {
+                                                                                                    damageDescription
+                                                                                                }
                                                                                             </p>
                                                                                         )}
                                                                                 </div>
@@ -1470,11 +1448,13 @@ export default function LibrarianFinesPage() {
                                                                                         Reject this payment?
                                                                                     </AlertDialogTitle>
                                                                                     <AlertDialogDescription className="text-white/70">
-                                                                                        This will move the fine back to{" "}
+                                                                                        This will move the fine
+                                                                                        back to{" "}
                                                                                         <span className="font-semibold">
                                                                                             Active (unpaid)
                                                                                         </span>
-                                                                                        . Use this when the reported payment
+                                                                                        . Use this when the
+                                                                                        reported payment
                                                                                         cannot be verified.
                                                                                     </AlertDialogDescription>
                                                                                 </AlertDialogHeader>
@@ -1542,12 +1522,15 @@ export default function LibrarianFinesPage() {
                                                                             <AlertDialogContent className="bg-slate-900 border-white/10 text-white max-h-[80vh] overflow-y-auto">
                                                                                 <AlertDialogHeader>
                                                                                     <AlertDialogTitle>
-                                                                                        Payment proof for fine {fine.id}
+                                                                                        Payment proof for fine{" "}
+                                                                                        {fine.id}
                                                                                     </AlertDialogTitle>
                                                                                     <AlertDialogDescription className="text-white/70">
-                                                                                        Screenshots or receipts uploaded by the
-                                                                                        student will appear below. Use these to
-                                                                                        verify the payment before confirming.
+                                                                                        Screenshots or receipts
+                                                                                        uploaded by the student will
+                                                                                        appear below. Use these to
+                                                                                        verify the payment before
+                                                                                        confirming.
                                                                                     </AlertDialogDescription>
                                                                                 </AlertDialogHeader>
                                                                                 <div className="mt-3 space-y-3">
@@ -1558,52 +1541,63 @@ export default function LibrarianFinesPage() {
                                                                                             Loading proofs…
                                                                                         </div>
                                                                                     ) : proofsForFine.length ? (
-                                                                                        proofsForFine.map((proof) => (
-                                                                                            <div
-                                                                                                key={proof.id}
-                                                                                                className="border border-white/15 rounded-md p-2 bg-black/20"
-                                                                                            >
-                                                                                                <div className="flex items-center justify-between text-[11px] text-white/60 mb-1">
-                                                                                                    <span>
-                                                                                                        Proof #{proof.id}
-                                                                                                    </span>
-                                                                                                    <span>
-                                                                                                        {fmtDateTime(
-                                                                                                            proof.uploadedAt
-                                                                                                        )}
-                                                                                                    </span>
+                                                                                        proofsForFine.map(
+                                                                                            (proof) => (
+                                                                                                <div
+                                                                                                    key={
+                                                                                                        proof.id
+                                                                                                    }
+                                                                                                    className="border border-white/15 rounded-md p-2 bg-black/20"
+                                                                                                >
+                                                                                                    <div className="flex items-center justify-between text-[11px] text-white/60 mb-1">
+                                                                                                        <span>
+                                                                                                            Proof #
+                                                                                                            {proof.id}
+                                                                                                        </span>
+                                                                                                        <span>
+                                                                                                            {fmtDateTime(
+                                                                                                                proof.uploadedAt
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    <div className="text-[11px] text-emerald-200 mb-2">
+                                                                                                        Payment method:{" "}
+                                                                                                        <span className="font-semibold">
+                                                                                                            {formatProofKind(
+                                                                                                                proof.kind
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    <div className="w-full flex justify-center">
+                                                                                                        <img
+                                                                                                            src={
+                                                                                                                proof.imageUrl
+                                                                                                            }
+                                                                                                            alt={`Payment proof ${proof.id}`}
+                                                                                                            className="max-h-80 w-auto object-contain rounded"
+                                                                                                        />
+                                                                                                    </div>
+                                                                                                    <div className="mt-2">
+                                                                                                        <a
+                                                                                                            href={
+                                                                                                                proof.imageUrl
+                                                                                                            }
+                                                                                                            target="_blank"
+                                                                                                            rel="noreferrer"
+                                                                                                            className="text-xs underline text-emerald-300 hover:text-emerald-200"
+                                                                                                        >
+                                                                                                            Open full
+                                                                                                            image
+                                                                                                        </a>
+                                                                                                    </div>
                                                                                                 </div>
-                                                                                                <div className="text-[11px] text-emerald-200 mb-2">
-                                                                                                    Payment method:{" "}
-                                                                                                    <span className="font-semibold">
-                                                                                                        {formatProofKind(
-                                                                                                            proof.kind
-                                                                                                        )}
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                                <div className="w-full flex justify-center">
-                                                                                                    <img
-                                                                                                        src={proof.imageUrl}
-                                                                                                        alt={`Payment proof ${proof.id}`}
-                                                                                                        className="max-h-80 w-auto object-contain rounded"
-                                                                                                    />
-                                                                                                </div>
-                                                                                                <div className="mt-2">
-                                                                                                    <a
-                                                                                                        href={proof.imageUrl}
-                                                                                                        target="_blank"
-                                                                                                        rel="noreferrer"
-                                                                                                        className="text-xs underline text-emerald-300 hover:text-emerald-200"
-                                                                                                    >
-                                                                                                        Open full image
-                                                                                                    </a>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        ))
+                                                                                            )
+                                                                                        )
                                                                                     ) : (
                                                                                         <p className="text-sm text-amber-200/90">
-                                                                                            No payment screenshots have been uploaded
-                                                                                            for this fine yet.
+                                                                                            No payment screenshots
+                                                                                            have been uploaded for
+                                                                                            this fine yet.
                                                                                         </p>
                                                                                     )}
                                                                                 </div>
@@ -1641,13 +1635,14 @@ export default function LibrarianFinesPage() {
                                                                         <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
                                                                             <AlertDialogHeader>
                                                                                 <AlertDialogTitle>
-                                                                                    Mark this fine as paid (over the
-                                                                                    counter)?
+                                                                                    Mark this fine as paid
+                                                                                    (over the counter)?
                                                                                 </AlertDialogTitle>
                                                                                 <AlertDialogDescription className="text-white/70">
-                                                                                    Use this when payment is taken in-person at
-                                                                                    the library counter and you want to record
-                                                                                    the fine as{" "}
+                                                                                    Use this when payment is
+                                                                                    taken in-person at the
+                                                                                    library counter and you
+                                                                                    want to record the fine as{" "}
                                                                                     <span className="font-semibold text-emerald-200">
                                                                                         Paid
                                                                                     </span>
@@ -1680,12 +1675,16 @@ export default function LibrarianFinesPage() {
                                                                                             {damageReportId && (
                                                                                                 <>
                                                                                                     Report #
-                                                                                                    {damageReportId}
+                                                                                                    {
+                                                                                                        damageReportId
+                                                                                                    }
                                                                                                     {damageDescription &&
                                                                                                         " · "}
                                                                                                 </>
                                                                                             )}
-                                                                                            {damageDescription}
+                                                                                            {
+                                                                                                damageDescription
+                                                                                            }
                                                                                         </p>
                                                                                     )}
                                                                             </div>
@@ -1754,10 +1753,12 @@ export default function LibrarianFinesPage() {
                                                                                     <span className="font-semibold">
                                                                                         Cancelled
                                                                                     </span>{" "}
-                                                                                    and set its resolved date to now. Use this
-                                                                                    when the fine has been waived (for example,
-                                                                                    admin decision on an overdue or damage
-                                                                                    fine).
+                                                                                    and set its resolved
+                                                                                    date to now. Use this when
+                                                                                    the fine has been waived
+                                                                                    (for example, admin
+                                                                                    decision on an overdue or
+                                                                                    damage fine).
                                                                                 </AlertDialogDescription>
                                                                             </AlertDialogHeader>
                                                                             <AlertDialogFooter>
@@ -1800,7 +1801,8 @@ export default function LibrarianFinesPage() {
 
                                                             {/* No actions for paid/cancelled */}
                                                             {(fine.status === "paid" ||
-                                                                fine.status === "cancelled") && (
+                                                                fine.status ===
+                                                                "cancelled") && (
                                                                     <Button
                                                                         type="button"
                                                                         size="sm"
