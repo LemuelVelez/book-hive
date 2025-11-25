@@ -62,7 +62,7 @@ import {
     checkStudentIdAvailability,
     // submitSupportTicket,
 } from "@/lib/authentication";
-import { dashboardForRole, type Role } from "@/hooks/use-session";
+import { dashboardForRole, type Role, useSession } from "@/hooks/use-session";
 
 import logo from "@/assets/images/logo.svg";
 
@@ -133,12 +133,23 @@ function sanitizeRedirect(raw: string | null): string | null {
     }
 }
 
+// Helper to compute destination dashboard path for a role
+function resolveDashboardForRole(role: Role): string {
+    // In this auth page we treat student + other as `/dashboard` (shared route),
+    // and use dashboardForRole() for staff roles.
+    if (role === "student" || role === "other") return "/dashboard";
+    return dashboardForRole(role);
+}
+
 // -------------------------
 // Component
 // -------------------------
 export default function AuthPage() {
     const navigate = useNavigate();
     const qs = useQuery();
+
+    // ✅ Session (cached globally, non-blocking)
+    const { user: sessionUser, loading: sessionLoading } = useSession();
 
     // UI state: which tab
     const [activeTab, setActiveTab] = useState<"login" | "register">("login");
@@ -190,11 +201,32 @@ export default function AuthPage() {
 
     // Redirect handling
     const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"));
-    const bootRedirectedRef = useRef(false); // reserved for one-time redirect guard if needed later
+    const bootRedirectedRef = useRef(false); // ensure we only auto-redirect once
 
     // -------------
     // Effects
     // -------------
+
+    // ✅ Auto-redirect users who already HAVE a valid session cookie
+    //    This runs in the background and does NOT block the login form from rendering.
+    useEffect(() => {
+        if (bootRedirectedRef.current) return;
+        if (sessionLoading) return;
+
+        bootRedirectedRef.current = true;
+
+        if (!sessionUser) return;
+
+        const rawRole = (sessionUser.accountType as Role) ?? "student";
+        const dest = redirectParam ?? resolveDashboardForRole(rawRole);
+
+        toast.info("You are already signed in.", {
+            description: "Redirecting to your dashboard…",
+        });
+
+        navigate(dest, { replace: true });
+    }, [sessionLoading, sessionUser, redirectParam, navigate]);
+
     // Load remembered email (if any)
     useEffect(() => {
         try {
@@ -220,11 +252,6 @@ export default function AuthPage() {
         const candidate = (activeTab === "login" ? email : regEmail).trim();
         if (!supEmail && candidate) setSupEmail(candidate);
     }, [activeTab, email, regEmail, supEmail]);
-
-    // Placeholder: keep for future "redirect once boot" logic
-    useEffect(() => {
-        if (bootRedirectedRef.current) return;
-    }, [redirectParam]);
 
     // -------------
     // Handlers
@@ -319,12 +346,8 @@ export default function AuthPage() {
             });
 
             const rawRole = (user.accountType as Role) ?? "student";
-
             const dest =
-                redirectParam ??
-                (rawRole === "student" || rawRole === "other"
-                    ? "/dashboard" // ✅ both student & other → /dashboard
-                    : dashboardForRole(rawRole));
+                redirectParam ?? resolveDashboardForRole(rawRole);
 
             navigate(dest, { replace: true });
         } catch (err: any) {
@@ -509,80 +532,7 @@ export default function AuthPage() {
         setSupSuccess(msg);
         toast.info("Under development", { description: msg });
 
-        // --- Original implementation (temporarily disabled) ---
-        /*
-        setSupError("");
-        setSupSuccess("");
-
-        // Minimal validations
-        if (!supName.trim()) {
-            const msg = "Please enter your name.";
-            setSupError(msg);
-            toast.error("Support ticket error", { description: msg });
-            return;
-        }
-        if (!supEmail.trim() || !supEmail.includes("@")) {
-            const msg = "Please provide a valid email address.";
-            setSupError(msg);
-            toast.error("Support ticket error", { description: msg });
-            return;
-        }
-        if (!supSubject.trim()) {
-            const msg = "Please add a short subject.";
-            setSupError(msg);
-            toast.error("Support ticket error", { description: msg });
-            return;
-        }
-        if (!supMessage.trim()) {
-            const msg = "Please describe your concern.";
-            setSupError(msg);
-            toast.error("Support ticket error", { description: msg });
-            return;
-        }
-        if (!consent) {
-            const msg = "Please allow us to contact you regarding this ticket.";
-            setSupError(msg);
-            toast.error("Support ticket error", { description: msg });
-            return;
-        }
-
-        setSupSubmitting(true);
-        try {
-            // Attach useful context to speed up triage
-            const context: Record<string, unknown> = {
-                page: "auth",
-                activeTab,
-                studentId: studentId || undefined,
-                college: college === "Others" ? customCollege : college || undefined,
-                program: program === "Others" ? customProgram : program || undefined,
-                yearLevel: yearLevel === "Others" ? customYearLevel : yearLevel || undefined,
-            };
-
-            const form = new FormData();
-            form.append("name", supName.trim());
-            form.append("email", supEmail.trim());
-            form.append("category", supCategory);
-            form.append("subject", supSubject.trim());
-            form.append("message", supMessage.trim());
-            form.append("context", JSON.stringify(context));
-            if (supFile) form.append("attachment", supFile, supFile.name);
-
-            const resp = await submitSupportTicket(form);
-            const tid = (resp as any)?.ticketId ? ` #${(resp as any).ticketId}` : "";
-            const successMsg = `Thanks! Your support request has been sent${tid}. We’ll get back to you via email.`;
-            setSupSuccess(successMsg);
-            toast.success("Support ticket sent", { description: successMsg });
-            resetSupport();
-        } catch (err: any) {
-            const msg =
-                err?.message ||
-                "Something went wrong while sending your request.";
-            setSupError(msg);
-            toast.error("Support ticket failed", { description: msg });
-        } finally {
-            setSupSubmitting(false);
-        }
-        */
+        // (Full implementation commented out)
     };
 
     // -------------------------

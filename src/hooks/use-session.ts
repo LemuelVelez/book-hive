@@ -27,22 +27,67 @@ export function dashboardForRole(
   }
 }
 
-/** Hook: fetch current session once */
+/* ------------------------------------------------------------------
+   Global session cache so we DON'T keep calling /api/auth/me
+   from every component that uses useSession().
+------------------------------------------------------------------- */
+
+let cachedUser: UserDTO | null = null
+let hasResolved = false
+let inFlight: Promise<UserDTO | null> | null = null
+
+async function fetchSessionOnce(): Promise<UserDTO | null> {
+  // If we've already resolved a session in this tab, reuse it
+  if (hasResolved) return cachedUser
+
+  // If a request is already in flight, reuse that promise
+  if (!inFlight) {
+    inFlight = apiMe()
+      .then((u) => {
+        cachedUser = u
+        hasResolved = true
+        return u
+      })
+      .catch(() => {
+        cachedUser = null
+        hasResolved = true
+        return null
+      })
+      .finally(() => {
+        inFlight = null
+      })
+  }
+
+  return inFlight
+}
+
+/** Hook: fetch current session once per browser tab (cached) */
 export function useSession(): { loading: boolean; user: UserDTO | null } {
-  const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<UserDTO | null>(null)
+  // Start with cached values (if any)
+  const [user, setUser] = useState<UserDTO | null>(cachedUser)
+  const [loading, setLoading] = useState(!hasResolved)
 
   useEffect(() => {
     let cancelled = false
 
-    ;(async () => {
-      try {
-        const u = await apiMe()
-        if (!cancelled) setUser(u)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
+    // If we already know the session, sync the state and bail
+    if (hasResolved) {
+      setUser(cachedUser)
+      setLoading(false)
+      return
+    }
+
+    fetchSessionOnce()
+      .then((u) => {
+        if (cancelled) return
+        setUser(u)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setUser(null)
+        setLoading(false)
+      })
 
     return () => {
       cancelled = true
@@ -50,4 +95,11 @@ export function useSession(): { loading: boolean; user: UserDTO | null } {
   }, [])
 
   return { loading, user }
+}
+
+/** Optional helper: call this after logout if you want to reset the cache */
+export function clearSessionCache() {
+  cachedUser = null
+  hasResolved = false
+  inFlight = null
 }
