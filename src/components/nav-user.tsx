@@ -29,6 +29,7 @@ import {
 import { toast } from "sonner"
 import { me as apiMe, logout as apiLogout, type UserDTO } from "@/lib/authentication"
 import { Loader2 } from "lucide-react"
+import { clearSessionCache } from "@/hooks/use-session"
 
 /** ---------- small helpers ---------- */
 function initialsFrom(fullName?: string | null, email?: string | null) {
@@ -107,7 +108,16 @@ export function NavUser() {
     async function onLogoutConfirmed() {
         try {
             setLoggingOut(true)
+
+            // 🔐 Clear all auth caches so other components (like /auth guards)
+            // don't see a stale "logged-in" user after logout.
             await apiLogout() // server clears session/cookie
+            clearSessionCache() // global useSession cache
+            cachedUser = null   // local NavUser cache
+            cachedUserLoaded = false
+            setUser(null)
+            setLoading(false)
+
             toast.success("You’ve been logged out.")
             // Hard-close any open UI before navigating
             setMenuOpen(false)
@@ -261,7 +271,7 @@ export function NavUser() {
                     <DropdownMenuContent
                         align="start"
                         side="top"
-                        className="w=[220px] bg-slate-900 text-white border-white/10"
+                        className="w-[220px] bg-slate-900 text-white border-white/10"
                     >
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex items-center gap-2">
