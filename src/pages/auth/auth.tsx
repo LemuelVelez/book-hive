@@ -62,7 +62,12 @@ import {
     checkStudentIdAvailability,
     // submitSupportTicket,
 } from "@/lib/authentication";
-import { dashboardForRole, type Role, useSession } from "@/hooks/use-session";
+import {
+    dashboardForRole,
+    type Role,
+    useSession,
+    setSessionUser,
+} from "@/hooks/use-session";
 
 import logo from "@/assets/images/logo.svg";
 
@@ -325,6 +330,9 @@ export default function AuthPage() {
             const resp = await apiLogin(email, password);
             const user = resp.user;
 
+            // ✅ update global session cache so dashboard guards see the new session
+            setSessionUser(user);
+
             // Persist remember-me choice after a successful login
             try {
                 if (rememberMe) {
@@ -532,7 +540,7 @@ export default function AuthPage() {
         setSupSuccess(msg);
         toast.info("Under development", { description: msg });
 
-        // (Full implementation commented out)
+        // (Full implementation is commented out)
     };
 
     // -------------------------
@@ -1100,7 +1108,7 @@ export default function AuthPage() {
                                                         )
                                                     }
                                                 >
-                                                    <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
+                                                    <SelectTrigger className="bg-slate-900/70 border-white/10 text:white">
                                                         <SelectValue placeholder="Select account type" />
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-slate-900 text-white border-white/10">

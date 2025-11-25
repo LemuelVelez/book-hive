@@ -97,7 +97,14 @@ export function useSession(): { loading: boolean; user: UserDTO | null } {
   return { loading, user }
 }
 
-/** Optional helper: call this after logout if you want to reset the cache */
+/** ✅ Called after LOGIN to update the global cache immediately */
+export function setSessionUser(u: UserDTO | null) {
+  cachedUser = u
+  hasResolved = true
+  inFlight = null
+}
+
+/** Optional helper: call this after LOGOUT if you want to reset the cache */
 export function clearSessionCache() {
   cachedUser = null
   hasResolved = false
