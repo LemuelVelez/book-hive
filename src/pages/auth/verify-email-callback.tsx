@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 
 import logo from "@/assets/images/logo.svg";
+import { ROUTES } from "@/api/auth/route"; // ✅ use API_BASE / ROUTES instead of hardcoded /api path
 
 // -------------------------
 // Lightweight query helper
@@ -93,15 +94,15 @@ export default function VerifyEmailCallbackPage() {
                 return;
             }
 
-            setLoading(true);
-
-            const verify = async () => {
-                const resp = await fetch("/api/auth/verify-email/confirm", {
+            // ✅ Use the API route helper so it works in production (Vercel → Render)
+            const verifyRequest = async () => {
+                const resp = await fetch(ROUTES.auth.verifyConfirm, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
                     body: JSON.stringify({ token }),
                 });
+
                 if (!resp.ok) {
                     const data = await resp.json().catch(() => ({}));
                     throw new Error(
@@ -109,17 +110,23 @@ export default function VerifyEmailCallbackPage() {
                         "We couldn't verify your email. The link may have expired."
                     );
                 }
+
                 return true;
             };
 
-            toast.promise(verify(), {
+            setLoading(true);
+
+            // Call once, but share between toast and local state
+            const promise = verifyRequest();
+
+            toast.promise(promise, {
                 loading: "Verifying email…",
                 success: "Email verified",
                 error: (err: any) => err?.message || "Verification failed",
             });
 
             try {
-                await verify();
+                await promise;
                 const msg = "Your email has been verified successfully.";
                 setSuccess(msg);
                 toast.success("You can now log in.", {
