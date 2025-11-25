@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 
 import logo from "@/assets/images/logo.svg";
-import { ROUTES } from "@/api/auth/route"; // ✅ use API_BASE / ROUTES instead of hardcoded /api path
+import { ROUTES } from "@/api/auth/route"; // ✅ use API routes helper
 
 // -------------------------
 // Lightweight query helper
@@ -47,7 +47,8 @@ export default function VerifyEmailCallbackPage() {
                 case "expired":
                     return "This verification link has expired. Please request a new one.";
                 case "used":
-                    return "This verification link has already been used.";
+                    // For legacy redirects that pass reason=used
+                    return "This verification link has already been used. Your email may already be verified.";
                 case "invalid":
                     return "This verification link is invalid.";
                 case "missing":
@@ -94,7 +95,11 @@ export default function VerifyEmailCallbackPage() {
                 return;
             }
 
-            // ✅ Use the API route helper so it works in production (Vercel → Render)
+            // Helper to detect the "already used" case
+            const isAlreadyUsedMessage = (msg: string) =>
+                /token already used/i.test(msg);
+
+            // ✅ Use backend URL from ROUTES so this works in production
             const verifyRequest = async () => {
                 const resp = await fetch(ROUTES.auth.verifyConfirm, {
                     method: "POST",
@@ -105,10 +110,10 @@ export default function VerifyEmailCallbackPage() {
 
                 if (!resp.ok) {
                     const data = await resp.json().catch(() => ({}));
-                    throw new Error(
-                        data?.message ||
-                        "We couldn't verify your email. The link may have expired."
-                    );
+                    const msg =
+                        (data && (data as any).message) ||
+                        "We couldn't verify your email. The link may have expired.";
+                    throw new Error(msg);
                 }
 
                 return true;
@@ -116,19 +121,26 @@ export default function VerifyEmailCallbackPage() {
 
             setLoading(true);
 
-            // Call once, but share between toast and local state
+            // ❗ Call the verify API ONCE, share the same promise between toast & state
             const promise = verifyRequest();
 
             toast.promise(promise, {
                 loading: "Verifying email…",
                 success: "Email verified",
-                error: (err: any) => err?.message || "Verification failed",
+                error: (err: any) => {
+                    const raw = err?.message || "Verification failed";
+                    if (isAlreadyUsedMessage(raw)) {
+                        return "Email already verified";
+                    }
+                    return raw;
+                },
             });
 
             try {
                 await promise;
                 const msg = "Your email has been verified successfully.";
                 setSuccess(msg);
+                setError("");
                 toast.success("You can now log in.", {
                     action: {
                         label: "Go to login",
@@ -136,7 +148,24 @@ export default function VerifyEmailCallbackPage() {
                     },
                 });
             } catch (e: any) {
-                setError(e?.message || "Something went wrong. Please try again.");
+                const raw = e?.message || "Something went wrong. Please try again.";
+
+                if (isAlreadyUsedMessage(raw)) {
+                    // ✅ UX fix: treat this as SUCCESS, not an error
+                    const msg =
+                        "Your email is already verified. You can now log in.";
+                    setSuccess(msg);
+                    setError("");
+                    toast.success("Email already verified", {
+                        description: msg,
+                        action: {
+                            label: "Go to login",
+                            onClick: () => navigate("/auth"),
+                        },
+                    });
+                } else {
+                    setError(raw);
+                }
             } finally {
                 setLoading(false);
             }
@@ -164,7 +193,9 @@ export default function VerifyEmailCallbackPage() {
                         alt="JRMSU-TC Book-Hive logo"
                         className="h-10 w-10 rounded-md object-contain"
                     />
-                    <span className="hidden md:inline font-semibold">JRMSU-TC Book-Hive</span>
+                    <span className="hidden md:inline font-semibold">
+                        JRMSU-TC Book-Hive
+                    </span>
                 </Link>
             </header>
 
@@ -179,12 +210,16 @@ export default function VerifyEmailCallbackPage() {
                             className="h-32 w-32 mx-auto mb-4 rounded-xl object-contain"
                         />
                         <h1 className="text-2xl font-bold">JRMSU-TC Book-Hive</h1>
-                        <p className="text-white/70">Library Borrowing & Reservation Platform</p>
+                        <p className="text-white/70">
+                            Library Borrowing & Reservation Platform
+                        </p>
                     </div>
 
                     <Card className="border-white/10 bg-slate-800/60 backdrop-blur">
                         <CardHeader>
-                            <CardTitle className="text-white">Verifying your email…</CardTitle>
+                            <CardTitle className="text-white">
+                                Verifying your email…
+                            </CardTitle>
                             <CardDescription>
                                 {success
                                     ? "Your address is verified."
