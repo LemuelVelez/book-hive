@@ -11,10 +11,12 @@ export type Role = UserDTO["accountType"]
 /** Map a role to its dashboard route */
 export function dashboardForRole(
   role: Role
-): "/dashboard/student" | "/dashboard/librarian" | "/dashboard/faculty" | "/dashboard/admin" {
+): "/dashboard" | "/dashboard/librarian" | "/dashboard/faculty" | "/dashboard/admin" {
   switch (role) {
     case "student":
-      return "/dashboard/student"
+    case "other":
+      // Student & "other" share the same dashboard route
+      return "/dashboard"
     case "librarian":
       return "/dashboard/librarian"
     case "faculty":
@@ -22,8 +24,8 @@ export function dashboardForRole(
     case "admin":
       return "/dashboard/admin"
     default:
-      // Fallback if an unknown/other role logs in
-      return "/dashboard/student"
+      // Fallback if an unknown role logs in
+      return "/dashboard"
   }
 }
 

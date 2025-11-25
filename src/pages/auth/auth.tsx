@@ -1655,7 +1655,7 @@ export default function AuthPage() {
                                 </CardContent>
 
                                 {/* Subtle link back to login */}
-                                <CardFooter className="flex justify-center border-t border-white/10">
+                                <CardFooter className="flex justify-center border-white/10">
                                     <p className="text-sm text-gray-300">
                                         Already have an account?{" "}
                                         <button
