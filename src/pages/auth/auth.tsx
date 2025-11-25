@@ -357,7 +357,7 @@ export default function AuthPage() {
         }
     };
 
-    // POST: /api/auth/register (+ best-effort email verification)
+    // POST: /api/auth/register (+ backend sends verification email)
     const triggerRegister = async () => {
         setRegError("");
 
@@ -449,14 +449,7 @@ export default function AuthPage() {
 
             await apiRegister(payload as any);
 
-            // Kick off verification email; best-effort (non-blocking)
-            try {
-                await apiResendVerifyEmail(regEmail.trim());
-            } catch (e) {
-                // ignore background email errors
-                noop(e);
-            }
-
+            // Backend already creates a verification token and sends the email.
             toast.success("Account created", {
                 description: "We sent a verification link to your email.",
             });
