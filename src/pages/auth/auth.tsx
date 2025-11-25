@@ -354,15 +354,15 @@ export default function AuthPage() {
             });
 
             const rawRole = (user.accountType as Role) ?? "student";
-            const dest =
-                redirectParam ?? resolveDashboardForRole(rawRole);
+            const dest = redirectParam ?? resolveDashboardForRole(rawRole);
 
             navigate(dest, { replace: true });
         } catch (err: any) {
-            const msg = String(err?.message || "Login failed. Please try again.");
+            const rawMsg = String(err?.message || "Login failed. Please try again.");
 
             // Handle "email not verified" specifically — route to verify page
-            const looksUnverified = /verify/i.test(msg) || /not\s*verified/i.test(msg);
+            const looksUnverified =
+                /verify/i.test(rawMsg) || /not\s*verified/i.test(rawMsg);
             if (looksUnverified) {
                 toast.warning("Email not verified", {
                     description: "We’ve sent a verification link. Please verify to continue.",
@@ -381,8 +381,44 @@ export default function AuthPage() {
                 return;
             }
 
-            setLoginError(msg);
-            toast.error("Login failed", { description: msg });
+            // ✅ Friendlier handling for "user not found"
+            const isUserNotFound =
+                /user not found/i.test(rawMsg) ||
+                /account not found/i.test(rawMsg) ||
+                /no account/i.test(rawMsg);
+
+            if (isUserNotFound) {
+                const msg =
+                    "No account found with that email. You might need to register first or use Forgot password if you created an account before.";
+                setLoginError(msg);
+                toast.error("Account not found", {
+                    description:
+                        "We couldn't find an account with that email. Try registering or resetting your password.",
+                });
+                setIsLoggingIn(false);
+                return;
+            }
+
+            // ✅ Friendlier handling for invalid credentials / forgot password
+            const isInvalidCreds =
+                /invalid email or password/i.test(rawMsg) ||
+                /invalid credentials/i.test(rawMsg);
+
+            if (isInvalidCreds) {
+                const msg =
+                    "Incorrect email or password. If you’ve forgotten your password, click “Forgot password?” to reset it.";
+                setLoginError(msg);
+                toast.error("Incorrect credentials", {
+                    description:
+                        "Double-check your email and password, or use the Forgot password link to reset it.",
+                });
+                setIsLoggingIn(false);
+                return;
+            }
+
+            // Fallback for any other server error
+            setLoginError(rawMsg);
+            toast.error("Login failed", { description: rawMsg });
         } finally {
             setIsLoggingIn(false);
         }
