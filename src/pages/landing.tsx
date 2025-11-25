@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
     ArrowRight,
     Calendar,
-    Bell,
     Clock,
     ShieldCheck,
     Search,
@@ -165,105 +164,107 @@ export default function LandingPage() {
                 <div className="absolute top-1/3 -left-10 h-72 w-md rounded-full bg-pink-600/20 blur-3xl" />
             </div>
 
-            {/* Header */}
-            <header className="container mx-auto px-4 py-5">
-                <nav className="flex items-center justify-between">
-                    <Link to="/" className="flex items-center gap-2 group">
-                        <img
-                            src={logo}
-                            alt="JRMSU-TC Book-Hive logo"
-                            className="h-10 w-10 rounded-md object-contain"
-                        />
-                        <span className="font-semibold tracking-tight group-hover:text-white/90">
-                            JRMSU-TC Book-Hive
-                        </span>
-                    </Link>
+            {/* Header (sticky) */}
+            <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10">
+                <div className="container mx-auto px-4 py-5">
+                    <nav className="flex items-center justify-between">
+                        <Link to="/" className="flex items-center gap-2 group">
+                            <img
+                                src={logo}
+                                alt="JRMSU-TC Book-Hive logo"
+                                className="h-10 w-10 rounded-md object-contain"
+                            />
+                            <span className="font-semibold tracking-tight group-hover:text-white/90">
+                                JRMSU-TC Book-Hive
+                            </span>
+                        </Link>
 
-                    {/* Desktop nav */}
-                    <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
-                        <a href="#features" className="hover:text-white">
-                            Features
-                        </a>
-                        <a href="#how-it-works" className="hover:text-white">
-                            How it works
-                        </a>
-                        <a href="#faq" className="hover:text-white">
-                            FAQ
-                        </a>
-                    </div>
+                        {/* Desktop nav */}
+                        <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
+                            <a href="#features" className="hover:text-white">
+                                Features
+                            </a>
+                            <a href="#how-it-works" className="hover:text-white">
+                                How it works
+                            </a>
+                            <a href="#faq" className="hover:text-white">
+                                FAQ
+                            </a>
+                        </div>
 
-                    {/* Desktop CTA */}
-                    <div className="hidden md:flex items-center gap-3">
-                        {!isAuthed ? (
-                            <Button
-                                className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                                onClick={() => navigate('/auth')}
-                            >
-                                Login / Register
-                            </Button>
-                        ) : (
-                            <Button
-                                className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                                onClick={() => navigate(dashboardHref)}
-                            >
-                                Go to Dashboard
-                            </Button>
-                        )}
-                    </div>
-
-                    {/* Mobile: Sheet menu (slides from TOP, contains Login/Register or Dashboard) */}
-                    <div className="md:hidden">
-                        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-                            <SheetTrigger asChild>
+                        {/* Desktop CTA */}
+                        <div className="hidden md:flex items-center gap-3">
+                            {!isAuthed ? (
                                 <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="rounded-xl group"
-                                    aria-expanded={sheetOpen}
+                                    className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                    onClick={() => navigate('/auth')}
                                 >
-                                    <Menu
-                                        className={[
-                                            'h-6 w-6 transform transition-transform duration-300',
-                                            'group-hover:scale-110',
-                                            sheetOpen ? 'rotate-90 scale-110' : 'rotate-0',
-                                        ].join(' ')}
-                                    />
-                                    <span className="sr-only">Open menu</span>
+                                    Login / Register
                                 </Button>
-                            </SheetTrigger>
+                            ) : (
+                                <Button
+                                    className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                    onClick={() => navigate(dashboardHref)}
+                                >
+                                    Go to Dashboard
+                                </Button>
+                            )}
+                        </div>
 
-                            <SheetContent
-                                side="top"
-                                className="w-full p-6 sm:p-8 bg-slate-900 border-white/10 text-white rounded-b-2xl"
-                            >
-                                <div className="w-full">
-                                    <div className="mb-4 space-y-2 text-sm text-white/80">
-                                        <a href="#features" className="block hover:text-white">
-                                            Features
-                                        </a>
-                                        <a href="#how-it-works" className="block hover:text-white">
-                                            How it works
-                                        </a>
-                                        <a href="#faq" className="block hover:text-white">
-                                            FAQ
-                                        </a>
+                        {/* Mobile: Sheet menu (slides from TOP, contains Login/Register or Dashboard) */}
+                        <div className="md:hidden">
+                            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+                                <SheetTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="rounded-xl group"
+                                        aria-expanded={sheetOpen}
+                                    >
+                                        <Menu
+                                            className={[
+                                                'h-6 w-6 transform transition-transform duration-300',
+                                                'group-hover:scale-110',
+                                                sheetOpen ? 'rotate-90 scale-110' : 'rotate-0',
+                                            ].join(' ')}
+                                        />
+                                        <span className="sr-only">Open menu</span>
+                                    </Button>
+                                </SheetTrigger>
+
+                                <SheetContent
+                                    side="top"
+                                    className="w-full p-6 sm:p-8 bg-slate-900 border-white/10 text-white rounded-b-2xl"
+                                >
+                                    <div className="w-full">
+                                        <div className="mb-4 space-y-2 text-sm text-white/80">
+                                            <a href="#features" className="block hover:text-white">
+                                                Features
+                                            </a>
+                                            <a href="#how-it-works" className="block hover:text-white">
+                                                How it works
+                                            </a>
+                                            <a href="#faq" className="block hover:text-white">
+                                                FAQ
+                                            </a>
+                                        </div>
+
+                                        <SheetClose asChild>
+                                            <Button
+                                                className="text-white w-full cursor-pointer mt-2 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                                onClick={() =>
+                                                    navigate(isAuthed ? dashboardHref : '/auth')
+                                                }
+                                            >
+                                                {isAuthed ? 'Go to Dashboard' : 'Login / Register'}
+                                            </Button>
+                                        </SheetClose>
                                     </div>
-
-                                    <SheetClose asChild>
-                                        <Button
-                                            className="text-white w-full cursor-pointer mt-2 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                                            onClick={() =>
-                                                navigate(isAuthed ? dashboardHref : '/auth')
-                                            }
-                                        >
-                                            {isAuthed ? 'Go to Dashboard' : 'Login / Register'}
-                                        </Button>
-                                    </SheetClose>
-                                </div>
-                            </SheetContent>
-                        </Sheet>
-                    </div>
-                </nav>
+                                </SheetContent>
+                            </Sheet>
+                        </div>
+                    </nav>
+                </div>
             </header>
 
             {/* Hero */}
@@ -275,16 +276,14 @@ export default function LandingPage() {
                             <span className="text-transparent bg-clip-text bg-linear-to-r from-purple-400 to-pink-400">
                                 online
                             </span>{' '}
-                            and skip the queue.
+                            and save time.
                         </h1>
                         <p className="mt-4 text-white/80 text-lg">
                             Book-Hive is JRMSU-TC’s web-based library platform for{' '}
                             <span className="font-semibold">
-                                real-time availability, reservations, smart queuing
+                                real-time availability and online reservations
                             </span>
-                            , and{' '}
-                            <span className="font-semibold">notifications</span>. Find, reserve,
-                            and pick up your books with ease.
+                            . Find, reserve, and pick up your books with ease.
                         </p>
 
                         <div className="mt-8 flex flex-wrap gap-3">
@@ -322,10 +321,10 @@ export default function LandingPage() {
                                 <ShieldCheck className="h-4 w-4" /> Secure accounts
                             </li>
                             <li className="flex items-center gap-2">
-                                <Clock className="h-4 w-4" /> Reduced waiting time
+                                <Clock className="h-4 w-4" /> Fast reservations
                             </li>
                             <li className="flex items-center gap-2">
-                                <Bell className="h-4 w-4" /> Timely reminders
+                                <Search className="h-4 w-4" /> Easy catalog search
                             </li>
                         </ul>
                     </div>
@@ -361,22 +360,17 @@ export default function LandingPage() {
                     <FeatureCard
                         icon={Calendar}
                         title="Reserve Ahead"
-                        description="Book your copy online and pick it up at your chosen time—no more long lines."
+                        description="Book your copy online and pick it up at your chosen time."
                     />
                     <FeatureCard
                         icon={ListChecks}
-                        title="Smart Queue"
-                        description="Join queues digitally and track your turn from your phone or laptop."
-                    />
-                    <FeatureCard
-                        icon={Bell}
-                        title="Reminders & Notices"
-                        description="Get notified about reservations, due dates, and returned items."
+                        title="Borrowing Management"
+                        description="See which books you’ve borrowed and when they’re due in one place."
                     />
                     <FeatureCard
                         icon={QrCode}
-                        title="QR-Based Pick-up"
-                        description="Present your QR code at the counter for quick verification and release."
+                        title="Student ID Verification"
+                        description="Present your student ID at the counter for quick verification and release."
                     />
                     <FeatureCard
                         icon={ShieldCheck}
@@ -403,13 +397,13 @@ export default function LandingPage() {
                         />
                         <StepItem
                             number={3}
-                            title="Get Notified"
-                            description="Receive confirmation and pick-up details via notifications."
+                            title="Confirm Reservation"
+                            description="Review your reservation details and pickup schedule in the app."
                         />
                         <StepItem
                             number={4}
                             title="Pick Up & Borrow"
-                            description="Show your QR at the counter and enjoy your book."
+                            description="Show your student ID at the counter and enjoy your book."
                             isLast
                         />
                     </div>
@@ -421,7 +415,7 @@ export default function LandingPage() {
                 <div className="text-center">
                     <SectionHeading
                         title="Ready to get started?"
-                        description="Experience shorter queues, clearer availability, and smoother borrowing."
+                        description="Experience easier access, clearer availability, and smoother borrowing."
                         className="mb-6"
                     />
                     <Button
@@ -447,8 +441,7 @@ export default function LandingPage() {
                             Do I need to visit the library to complete a reservation?
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-4 text-white/70">
-                            Reserve online; you’ll only visit to pick up or return the item. You’ll
-                            receive reminders for due dates.
+                            Reserve online; you’ll only visit to pick up or return the item.
                         </AccordionContent>
                     </AccordionItem>
 
@@ -460,8 +453,7 @@ export default function LandingPage() {
                             Can I see if a book is currently borrowed?
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-4 text-white/70">
-                            Yes. Availability is shown in real time. If a title is out, you can join
-                            the waitlist and get notified.
+                            Yes. Availability is shown in real time, and you can borrow the book once it becomes available again.
                         </AccordionContent>
                     </AccordionItem>
                 </Accordion>
