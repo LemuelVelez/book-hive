@@ -255,11 +255,18 @@ export default function StudentCirculationPage() {
             </p>
             <p className="mt-1 text-[11px] text-amber-200/90">
               Books <span className="font-semibold">cannot be auto-returned</span>. When
-              you request a return, the status becomes{" "}
-              <span className="font-semibold">Pending verification</span>. A
-              librarian must verify the{" "}
+              you{" "}
+              <span className="font-semibold">borrow a book online</span> or{" "}
+              <span className="font-semibold">request a return</span>, the status
+              becomes{" "}
+              <span className="font-semibold">
+                Pending
+              </span>
+              . A librarian must verify the{" "}
               <span className="font-semibold">physical book</span> before it
-              changes to <span className="font-semibold">Returned</span>.
+              changes to{" "}
+              <span className="font-semibold">Borrowed</span> or{" "}
+              <span className="font-semibold">Returned</span>.
             </p>
             <p className="mt-1 text-[11px] text-emerald-200/90">
               To <span className="font-semibold">pay any fines</span>, use your{" "}
@@ -316,7 +323,7 @@ export default function StudentCirculationPage() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by title…"
-                  className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                  className="pl-9 bg-slate-900/70 border-white/20 text:white"
                 />
               </div>
 
@@ -476,7 +483,7 @@ export default function StudentCirculationPage() {
                           <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
                             <span className="inline-flex items-center gap-1">
                               <Clock3 className="h-3 w-3" />
-                              Pending verification
+                              Pending
                             </span>
                           </Badge>
                         ) : isOverdue ? (
@@ -567,12 +574,11 @@ export default function StudentCirculationPage() {
                                   request for{" "}
                                   <span className="font-semibold text-white">
                                     “
-                                    {record.bookTitle ??
-                                      `Book #${record.bookId}`}”
+                                    {record.bookTitle ?? `Book #${record.bookId}`}”
                                   </span>
                                   . The status will change to{" "}
                                   <span className="font-semibold text-amber-200">
-                                    Pending verification
+                                    Pending
                                   </span>
                                   .
                                 </AlertDialogDescription>
@@ -645,7 +651,7 @@ export default function StudentCirculationPage() {
                             disabled
                             className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
                           >
-                            Pending verification
+                            Pending
                           </Button>
                         ) : (
                           <Button

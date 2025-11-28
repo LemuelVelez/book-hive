@@ -50,6 +50,7 @@ import {
   fetchBorrowRecords,
   markBorrowReturned,
   updateBorrowDueDate,
+  markBorrowAsBorrowed,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -132,7 +133,11 @@ export default function LibrarianBorrowRecordsPage() {
     "all" | "borrowed" | "returned"
   >("all");
 
-  // --- Return dialog state (for marking as returned / verifying pending) ---
+  const [markBorrowBusyId, setMarkBorrowBusyId] = React.useState<string | null>(
+    null
+  );
+
+  // --- Return dialog state (for marking as returned) ---
   const [returnDialogOpen, setReturnDialogOpen] = React.useState(false);
   const [selectedRecord, setSelectedRecord] =
     React.useState<BorrowRecordDTO | null>(null);
@@ -191,7 +196,7 @@ export default function LibrarianBorrowRecordsPage() {
   }
 
   /**
-   * Open dialog to mark a record as returned (for pending).
+   * Open dialog to mark a record as returned.
    * Auto-compute fine (if overdue), but allow librarian to edit it.
    */
   function openReturnDialog(rec: BorrowRecordDTO) {
@@ -212,6 +217,26 @@ export default function LibrarianBorrowRecordsPage() {
     setReturnDialogOpen(false);
     setSelectedRecord(null);
     setSubmittingReturn(false);
+  }
+
+  async function handleMarkBorrowed(rec: BorrowRecordDTO) {
+    setMarkBorrowBusyId(rec.id);
+    try {
+      const updated = await markBorrowAsBorrowed(rec.id);
+
+      setRecords((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
+
+      toast.success("Marked as borrowed", {
+        description: `Record #${updated.id} is now marked as Borrowed.`,
+      });
+    } catch (err: any) {
+      const msg = err?.message || "Failed to mark as borrowed.";
+      toast.error("Update failed", { description: msg });
+    } finally {
+      setMarkBorrowBusyId(null);
+    }
   }
 
   async function handleConfirmReturn() {
@@ -337,12 +362,14 @@ export default function LibrarianBorrowRecordsPage() {
             </p>
             <p className="mt-1 text-[11px] text-amber-200/90">
               For{" "}
-              <span className="font-semibold">pending verification</span>{" "}
-              records, use this page to confirm the{" "}
-              <span className="font-semibold">physical return</span>, auto-
-              compute fines, and mark them as{" "}
-              <span className="font-semibold">Returned</span>. This will keep
-              the student&apos;s circulation status in sync.
+              <span className="font-semibold">pending pickup</span> records,
+              use this page to confirm that the student has received the{" "}
+              <span className="font-semibold">physical book</span> and mark
+              the status as{" "}
+              <span className="font-semibold">Borrowed</span>. When the book
+              is returned, use this page to mark it as{" "}
+              <span className="font-semibold">Returned</span> and finalize any
+              fines.
             </p>
             <p className="mt-1 text-[11px] text-emerald-200/90">
               The amount you finalize here becomes the{" "}
@@ -454,19 +481,19 @@ export default function LibrarianBorrowRecordsPage() {
                     <TableHead className="text-xs font-semibold text-white/70">
                       Borrow Date
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70">
+                    <TableHead className="text-xs font-semibold text:white/70">
                       Due Date
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70">
+                    <TableHead className="text-xs font-semibold text:white/70">
                       Return Date
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70">
+                    <TableHead className="text-xs font-semibold text:white/70">
                       Status
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70 text-right">
+                    <TableHead className="text-xs font-semibold text:white/70 text-right">
                       ₱Fine
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70 text-right">
+                    <TableHead className="text-xs font-semibold text:white/70 text-right">
                       Actions
                     </TableHead>
                   </TableRow>
@@ -530,7 +557,7 @@ export default function LibrarianBorrowRecordsPage() {
                             <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
                               <span className="inline-flex items-center gap-1">
                                 <Clock3 className="h-3 w-3" />
-                                Pending verification
+                                Pending pickup
                               </span>
                             </Badge>
                           ) : isOverdue ? (
@@ -594,8 +621,27 @@ export default function LibrarianBorrowRecordsPage() {
                                 <span>Edit due date</span>
                               </Button>
 
-                              {/* Only show verify button for pending records */}
                               {isPending && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                  onClick={() => handleMarkBorrowed(rec)}
+                                  disabled={markBorrowBusyId === rec.id}
+                                >
+                                  {markBorrowBusyId === rec.id ? (
+                                    <span className="inline-flex items-center gap-1">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      <span>Marking…</span>
+                                    </span>
+                                  ) : (
+                                    "Confirm pickup → Mark borrowed"
+                                  )}
+                                </Button>
+                              )}
+
+                              {isBorrowed && (
                                 <Button
                                   type="button"
                                   size="sm"
@@ -603,7 +649,7 @@ export default function LibrarianBorrowRecordsPage() {
                                   className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
                                   onClick={() => openReturnDialog(rec)}
                                 >
-                                  Verify &amp; mark returned
+                                  Mark as returned
                                 </Button>
                               )}
                             </div>
@@ -637,11 +683,7 @@ export default function LibrarianBorrowRecordsPage() {
         {selectedRecord && (
           <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
             <AlertDialogHeader>
-              <AlertDialogTitle>
-                {selectedRecord.status === "pending"
-                  ? "Verify and mark as returned?"
-                  : "Mark as returned?"}
-              </AlertDialogTitle>
+              <AlertDialogTitle>Mark as returned?</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
                 You&apos;re about to mark{" "}
                 <span className="font-semibold text-white">

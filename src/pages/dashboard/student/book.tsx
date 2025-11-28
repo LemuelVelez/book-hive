@@ -30,6 +30,7 @@ import {
     CheckCircle2,
     CircleOff,
     Clock3,
+    AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -94,6 +95,28 @@ function peso(n: number) {
     }
 }
 
+/**
+ * Compute how many full days a book is overdue based on due date and today
+ * in the local timezone. Returns 0 if not overdue or if the date is invalid.
+ */
+function computeOverdueDays(d?: string | null) {
+    if (!d) return 0;
+    const due = new Date(d);
+    if (Number.isNaN(due.getTime())) return 0;
+
+    const now = new Date();
+    const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const todayLocal = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+    );
+
+    const diffMs = todayLocal.getTime() - dueLocal.getTime();
+    const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return rawDays > 0 ? rawDays : 0;
+}
+
 export default function StudentBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [myRecords, setMyRecords] = React.useState<BorrowRecordDTO[]>([]);
@@ -142,7 +165,9 @@ export default function StudentBooksPage() {
         const byBook: BookWithStatus[] = books.map((book) => {
             const recordsForBook = myRecords.filter((r) => r.bookId === book.id);
             const activeRecord =
-                recordsForBook.find((r) => r.status === "borrowed") ?? null;
+                recordsForBook.find(
+                    (r) => r.status === "borrowed" || r.status === "pending"
+                ) ?? null;
             const lastRecord = recordsForBook[0] ?? null;
 
             const myStatus: "never" | "active" | "returned" = activeRecord
@@ -212,8 +237,8 @@ export default function StudentBooksPage() {
         setBorrowBusyId(book.id);
         try {
             const record = await createSelfBorrow(book.id);
-            toast.success("Book borrowed", {
-                description: `"${book.title}" has been borrowed. Due on ${fmtDate(
+            toast.success("Borrow request submitted", {
+                description: `"${book.title}" is now pending pickup. Due date: ${fmtDate(
                     record.dueDate
                 )}.`,
             });
@@ -296,7 +321,7 @@ export default function StudentBooksPage() {
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         placeholder="Search by title, author, ISBN…"
-                                        className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                                        className="pl-9 bg-slate-900/70 border-white/20 text:white"
                                     />
                                 </div>
 
@@ -326,6 +351,14 @@ export default function StudentBooksPage() {
                                 </div>
                             </div>
                         </div>
+
+                        <p className="mt-2 text-[11px] text-white/60">
+                            When you borrow a book online, its status starts as{" "}
+                            <span className="font-semibold text-amber-200">Pending</span>{" "}
+                            until a librarian confirms pickup. After confirmation it will
+                            appear as{" "}
+                            <span className="font-semibold text-emerald-200">Borrowed</span>.
+                        </p>
                     </CardHeader>
 
                     <CardContent>
@@ -372,7 +405,7 @@ export default function StudentBooksPage() {
                                                 <TableHead className="text-xs font-semibold text-white/70">
                                                     Author
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
+                                                <TableHead className="text-xs font-semibold text:white/70">
                                                     ISBN
                                                 </TableHead>
                                                 <TableHead className="text-xs font-semibold text-white/70">
@@ -400,11 +433,21 @@ export default function StudentBooksPage() {
                                             {rows.map((book) => {
                                                 const { myStatus, activeRecord, lastRecord } = book;
 
-                                                // Due date for the current user (only meaningful when actively borrowed)
-                                                const myDueDate =
-                                                    myStatus === "active" && activeRecord
-                                                        ? fmtDate(activeRecord.dueDate)
-                                                        : "—";
+                                                const isPendingPickup =
+                                                    activeRecord?.status === "pending";
+                                                const isBorrowedActive =
+                                                    activeRecord?.status === "borrowed";
+                                                const overdueDays =
+                                                    activeRecord &&
+                                                        (isPendingPickup || isBorrowedActive)
+                                                        ? computeOverdueDays(activeRecord.dueDate)
+                                                        : 0;
+                                                const isOverdue =
+                                                    isBorrowedActive && overdueDays > 0;
+
+                                                const myDueDate = activeRecord
+                                                    ? fmtDate(activeRecord.dueDate)
+                                                    : "—";
 
                                                 return (
                                                     <TableRow
@@ -442,7 +485,7 @@ export default function StudentBooksPage() {
                                                                 variant={book.available ? "default" : "outline"}
                                                                 className={
                                                                     book.available
-                                                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
+                                                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text:white border-emerald-400/80"
                                                                         : "border-red-400/70 text-red-200 hover:bg-red-500/10"
                                                                 }
                                                             >
@@ -482,22 +525,83 @@ export default function StudentBooksPage() {
                                                                 </span>
                                                             )}
 
-                                                            {myStatus === "active" && activeRecord && (
+                                                            {myStatus !== "never" && activeRecord && (
                                                                 <>
-                                                                    <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                        <Clock3 className="h-3 w-3 shrink-0" />
-                                                                        <span>
-                                                                            Borrowed by you · Borrowed:{" "}
-                                                                            <span className="font-medium">
-                                                                                {fmtDate(activeRecord.borrowDate)}
-                                                                            </span>
-                                                                            {" · "}
-                                                                            Due:{" "}
-                                                                            <span className="font-medium">
-                                                                                {fmtDate(activeRecord.dueDate)}
+                                                                    {isPendingPickup && (
+                                                                        <span className="inline-flex items-center gap-1 text-amber-200">
+                                                                            <Clock3 className="h-3 w-3 shrink-0" />
+                                                                            <span>
+                                                                                Pending pickup · Reserved on{" "}
+                                                                                <span className="font-medium">
+                                                                                    {fmtDate(
+                                                                                        activeRecord.borrowDate
+                                                                                    )}
+                                                                                </span>
+                                                                                {" · "}
+                                                                                Due:{" "}
+                                                                                <span className="font-medium">
+                                                                                    {fmtDate(
+                                                                                        activeRecord.dueDate
+                                                                                    )}
+                                                                                </span>
                                                                             </span>
                                                                         </span>
-                                                                    </span>
+                                                                    )}
+
+                                                                    {!isPendingPickup &&
+                                                                        isOverdue &&
+                                                                        isBorrowedActive && (
+                                                                            <span className="inline-flex items-center gap-1 text-red-300">
+                                                                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                                                                <span>
+                                                                                    Overdue · Borrowed:{" "}
+                                                                                    <span className="font-medium">
+                                                                                        {fmtDate(
+                                                                                            activeRecord.borrowDate
+                                                                                        )}
+                                                                                    </span>
+                                                                                    {" · "}
+                                                                                    Due:{" "}
+                                                                                    <span className="font-medium">
+                                                                                        {fmtDate(
+                                                                                            activeRecord.dueDate
+                                                                                        )}
+                                                                                    </span>
+                                                                                    {" · "}
+                                                                                    <span className="font-semibold">
+                                                                                        {overdueDays} day
+                                                                                        {overdueDays === 1
+                                                                                            ? ""
+                                                                                            : "s"}{" "}
+                                                                                        overdue
+                                                                                    </span>
+                                                                                </span>
+                                                                            </span>
+                                                                        )}
+
+                                                                    {!isPendingPickup &&
+                                                                        !isOverdue &&
+                                                                        isBorrowedActive && (
+                                                                            <span className="inline-flex items-center gap-1 text-amber-200">
+                                                                                <Clock3 className="h-3 w-3 shrink-0" />
+                                                                                <span>
+                                                                                    Borrowed by you · Borrowed:{" "}
+                                                                                    <span className="font-medium">
+                                                                                        {fmtDate(
+                                                                                            activeRecord.borrowDate
+                                                                                        )}
+                                                                                    </span>
+                                                                                    {" · "}
+                                                                                    Due:{" "}
+                                                                                    <span className="font-medium">
+                                                                                        {fmtDate(
+                                                                                            activeRecord.dueDate
+                                                                                        )}
+                                                                                    </span>
+                                                                                </span>
+                                                                            </span>
+                                                                        )}
+
                                                                     {activeRecord.fine > 0 && (
                                                                         <span className="ml-3 text-red-300">
                                                                             Fine: {peso(activeRecord.fine)}
@@ -506,17 +610,21 @@ export default function StudentBooksPage() {
                                                                 </>
                                                             )}
 
-                                                            {myStatus === "returned" && lastRecord && (
-                                                                <span className="inline-flex items-center gap-1 text-white/70">
-                                                                    <CheckCircle2 className="h-3 w-3 text-emerald-300 shrink-0" />
-                                                                    <span>
-                                                                        Returned · Last returned:{" "}
-                                                                        <span className="font-medium">
-                                                                            {fmtDate(lastRecord.returnDate)}
+                                                            {myStatus === "returned" &&
+                                                                lastRecord &&
+                                                                !activeRecord && (
+                                                                    <span className="inline-flex items-center gap-1 text-white/70">
+                                                                        <CheckCircle2 className="h-3 w-3 text-emerald-300 shrink-0" />
+                                                                        <span>
+                                                                            Returned · Last returned:{" "}
+                                                                            <span className="font-medium">
+                                                                                {fmtDate(
+                                                                                    lastRecord.returnDate
+                                                                                )}
+                                                                            </span>
                                                                         </span>
                                                                     </span>
-                                                                </span>
-                                                            )}
+                                                                )}
                                                         </TableCell>
 
                                                         {/* Action – also gets its own horizontal scrollbar */}
@@ -534,7 +642,9 @@ export default function StudentBooksPage() {
                                                                             type="button"
                                                                             size="sm"
                                                                             className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                                                                            disabled={borrowBusyId === book.id}
+                                                                            disabled={
+                                                                                borrowBusyId === book.id
+                                                                            }
                                                                         >
                                                                             Borrow
                                                                         </Button>
@@ -588,14 +698,20 @@ export default function StudentBooksPage() {
                                                                         <AlertDialogFooter>
                                                                             <AlertDialogCancel
                                                                                 className="border-white/20 text-white hover:bg-black/20"
-                                                                                disabled={borrowBusyId === book.id}
+                                                                                disabled={
+                                                                                    borrowBusyId === book.id
+                                                                                }
                                                                             >
                                                                                 Cancel
                                                                             </AlertDialogCancel>
                                                                             <AlertDialogAction
                                                                                 className="bg-purple-600 hover:bg-purple-700 text-white"
-                                                                                disabled={borrowBusyId === book.id}
-                                                                                onClick={() => void handleBorrow(book)}
+                                                                                disabled={
+                                                                                    borrowBusyId === book.id
+                                                                                }
+                                                                                onClick={() =>
+                                                                                    void handleBorrow(book)
+                                                                                }
                                                                             >
                                                                                 {borrowBusyId === book.id ? (
                                                                                     <span className="inline-flex items-center gap-2">
@@ -609,15 +725,55 @@ export default function StudentBooksPage() {
                                                                         </AlertDialogFooter>
                                                                     </AlertDialogContent>
                                                                 </AlertDialog>
-                                                            ) : myStatus === "active" ? (
+                                                            ) : activeRecord &&
+                                                                (isPendingPickup || isBorrowedActive) ? (
                                                                 <span className="inline-flex flex-col items-end text-xs text-amber-200">
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <Clock3 className="h-3 w-3" />
-                                                                        Borrowed by you
-                                                                    </span>
-                                                                    <span className="text-white/60">
-                                                                        Claim the physical book from the librarian.
-                                                                    </span>
+                                                                    {isPendingPickup && (
+                                                                        <>
+                                                                            <span className="inline-flex items-center gap-1">
+                                                                                <Clock3 className="h-3 w-3" />
+                                                                                Pending pickup
+                                                                            </span>
+                                                                            <span className="text-white/60">
+                                                                                Go to the librarian to
+                                                                                receive the physical book.
+                                                                            </span>
+                                                                        </>
+                                                                    )}
+                                                                    {isBorrowedActive && !isOverdue && (
+                                                                        <>
+                                                                            <span className="inline-flex items-center gap-1">
+                                                                                <Clock3 className="h-3 w-3" />
+                                                                                Borrowed by you
+                                                                            </span>
+                                                                            <span className="text-white/60">
+                                                                                Due on{" "}
+                                                                                <span className="font-semibold">
+                                                                                    {myDueDate}
+                                                                                </span>
+                                                                                .
+                                                                            </span>
+                                                                        </>
+                                                                    )}
+                                                                    {isBorrowedActive && isOverdue && (
+                                                                        <>
+                                                                            <span className="inline-flex items-center gap-1 text-red-300">
+                                                                                <AlertTriangle className="h-3 w-3" />
+                                                                                Overdue
+                                                                            </span>
+                                                                            <span className="text-white/60">
+                                                                                Overdue by{" "}
+                                                                                <span className="font-semibold">
+                                                                                    {overdueDays} day
+                                                                                    {overdueDays === 1
+                                                                                        ? ""
+                                                                                        : "s"}
+                                                                                </span>
+                                                                                . Please return the
+                                                                                book as soon as possible.
+                                                                            </span>
+                                                                        </>
+                                                                    )}
                                                                 </span>
                                                             ) : (
                                                                 <Button
@@ -638,17 +794,28 @@ export default function StudentBooksPage() {
                                     </Table>
                                 </div>
 
-                                {/* MOBILE: row-level layout (unchanged) */}
+                                {/* MOBILE: row-level layout */}
                                 <div className="md:hidden space-y-3 mt-2">
                                     <p className="text-[11px] text-white/60 px-1">
                                         Swipe sideways inside each row to see full details.
                                     </p>
                                     {rows.map((book) => {
                                         const { myStatus, activeRecord, lastRecord } = book;
-                                        const myDueDate =
-                                            myStatus === "active" && activeRecord
-                                                ? fmtDate(activeRecord.dueDate)
-                                                : "—";
+                                        const isPendingPickup =
+                                            activeRecord?.status === "pending";
+                                        const isBorrowedActive =
+                                            activeRecord?.status === "borrowed";
+                                        const overdueDays =
+                                            activeRecord &&
+                                                (isPendingPickup || isBorrowedActive)
+                                                ? computeOverdueDays(activeRecord.dueDate)
+                                                : 0;
+                                        const isOverdue =
+                                            isBorrowedActive && overdueDays > 0;
+
+                                        const myDueDate = activeRecord
+                                            ? fmtDate(activeRecord.dueDate)
+                                            : "—";
 
                                         return (
                                             <div
@@ -691,45 +858,126 @@ export default function StudentBooksPage() {
                                                     {myStatus === "never" && (
                                                         <span>Not yet borrowed</span>
                                                     )}
-                                                    {myStatus === "active" && activeRecord && (
-                                                        <span>
-                                                            <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                <Clock3 className="h-3 w-3" />
-                                                                Borrowed by you
-                                                            </span>
-                                                            <br />
-                                                            Borrowed:{" "}
-                                                            <span className="font-medium">
-                                                                {fmtDate(activeRecord.borrowDate)}
-                                                            </span>
-                                                            {" · "}
-                                                            Due:{" "}
-                                                            <span className="font-medium">
-                                                                {fmtDate(activeRecord.dueDate)}
-                                                            </span>
-                                                            {activeRecord.fine > 0 && (
-                                                                <>
-                                                                    <br />
-                                                                    <span className="text-red-300">
-                                                                        Current fine: {peso(activeRecord.fine)}
+                                                    {activeRecord && (
+                                                        <>
+                                                            {isPendingPickup && (
+                                                                <span>
+                                                                    <span className="inline-flex items-center gap-1 text-amber-200">
+                                                                        <Clock3 className="h-3 w-3" />
+                                                                        Pending pickup
                                                                     </span>
-                                                                </>
+                                                                    <br />
+                                                                    Reserved on:{" "}
+                                                                    <span className="font-medium">
+                                                                        {fmtDate(
+                                                                            activeRecord.borrowDate
+                                                                        )}
+                                                                    </span>
+                                                                    {" · "}
+                                                                    Due:{" "}
+                                                                    <span className="font-medium">
+                                                                        {fmtDate(
+                                                                            activeRecord.dueDate
+                                                                        )}
+                                                                    </span>
+                                                                </span>
                                                             )}
-                                                        </span>
+                                                            {!isPendingPickup &&
+                                                                isOverdue &&
+                                                                isBorrowedActive && (
+                                                                    <span>
+                                                                        <span className="inline-flex items-center gap-1 text-red-300">
+                                                                            <AlertTriangle className="h-3 w-3" />
+                                                                            Overdue
+                                                                        </span>
+                                                                        <br />
+                                                                        Borrowed:{" "}
+                                                                        <span className="font-medium">
+                                                                            {fmtDate(
+                                                                                activeRecord.borrowDate
+                                                                            )}
+                                                                        </span>
+                                                                        {" · "}
+                                                                        Due:{" "}
+                                                                        <span className="font-medium">
+                                                                            {fmtDate(
+                                                                                activeRecord.dueDate
+                                                                            )}
+                                                                        </span>
+                                                                        <br />
+                                                                        Overdue by{" "}
+                                                                        <span className="font-semibold">
+                                                                            {overdueDays} day
+                                                                            {overdueDays === 1
+                                                                                ? ""
+                                                                                : "s"}
+                                                                        </span>
+                                                                        .
+                                                                        {activeRecord.fine > 0 && (
+                                                                            <>
+                                                                                <br />
+                                                                                <span className="text-red-300">
+                                                                                    Current fine:{" "}
+                                                                                    {peso(
+                                                                                        activeRecord.fine
+                                                                                    )}
+                                                                                </span>
+                                                                            </>
+                                                                        )}
+                                                                    </span>
+                                                                )}
+                                                            {!isPendingPickup &&
+                                                                !isOverdue &&
+                                                                isBorrowedActive && (
+                                                                    <span>
+                                                                        <span className="inline-flex items-center gap-1 text-amber-200">
+                                                                            <Clock3 className="h-3 w-3" />
+                                                                            Borrowed by you
+                                                                        </span>
+                                                                        <br />
+                                                                        Borrowed:{" "}
+                                                                        <span className="font-medium">
+                                                                            {fmtDate(
+                                                                                activeRecord.borrowDate
+                                                                            )}
+                                                                        </span>
+                                                                        {" · "}
+                                                                        Due:{" "}
+                                                                        <span className="font-medium">
+                                                                            {fmtDate(
+                                                                                activeRecord.dueDate
+                                                                            )}
+                                                                        </span>
+                                                                        {activeRecord.fine > 0 && (
+                                                                            <>
+                                                                                <br />
+                                                                                <span className="text-red-300">
+                                                                                    Current fine:{" "}
+                                                                                    {peso(
+                                                                                        activeRecord.fine
+                                                                                    )}
+                                                                                </span>
+                                                                            </>
+                                                                        )}
+                                                                    </span>
+                                                                )}
+                                                        </>
                                                     )}
-                                                    {myStatus === "returned" && lastRecord && (
-                                                        <span>
-                                                            <span className="inline-flex items-center gap-1 text-emerald-200">
-                                                                <CheckCircle2 className="h-3 w-3" />
-                                                                Returned
+                                                    {myStatus === "returned" &&
+                                                        lastRecord &&
+                                                        !activeRecord && (
+                                                            <span>
+                                                                <span className="inline-flex items-center gap-1 text-emerald-200">
+                                                                    <CheckCircle2 className="h-3 w-3" />
+                                                                    Returned
+                                                                </span>
+                                                                <br />
+                                                                Last returned:{" "}
+                                                                <span className="font-medium">
+                                                                    {fmtDate(lastRecord.returnDate)}
+                                                                </span>
                                                             </span>
-                                                            <br />
-                                                            Last returned:{" "}
-                                                            <span className="font-medium">
-                                                                {fmtDate(lastRecord.returnDate)}
-                                                            </span>
-                                                        </span>
-                                                    )}
+                                                        )}
                                                 </div>
 
                                                 {/* Row-level horizontal scroll with details */}
@@ -864,15 +1112,53 @@ export default function StudentBooksPage() {
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
                                                         </AlertDialog>
-                                                    ) : myStatus === "active" ? (
+                                                    ) : activeRecord &&
+                                                        (isPendingPickup || isBorrowedActive) ? (
                                                         <span className="inline-flex flex-col items-end text-xs text-amber-200">
-                                                            <span className="inline-flex items-center gap-1">
-                                                                <Clock3 className="h-3 w-3" />
-                                                                Borrowed by you
-                                                            </span>
-                                                            <span className="text-white/60">
-                                                                Claim the physical book from the librarian.
-                                                            </span>
+                                                            {isPendingPickup && (
+                                                                <>
+
+                                                                    <span className="inline-flex items-center gap-1">
+                                                                        <Clock3 className="h-3 w-3" />
+                                                                        Pending pickup
+                                                                    </span>
+                                                                    <span className="text-white/60">
+                                                                        Go to the librarian to receive the physical
+                                                                        book.
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                            {isBorrowedActive && !isOverdue && (
+                                                                <>
+                                                                    <span className="inline-flex items-center gap-1">
+                                                                        <Clock3 className="h-3 w-3" />
+                                                                        Borrowed by you
+                                                                    </span>
+                                                                    <span className="text-white/60">
+                                                                        Due on{" "}
+                                                                        <span className="font-semibold">
+                                                                            {myDueDate}
+                                                                        </span>
+                                                                        .
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                            {isBorrowedActive && isOverdue && (
+                                                                <>
+                                                                    <span className="inline-flex items-center gap-1 text-red-300">
+                                                                        <AlertTriangle className="h-3 w-3" />
+                                                                        Overdue
+                                                                    </span>
+                                                                    <span className="text-white/60">
+                                                                        Overdue by{" "}
+                                                                        <span className="font-semibold">
+                                                                            {overdueDays} day
+                                                                            {overdueDays === 1 ? "" : "s"}
+                                                                        </span>
+                                                                        . Please return the book as soon as possible.
+                                                                    </span>
+                                                                </>
+                                                            )}
                                                         </span>
                                                     ) : (
                                                         <Button

@@ -143,7 +143,9 @@ export async function createBorrowRecord(
 
 /**
  * Student self-service borrow: userId is taken from the session on the server.
- * Server will now use the per-book borrow_duration_days to compute dueDate.
+ * Server will compute dueDate based on per-book borrow_duration_days.
+ * We explicitly start new self-borrows in "pending" status so that a librarian
+ * must confirm physical pickup (via markBorrowAsBorrowed) before it becomes "borrowed".
  */
 export async function createSelfBorrow(
     bookId: string | number
@@ -151,7 +153,7 @@ export async function createSelfBorrow(
     type Resp = JsonOk<{ record: BorrowRecordDTO }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.createSelf, {
         method: "POST",
-        body: { bookId },
+        body: { bookId, status: "pending" },
     });
     return res.record;
 }
@@ -170,6 +172,25 @@ export async function requestBorrowReturn(
         method: "PATCH",
         body: {
             status: "pending",
+        },
+    });
+    return res.record;
+}
+
+/**
+ * Librarian/Admin action: confirm that the student has physically
+ * received the book.
+ * - Sets status to "borrowed"
+ * - Keeps existing borrowDate / dueDate / fine values.
+ */
+export async function markBorrowAsBorrowed(
+    id: string | number
+): Promise<BorrowRecordDTO> {
+    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {
+        method: "PATCH",
+        body: {
+            status: "borrowed",
         },
     });
     return res.record;
