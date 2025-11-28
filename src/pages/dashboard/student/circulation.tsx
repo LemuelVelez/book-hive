@@ -92,6 +92,29 @@ function normalizeFine(value: any): number {
   return Number.isNaN(num) ? 0 : num;
 }
 
+/**
+ * Compute overdue days based purely on due date vs today (local),
+ * same behavior as the librarian view.
+ */
+function computeOverdueDays(dueDate?: string | null): number {
+  if (!dueDate) return 0;
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return 0;
+
+  const now = new Date();
+
+  const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const todayLocal = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+
+  const diffMs = todayLocal.getTime() - dueLocal.getTime();
+  const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return rawDays > 0 ? rawDays : 0;
+}
+
 export default function StudentCirculationPage() {
   const [records, setRecords] = React.useState<BorrowRecordDTO[]>([]);
   const [fines, setFines] = React.useState<FineDTO[]>([]);
@@ -441,8 +464,8 @@ export default function StudentCirculationPage() {
                     : fineAmountFromRecord;
 
                   const isActiveBorrow = isBorrowed || isAnyPending;
-                  const isOverdue =
-                    isActiveBorrow && finalFineAmount > 0;
+                  const overdueDays = computeOverdueDays(record.dueDate);
+                  const isOverdue = isActiveBorrow && overdueDays > 0;
 
                   return (
                     <TableRow
@@ -507,6 +530,17 @@ export default function StudentCirculationPage() {
                       >
                         <div className="flex flex-col items-start gap-0.5">
                           <span>{peso(finalFineAmount)}</span>
+
+                          {/* Overdue & still active → show accruing fine notice */}
+                          {isActiveBorrow &&
+                            isOverdue &&
+                            finalFineAmount > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                                Accruing overdue fine ({peso(finalFineAmount)})
+                              </span>
+                            )}
+
                           {linkedFine && linkedFine.status === "active" && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
