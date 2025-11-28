@@ -959,7 +959,9 @@ export default function LibrarianBorrowRecordsPage() {
         }}
       >
         {dueRecord && (
-          <AlertDialogContent className="bg-slate-900 border-white/10 text:white">
+          <AlertDialogContent
+            className="bg-slate-900 border-white/10 text:white max-h-[80vh] overflow-y-auto md:max-h-none md:overflow-visible"
+          >
             <AlertDialogHeader>
               <AlertDialogTitle>Edit due date</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
