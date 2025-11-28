@@ -27,10 +27,6 @@ import {
 import { fetchBooks, type BookDTO } from "@/lib/books"
 import { createSelfBorrow } from "@/lib/borrows"
 
-// Simple module-level cache so we only call /api/auth/me once per page load
-let cachedUser: any | null = null
-let cachedUserLoaded = false
-
 /**
  * Format a date string as YYYY-MM-DD in the *local* timezone
  * to avoid off-by-one issues from UTC conversions.
@@ -52,7 +48,9 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const location = useLocation()
     const pathname = location.pathname
 
-    const [user, setUser] = React.useState<any | null>(cachedUser)
+    // user === undefined -> still loading
+    // user === null      -> not logged in or failed to load
+    const [user, setUser] = React.useState<any | null | undefined>(undefined)
 
     // Quick-reserve dialog state
     const [reserveOpen, setReserveOpen] = React.useState(false)
@@ -61,24 +59,22 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const [books, setBooks] = React.useState<BookDTO[]>([])
     const [selectedBookId, setSelectedBookId] = React.useState<string>("")
 
+    // ✅ Always fetch the *current* user when the header mounts.
+    // No module-level cache – this avoids stale roles after logging in as
+    // a different account without a full page refresh.
     React.useEffect(() => {
-        // If we've already loaded user once, reuse it (no flicker on route changes)
-        if (cachedUserLoaded) return
-
         let cancelled = false
 
             ; (async () => {
                 try {
                     const u = await apiMe()
                     if (!cancelled) {
-                        cachedUser = u
-                        cachedUserLoaded = true
                         setUser(u)
                     }
                 } catch {
                     // silently ignore – header will just not show the name
                     if (!cancelled) {
-                        cachedUserLoaded = true
+                        setUser(null)
                     }
                 }
             })()
@@ -110,8 +106,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
     }
 
+    // Prefer the real user role, fall back to inferred role from the path
     const rawRole =
-        (user?.accountType as string | undefined) ?? inferRoleFromPath(pathname)
+        (user?.accountType as string | undefined) ??
+        (user?.role as string | undefined) ??
+        inferRoleFromPath(pathname)
+
     const roleLabel = formatRole(rawRole)
 
     const displayName =
@@ -151,7 +151,8 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                     }
                 } catch (err: any) {
                     const msg =
-                        err?.message || "Failed to load books for reservation. Please try again."
+                        err?.message ||
+                        "Failed to load books for reservation. Please try again."
                     toast.error("Failed to load books", { description: msg })
                 } finally {
                     if (!cancelled) {
