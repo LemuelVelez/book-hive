@@ -2,7 +2,12 @@
 import { BORROW_ROUTES } from "@/api/borrows/route";
 import { API_BASE } from "@/api/auth/route";
 
-export type BorrowStatus = "borrowed" | "pending" | "returned";
+export type BorrowStatus =
+    | "borrowed"
+    | "pending"          // legacy
+    | "pending_pickup"   // student reserved online, not yet picked up
+    | "pending_return"   // student requested return; waiting for librarian
+    | "returned";
 
 export type BorrowRecordDTO = {
     id: string;
@@ -144,8 +149,8 @@ export async function createBorrowRecord(
 /**
  * Student self-service borrow: userId is taken from the session on the server.
  * Server will compute dueDate based on per-book borrow_duration_days.
- * We explicitly start new self-borrows in "pending" status so that a librarian
- * must confirm physical pickup (via markBorrowAsBorrowed) before it becomes "borrowed".
+ * We now always start self-borrows in "pending_pickup" on the server so that a
+ * librarian must confirm physical pickup before it becomes "borrowed".
  */
 export async function createSelfBorrow(
     bookId: string | number
@@ -153,14 +158,14 @@ export async function createSelfBorrow(
     type Resp = JsonOk<{ record: BorrowRecordDTO }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.createSelf, {
         method: "POST",
-        body: { bookId, status: "pending" },
+        body: { bookId },
     });
     return res.record;
 }
 
 /**
  * Student online action: request to return a book.
- * - Sets status to "pending"
+ * - Sets status to "pending_return"
  * - Does NOT change return_date
  * - The book remains unavailable until a librarian marks it as "returned".
  */
@@ -171,7 +176,7 @@ export async function requestBorrowReturn(
     const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {
         method: "PATCH",
         body: {
-            status: "pending",
+            status: "pending_return",
         },
     });
     return res.record;

@@ -41,10 +41,7 @@ import {
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
-import {
-  fetchMyFines,
-  type FineDTO,
-} from "@/lib/fines";
+import { fetchMyFines, type FineDTO } from "@/lib/fines";
 
 import {
   AlertDialog,
@@ -69,8 +66,7 @@ function fmtDate(d?: string | null) {
   try {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return d;
-    // en-CA -> 2025-11-13 (YYYY-MM-DD)
-    return date.toLocaleDateString("en-CA");
+    return date.toLocaleDateString("en-CA"); // 2025-11-13
   } catch {
     return d;
   }
@@ -145,10 +141,8 @@ export default function StudentCirculationPage() {
     let rows = [...records];
 
     if (statusFilter === "borrowed") {
-      // Treat both "borrowed" and "pending" as active borrows for filtering
-      rows = rows.filter(
-        (r) => r.status === "borrowed" || r.status === "pending"
-      );
+      // "Active" = anything that is not returned
+      rows = rows.filter((r) => r.status !== "returned");
     } else if (statusFilter === "returned") {
       rows = rows.filter((r) => r.status === "returned");
     }
@@ -167,10 +161,7 @@ export default function StudentCirculationPage() {
   }, [records, statusFilter, search]);
 
   const activeBorrows = React.useMemo(
-    () =>
-      records.filter(
-        (r) => r.status === "borrowed" || r.status === "pending"
-      ),
+    () => records.filter((r) => r.status !== "returned"),
     [records]
   );
 
@@ -200,9 +191,11 @@ export default function StudentCirculationPage() {
     if (record.status !== "borrowed") {
       toast.info("Return request not needed", {
         description:
-          record.status === "pending"
+          record.status === "pending_return" || record.status === "pending"
             ? "This book already has a pending return request."
-            : "This book is already marked as returned.",
+            : record.status === "pending_pickup"
+              ? "This book is still pending pickup. Please get the book from the librarian first."
+              : "This book is already marked as returned.",
       });
       return;
     }
@@ -254,15 +247,14 @@ export default function StudentCirculationPage() {
               and send online return requests.
             </p>
             <p className="mt-1 text-[11px] text-amber-200/90">
-              Books <span className="font-semibold">cannot be auto-returned</span>. When
-              you{" "}
+              Books{" "}
+              <span className="font-semibold">cannot be auto-returned</span>.
+              When you{" "}
               <span className="font-semibold">borrow a book online</span> or{" "}
-              <span className="font-semibold">request a return</span>, the status
-              becomes{" "}
-              <span className="font-semibold">
-                Pending
-              </span>
-              . A librarian must verify the{" "}
+              <span className="font-semibold">request a return</span>, the
+              status becomes{" "}
+              <span className="font-semibold">Pending</span>. A librarian must
+              verify the{" "}
               <span className="font-semibold">physical book</span> before it
               changes to{" "}
               <span className="font-semibold">Borrowed</span> or{" "}
@@ -270,8 +262,8 @@ export default function StudentCirculationPage() {
             </p>
             <p className="mt-1 text-[11px] text-emerald-200/90">
               To <span className="font-semibold">pay any fines</span>, use your{" "}
-              <span className="font-semibold">Fines</span> page, where you can upload
-              payment receipts and track verification.
+              <span className="font-semibold">Fines</span> page, where you can
+              upload payment receipts and track verification.
             </p>
           </div>
         </div>
@@ -354,10 +346,10 @@ export default function StudentCirculationPage() {
               request a return
             </span>{" "}
             for books that are still{" "}
-            <span className="font-semibold text-amber-200">Borrowed</span>. Once
-            requested, the status becomes{" "}
-            <span className="font-semibold text-amber-200">Pending</span> until a
-            librarian confirms the physical return.
+            <span className="font-semibold text-amber-200">Borrowed</span>.
+            Once requested, the status becomes{" "}
+            <span className="font-semibold text-amber-200">Pending</span>{" "}
+            until a librarian confirms the physical return.
           </p>
           <p className="mt-1 text-[11px] text-white/60">
             Returned rows with the{" "}
@@ -432,9 +424,13 @@ export default function StudentCirculationPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map((record) => {
+                  const isReturned = record.status === "returned";
                   const isBorrowed = record.status === "borrowed";
-                  const isPending = record.status === "pending";
-                  const isActiveBorrow = isBorrowed || isPending;
+                  const isPendingPickup = record.status === "pending_pickup";
+                  const isPendingReturn = record.status === "pending_return";
+                  const isLegacyPending = record.status === "pending";
+                  const isAnyPending =
+                    isPendingPickup || isPendingReturn || isLegacyPending;
 
                   const linkedFine = finesByBorrowId[record.id];
                   const fineAmountFromRecord = normalizeFine(
@@ -444,6 +440,7 @@ export default function StudentCirculationPage() {
                     ? normalizeFine(linkedFine.amount)
                     : fineAmountFromRecord;
 
+                  const isActiveBorrow = isBorrowed || isAnyPending;
                   const isOverdue =
                     isActiveBorrow && finalFineAmount > 0;
 
@@ -472,14 +469,14 @@ export default function StudentCirculationPage() {
                         {fmtDate(record.returnDate)}
                       </TableCell>
                       <TableCell>
-                        {record.status === "returned" ? (
+                        {isReturned ? (
                           <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
                             <span className="inline-flex items-center gap-1">
                               <CheckCircle2 className="h-3 w-3" />
                               Returned
                             </span>
                           </Badge>
-                        ) : isPending ? (
+                        ) : isAnyPending ? (
                           <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
                             <span className="inline-flex items-center gap-1">
                               <Clock3 className="h-3 w-3" />
@@ -543,8 +540,7 @@ export default function StudentCirculationPage() {
                           cellScrollbarClasses
                         }
                       >
-                        {/* Borrow-related actions only */}
-                        {record.status === "borrowed" ? (
+                        {isBorrowed ? (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
@@ -574,7 +570,8 @@ export default function StudentCirculationPage() {
                                   request for{" "}
                                   <span className="font-semibold text-white">
                                     “
-                                    {record.bookTitle ?? `Book #${record.bookId}`}”
+                                    {record.bookTitle ??
+                                      `Book #${record.bookId}`}”
                                   </span>
                                   . The status will change to{" "}
                                   <span className="font-semibold text-amber-200">
@@ -592,7 +589,9 @@ export default function StudentCirculationPage() {
                                   {fmtDate(record.borrowDate)}
                                 </p>
                                 <p>
-                                  <span className="text-white/60">Due date:</span>{" "}
+                                  <span className="text-white/60">
+                                    Due date:
+                                  </span>{" "}
                                   {fmtDate(record.dueDate)}
                                 </p>
                                 <p className="text-xs text-white/70">
@@ -629,7 +628,9 @@ export default function StudentCirculationPage() {
                                 <AlertDialogAction
                                   className="bg-purple-600 hover:bg-purple-700 text-white"
                                   disabled={returnBusyId === record.id}
-                                  onClick={() => void handleRequestReturn(record)}
+                                  onClick={() =>
+                                    void handleRequestReturn(record)
+                                  }
                                 >
                                   {returnBusyId === record.id ? (
                                     <span className="inline-flex items-center gap-2">
@@ -643,7 +644,7 @@ export default function StudentCirculationPage() {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                        ) : record.status === "pending" ? (
+                        ) : isPendingReturn || isLegacyPending ? (
                           <Button
                             type="button"
                             size="sm"
@@ -651,7 +652,17 @@ export default function StudentCirculationPage() {
                             disabled
                             className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
                           >
-                            Pending
+                            Pending return
+                          </Button>
+                        ) : record.status === "pending_pickup" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
+                          >
+                            Pending pickup
                           </Button>
                         ) : (
                           <Button

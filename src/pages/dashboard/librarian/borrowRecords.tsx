@@ -24,6 +24,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -53,6 +54,8 @@ import {
   markBorrowAsBorrowed,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
+
+import { Calendar } from "@/components/ui/calendar";
 
 // === CONFIG: adjust fine per day here if needed ===
 const FINE_PER_DAY = 5; // ₱5.00 per overdue day
@@ -122,6 +125,33 @@ function computeAutoFine(dueDate?: string | null) {
   return { overdueDays, autoFine };
 }
 
+/**
+ * Parse "YYYY-MM-DD" into a local Date object (no timezone shift).
+ */
+function parseYmdToDate(d?: string | null): Date | undefined {
+  if (!d) return undefined;
+  const parts = d.split("-");
+  if (parts.length !== 3) return undefined;
+  const [yStr, mStr, dayStr] = parts;
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const day = Number(dayStr);
+  if (!y || !m || !day) return undefined;
+  const date = new Date(y, m - 1, day);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date;
+}
+
+/**
+ * Format a Date to "YYYY-MM-DD" for API.
+ */
+function formatDateForApi(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default function LibrarianBorrowRecordsPage() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -133,9 +163,8 @@ export default function LibrarianBorrowRecordsPage() {
     "all" | "borrowed" | "returned"
   >("all");
 
-  const [markBorrowBusyId, setMarkBorrowBusyId] = React.useState<string | null>(
-    null
-  );
+  const [markBorrowBusyId, setMarkBorrowBusyId] =
+    React.useState<string | null>(null);
 
   // --- Return dialog state (for marking as returned) ---
   const [returnDialogOpen, setReturnDialogOpen] = React.useState(false);
@@ -151,7 +180,9 @@ export default function LibrarianBorrowRecordsPage() {
   const [dueRecord, setDueRecord] = React.useState<BorrowRecordDTO | null>(
     null
   );
-  const [dueDateInput, setDueDateInput] = React.useState<string>("");
+  const [dueDateInput, setDueDateInput] = React.useState<Date | undefined>(
+    undefined
+  );
   const [submittingDue, setSubmittingDue] = React.useState(false);
 
   const loadRecords = React.useCallback(async () => {
@@ -185,7 +216,7 @@ export default function LibrarianBorrowRecordsPage() {
 
   function openDueDialog(rec: BorrowRecordDTO) {
     setDueRecord(rec);
-    setDueDateInput(rec.dueDate ?? "");
+    setDueDateInput(parseYmdToDate(rec.dueDate));
     setDueDialogOpen(true);
   }
 
@@ -286,9 +317,11 @@ export default function LibrarianBorrowRecordsPage() {
       return;
     }
 
+    const ymd = formatDateForApi(dueDateInput);
+
     setSubmittingDue(true);
     try {
-      const updated = await updateBorrowDueDate(dueRecord.id, dueDateInput);
+      const updated = await updateBorrowDueDate(dueRecord.id, ymd);
 
       setRecords((prev) =>
         prev.map((r) => (r.id === updated.id ? updated : r))
@@ -310,11 +343,9 @@ export default function LibrarianBorrowRecordsPage() {
     const q = search.trim().toLowerCase();
     let rows = records;
 
-    // "Borrowed" filter: treat both borrowed + pending as "active"
+    // "Borrowed" filter: treat as "Active" (non-returned)
     if (statusFilter === "borrowed") {
-      rows = rows.filter(
-        (r) => r.status === "borrowed" || r.status === "pending"
-      );
+      rows = rows.filter((r) => r.status !== "returned");
     } else if (statusFilter === "returned") {
       rows = rows.filter((r) => r.status === "returned");
     }
@@ -366,8 +397,10 @@ export default function LibrarianBorrowRecordsPage() {
               use this page to confirm that the student has received the{" "}
               <span className="font-semibold">physical book</span> and mark
               the status as{" "}
-              <span className="font-semibold">Borrowed</span>. When the book
-              is returned, use this page to mark it as{" "}
+              <span className="font-semibold">Borrowed</span>. For{" "}
+              <span className="font-semibold">pending return</span> records
+              (created by the student&apos;s online return request), use this
+              page to mark the book as{" "}
               <span className="font-semibold">Returned</span> and finalize any
               fines.
             </p>
@@ -375,7 +408,8 @@ export default function LibrarianBorrowRecordsPage() {
               The amount you finalize here becomes the{" "}
               <span className="font-semibold">official fine</span> for this
               borrow. Payment status (active, pending verification, paid) is
-              managed in the <span className="font-semibold">Fines</span> page.
+              managed in the <span className="font-semibold">Fines</span>{" "}
+              page.
             </p>
           </div>
         </div>
@@ -385,7 +419,7 @@ export default function LibrarianBorrowRecordsPage() {
             type="button"
             variant="outline"
             size="icon"
-            className="border-white/20 text-white/90 hover:bg-white/10"
+            className="border-white/20 text-white/90 hover:bg:white/10"
             onClick={handleRefresh}
             disabled={refreshing || loading}
           >
@@ -508,14 +542,22 @@ export default function LibrarianBorrowRecordsPage() {
                     const bookLabel = rec.bookTitle || `Book #${rec.bookId}`;
 
                     const isReturned = rec.status === "returned";
-                    const isPending = rec.status === "pending";
+                    const isPendingPickup = rec.status === "pending_pickup";
+                    const isPendingReturn = rec.status === "pending_return";
+                    const isLegacyPending = rec.status === "pending";
+                    const isAnyPending =
+                      isPendingPickup || isPendingReturn || isLegacyPending;
                     const isBorrowed = rec.status === "borrowed";
 
                     const { overdueDays, autoFine } = computeAutoFine(
                       rec.dueDate
                     );
+
+                    // Overdue applies to active loans / pending returns,
+                    // but not to pending pickup.
                     const isOverdue =
-                      (isBorrowed || isPending) && overdueDays > 0;
+                      (isBorrowed || isPendingReturn || isLegacyPending) &&
+                      overdueDays > 0;
 
                     const fineAmount = normalizeFine(rec.fine as any);
 
@@ -553,11 +595,18 @@ export default function LibrarianBorrowRecordsPage() {
                                 Returned
                               </span>
                             </Badge>
-                          ) : isPending ? (
+                          ) : isPendingPickup ? (
                             <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
                               <span className="inline-flex items-center gap-1">
                                 <Clock3 className="h-3 w-3" />
                                 Pending pickup
+                              </span>
+                            </Badge>
+                          ) : isPendingReturn || isLegacyPending ? (
+                            <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                              <span className="inline-flex items-center gap-1">
+                                <Clock3 className="h-3 w-3" />
+                                Pending
                               </span>
                             </Badge>
                           ) : isOverdue ? (
@@ -585,7 +634,7 @@ export default function LibrarianBorrowRecordsPage() {
                         >
                           <div className="inline-flex flex-col items-end gap-0.5">
                             <span>{peso(fineAmount)}</span>
-                            {isBorrowed || isPending ? (
+                            {isBorrowed || isAnyPending ? (
                               isOverdue && autoFine > 0 ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
                                   <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
@@ -607,9 +656,13 @@ export default function LibrarianBorrowRecordsPage() {
                             cellScrollbarClasses
                           }
                         >
-                          {isBorrowed || isPending ? (
+                          {isReturned ? (
+                            <span className="inline-flex items-center gap-1 text-white/60 text-xs">
+                              <XCircle className="h-3.5 w-3.5" /> No actions
+                            </span>
+                          ) : (
                             <div className="inline-flex flex-col items-end gap-1">
-                              {/*✏️ Edit due date button with Lucide Edit icon */}
+                              {/* ✏️ Edit due date */}
                               <Button
                                 type="button"
                                 size="sm"
@@ -621,42 +674,129 @@ export default function LibrarianBorrowRecordsPage() {
                                 <span>Edit due date</span>
                               </Button>
 
-                              {isPending && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
-                                  onClick={() => handleMarkBorrowed(rec)}
-                                  disabled={markBorrowBusyId === rec.id}
-                                >
-                                  {markBorrowBusyId === rec.id ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      <span>Marking…</span>
-                                    </span>
-                                  ) : (
-                                    "Confirm pickup → Mark borrowed"
-                                  )}
-                                </Button>
+                              {/* ✅ Confirm pickup → mark borrowed (only for pending_pickup) */}
+                              {isPendingPickup && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                      disabled={markBorrowBusyId === rec.id}
+                                    >
+                                      {markBorrowBusyId === rec.id ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          <span>Marking…</span>
+                                        </span>
+                                      ) : (
+                                        "Confirm pickup → Mark borrowed"
+                                      )}
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>
+                                        Confirm pickup &amp; mark as borrowed?
+                                      </AlertDialogTitle>
+                                      <AlertDialogDescription className="text-white/70">
+                                        You&apos;re about to confirm that the
+                                        student has received the{" "}
+                                        <span className="font-semibold text-white">
+                                          “{bookLabel}”
+                                        </span>{" "}
+                                        and change this record&apos;s status
+                                        from{" "}
+                                        <span className="font-semibold text-amber-200">
+                                          Pending pickup
+                                        </span>{" "}
+                                        to{" "}
+                                        <span className="font-semibold text-emerald-200">
+                                          Borrowed
+                                        </span>
+                                        .
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+
+                                    <div className="mt-3 text-sm text-white/80 space-y-1">
+                                      <p>
+                                        <span className="text-white/60">
+                                          Student:
+                                        </span>{" "}
+                                        {studentLabel}
+                                      </p>
+                                      <p>
+                                        <span className="text-white/60">
+                                          Borrowed on:
+                                        </span>{" "}
+                                        {fmtDate(rec.borrowDate)}
+                                      </p>
+                                      <p>
+                                        <span className="text-white/60">
+                                          Due date:
+                                        </span>{" "}
+                                        {fmtDate(rec.dueDate)}
+                                      </p>
+                                      <p className="text-xs text-white/70 pt-1">
+                                        After confirming, this book remains{" "}
+                                        <span className="font-semibold">
+                                          unavailable
+                                        </span>{" "}
+                                        until it is marked as{" "}
+                                        <span className="font-semibold text-emerald-200">
+                                          Returned
+                                        </span>{" "}
+                                        on this page.
+                                      </p>
+                                    </div>
+
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel
+                                        className="border-white/20 text-white hover:bg-black/20"
+                                        disabled={markBorrowBusyId === rec.id}
+                                      >
+                                        Cancel
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        disabled={markBorrowBusyId === rec.id}
+                                        onClick={() =>
+                                          void handleMarkBorrowed(rec)
+                                        }
+                                      >
+                                        {markBorrowBusyId === rec.id ? (
+                                          <span className="inline-flex items-center gap-2">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            Marking…
+                                          </span>
+                                        ) : (
+                                          "Confirm & mark borrowed"
+                                        )}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               )}
 
-                              {isBorrowed && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
-                                  onClick={() => openReturnDialog(rec)}
-                                >
-                                  Mark as returned
-                                </Button>
-                              )}
+                              {/* Mark as returned:
+                                  - for borrowed
+                                  - for pending_return
+                                  - for legacy pending */}
+                              {(isBorrowed ||
+                                isPendingReturn ||
+                                isLegacyPending) && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                    onClick={() => openReturnDialog(rec)}
+                                  >
+                                    Mark as returned
+                                  </Button>
+                                )}
                             </div>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-white/60 text-xs">
-                              <XCircle className="h-3.5 w-3.5" /> No actions
-                            </span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -854,12 +994,24 @@ export default function LibrarianBorrowRecordsPage() {
               <label className="text-xs font-medium text-white/80">
                 New due date
               </label>
-              <Input
-                type="date"
-                value={dueDateInput}
-                onChange={(e) => setDueDateInput(e.target.value)}
-                className="bg-slate-900/70 border-white/20 text-white"
-              />
+              <div className="flex flex-col gap-2">
+                <Calendar
+                  mode="single"
+                  selected={dueDateInput}
+                  onSelect={setDueDateInput}
+                  captionLayout="dropdown"
+                  className="rounded-md border border-white/10 bg-slate-900/70"
+                  autoFocus
+                />
+                <p className="text-[11px] text-white/60">
+                  Selected date:{" "}
+                  <span className="font-semibold">
+                    {dueDateInput
+                      ? dueDateInput.toLocaleDateString("en-CA")
+                      : "—"}
+                  </span>
+                </p>
+              </div>
               <p className="text-[11px] text-white/60">
                 Extending the due date will automatically reduce or remove
                 overdue fines for this record while it is still active.
