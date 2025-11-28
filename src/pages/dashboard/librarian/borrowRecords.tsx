@@ -780,22 +780,20 @@ export default function LibrarianBorrowRecordsPage() {
                               )}
 
                               {/* Mark as returned:
-                                  - for borrowed
-                                  - for pending_return
-                                  - for legacy pending */}
-                              {(isBorrowed ||
-                                isPendingReturn ||
-                                isLegacyPending) && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
-                                    onClick={() => openReturnDialog(rec)}
-                                  >
-                                    Mark as returned
-                                  </Button>
-                                )}
+                                  - only for pending_return
+                                  - or legacy pending
+                                  (Borrowed will NOT show this until student clicks "Request return") */}
+                              {(isPendingReturn || isLegacyPending) && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                  onClick={() => openReturnDialog(rec)}
+                                >
+                                  Mark as returned
+                                </Button>
+                              )}
                             </div>
                           )}
                         </TableCell>
@@ -891,7 +889,7 @@ export default function LibrarianBorrowRecordsPage() {
                     step="0.01"
                     value={fineInput}
                     onChange={(e) => setFineInput(e.target.value)}
-                    className="pl-6 bg-slate-900/70 border-white/20 text-white"
+                    className="pl-6 bg-slate-900/70 border-white/20 text:white"
                   />
                 </div>
                 <Button
@@ -961,12 +959,12 @@ export default function LibrarianBorrowRecordsPage() {
         }}
       >
         {dueRecord && (
-          <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+          <AlertDialogContent className="bg-slate-900 border-white/10 text:white">
             <AlertDialogHeader>
               <AlertDialogTitle>Edit due date</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
                 You&apos;re updating the due date for{" "}
-                <span className="font-semibold text-white">
+                <span className="font-semibold text:white">
                   “{dueRecord.bookTitle ?? `Book #${dueRecord.bookId}`}”
                 </span>{" "}
                 borrowed by{" "}
@@ -979,7 +977,7 @@ export default function LibrarianBorrowRecordsPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            <div className="mt-3 text-sm text-white/80 space-y-1">
+            <div className="mt-3 text-sm text:white/80 space-y-1">
               <p>
                 <span className="text-white/60">Borrowed on:</span>{" "}
                 {fmtDate(dueRecord.borrowDate)}
@@ -991,7 +989,7 @@ export default function LibrarianBorrowRecordsPage() {
             </div>
 
             <div className="mt-4 space-y-2">
-              <label className="text-xs font-medium text-white/80">
+              <label className="text-xs font-medium text:white/80">
                 New due date
               </label>
               <div className="flex flex-col gap-2">
