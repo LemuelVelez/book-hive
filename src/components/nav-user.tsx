@@ -31,6 +31,16 @@ import { me as apiMe, logout as apiLogout, type UserDTO } from "@/lib/authentica
 import { Loader2 } from "lucide-react"
 import { clearSessionCache } from "@/hooks/use-session"
 
+type UserWithAvatar = UserDTO & {
+    avatarUrl?: string | null
+    avatar_url?: string | null
+    avatar?: string | null
+    photoURL?: string | null
+    photoUrl?: string | null
+    imageUrl?: string | null
+    image?: string | null
+}
+
 /** ---------- small helpers ---------- */
 function initialsFrom(fullName?: string | null, email?: string | null) {
     const src = (fullName && fullName.trim()) || (email && email.trim()) || ""
@@ -50,9 +60,22 @@ function displayEmail(user: UserDTO | null) {
     if (!user) return "Not signed in"
     return user.email
 }
+function resolveAvatarUrl(u: UserWithAvatar | null): string | undefined {
+    const v =
+        u?.avatarUrl ??
+        u?.avatar_url ??
+        u?.avatar ??
+        u?.photoURL ??
+        u?.photoUrl ??
+        u?.imageUrl ??
+        u?.image ??
+        null
+    const s = typeof v === "string" ? v.trim() : ""
+    return s ? s : undefined
+}
 
 /** ---------- module-level cache to avoid refetch flicker across routes ---------- */
-let cachedUser: UserDTO | null = null
+let cachedUser: UserWithAvatar | null = null
 let cachedUserLoaded = false
 
 export function NavUser() {
@@ -61,10 +84,9 @@ export function NavUser() {
     const { state } = useSidebar()
     const collapsed = state === "collapsed"
 
-    const [user, setUser] = React.useState<UserDTO | null>(cachedUser)
+    const [user, setUser] = React.useState<UserWithAvatar | null>(cachedUser)
     const [loading, setLoading] = React.useState<boolean>(() => !cachedUserLoaded)
 
-    // Close any open menus/dialogs when navigating to a new route to prevent UI “stuck open” glitches
     const [menuOpen, setMenuOpen] = React.useState(false)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [loggingOut, setLoggingOut] = React.useState(false)
@@ -74,10 +96,8 @@ export function NavUser() {
         setConfirmOpen(false)
     }, [location.pathname])
 
-    // Fetch user only once per page load; reuse cached value to prevent flicker
     React.useEffect(() => {
         if (cachedUserLoaded) {
-            // nothing to do; already cached
             setLoading(false)
             return
         }
@@ -85,16 +105,14 @@ export function NavUser() {
         let cancelled = false
             ; (async () => {
                 try {
-                    const u = await apiMe()
+                    const u = (await apiMe()) as any
                     if (!cancelled) {
                         cachedUser = u
                         cachedUserLoaded = true
                         setUser(u)
                     }
                 } catch {
-                    if (!cancelled) {
-                        cachedUserLoaded = true // avoid retry-loop flicker
-                    }
+                    if (!cancelled) cachedUserLoaded = true
                 } finally {
                     if (!cancelled) setLoading(false)
                 }
@@ -109,17 +127,14 @@ export function NavUser() {
         try {
             setLoggingOut(true)
 
-            // 🔐 Clear all auth caches so other components (like /auth guards)
-            // don't see a stale "logged-in" user after logout.
-            await apiLogout() // server clears session/cookie
-            clearSessionCache() // global useSession cache
-            cachedUser = null   // local NavUser cache
+            await apiLogout()
+            clearSessionCache()
+            cachedUser = null
             cachedUserLoaded = false
             setUser(null)
             setLoading(false)
 
             toast.success("You’ve been logged out.")
-            // Hard-close any open UI before navigating
             setMenuOpen(false)
             setConfirmOpen(false)
             navigate("/", { replace: true })
@@ -132,15 +147,15 @@ export function NavUser() {
     }
 
     function openLogoutConfirm() {
-        setMenuOpen(false) // close dropdown first
+        setMenuOpen(false)
         setConfirmOpen(true)
     }
 
     const name = displayName(user)
     const email = displayEmail(user)
     const initials = initialsFrom(user?.fullName, user?.email)
+    const avatarSrc = resolveAvatarUrl(user)
 
-    /** -------- collapsed: avatar only -------- */
     if (collapsed) {
         return (
             <SidebarMenu>
@@ -152,7 +167,12 @@ export function NavUser() {
                                 aria-label={`${name} account menu`}
                             >
                                 <Avatar className="h-8 w-8">
-                                    <AvatarImage src={""} alt={name} />
+                                    {/* ✅ crop instead of stretch */}
+                                    <AvatarImage
+                                        src={avatarSrc}
+                                        alt={name}
+                                        className="object-cover object-center"
+                                    />
                                     <AvatarFallback>
                                         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : initials}
                                     </AvatarFallback>
@@ -167,7 +187,12 @@ export function NavUser() {
                             <DropdownMenuLabel className="font-normal">
                                 <div className="flex items-center gap-2">
                                     <Avatar className="h-7 w-7">
-                                        <AvatarImage src={""} alt={name} />
+                                        {/* ✅ crop instead of stretch */}
+                                        <AvatarImage
+                                            src={avatarSrc}
+                                            alt={name}
+                                            className="object-cover object-center"
+                                        />
                                         <AvatarFallback>{initials}</AvatarFallback>
                                     </Avatar>
                                     <div className="text-xs">
@@ -211,7 +236,6 @@ export function NavUser() {
                     </DropdownMenu>
                 </SidebarMenuItem>
 
-                {/* Logout confirmation (collapsed) */}
                 <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
                     <AlertDialogContent className="bg-slate-900 text-white border-white/10">
                         <AlertDialogHeader>
@@ -245,7 +269,6 @@ export function NavUser() {
         )
     }
 
-    /** -------- expanded: avatar + name + email -------- */
     return (
         <SidebarMenu>
             <SidebarMenuItem>
@@ -253,7 +276,12 @@ export function NavUser() {
                     <DropdownMenuTrigger asChild>
                         <SidebarMenuButton size="lg" className="data-[active=true]:bg-transparent">
                             <Avatar className="h-6 w-6">
-                                <AvatarImage src={""} alt={name} />
+                                {/* ✅ crop instead of stretch */}
+                                <AvatarImage
+                                    src={avatarSrc}
+                                    alt={name}
+                                    className="object-cover object-center"
+                                />
                                 <AvatarFallback>
                                     {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : initials}
                                 </AvatarFallback>
@@ -276,7 +304,12 @@ export function NavUser() {
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex items-center gap-2">
                                 <Avatar className="h-7 w-7">
-                                    <AvatarImage src={""} alt={name} />
+                                    {/* ✅ crop instead of stretch */}
+                                    <AvatarImage
+                                        src={avatarSrc}
+                                        alt={name}
+                                        className="object-cover object-center"
+                                    />
                                     <AvatarFallback>{initials}</AvatarFallback>
                                 </Avatar>
                                 <div className="text-xs">
@@ -320,7 +353,6 @@ export function NavUser() {
                 </DropdownMenu>
             </SidebarMenuItem>
 
-            {/* Logout confirmation (expanded) */}
             <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
                 <AlertDialogContent className="bg-slate-900 text-white border-white/10">
                     <AlertDialogHeader>

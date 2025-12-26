@@ -48,23 +48,17 @@ import {
 import { fetchBooks, type BookDTO } from "@/lib/books"
 import { createSelfBorrow } from "@/lib/borrows"
 
-/**
- * Format a date string as YYYY-MM-DD in the *local* timezone
- * to avoid off-by-one issues from UTC conversions.
- */
 function fmtDate(d?: string | null) {
     if (!d) return "—"
     try {
         const date = new Date(d)
         if (Number.isNaN(date.getTime())) return d
-        // en-CA locale -> YYYY-MM-DD
         return date.toLocaleDateString("en-CA")
     } catch {
         return d
     }
 }
 
-/** small helpers */
 function initialsFrom(fullName?: string | null, email?: string | null) {
     const src = (fullName && fullName.trim()) || (email && email.trim()) || ""
     if (!src) return "U"
@@ -76,45 +70,46 @@ function initialsFrom(fullName?: string | null, email?: string | null) {
     return raw.toUpperCase()
 }
 
-/** Top header shown inside the dashboard content area */
+function resolveAvatarUrl(u: any): string | undefined {
+    const v =
+        u?.avatarUrl ??
+        u?.avatar_url ??
+        u?.avatar ??
+        u?.photoURL ??
+        u?.photoUrl ??
+        u?.imageUrl ??
+        u?.image ??
+        null
+    const s = typeof v === "string" ? v.trim() : ""
+    return s ? s : undefined
+}
+
 export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const location = useLocation()
     const navigate = useNavigate()
     const pathname = location.pathname
 
-    // user === undefined -> still loading
-    // user === null      -> not logged in or failed to load
     const [user, setUser] = React.useState<any | null | undefined>(undefined)
 
-    // Header user dropdown state (avatar only)
     const [userMenuOpen, setUserMenuOpen] = React.useState(false)
     const [logoutConfirmOpen, setLogoutConfirmOpen] = React.useState(false)
     const [loggingOut, setLoggingOut] = React.useState(false)
 
-    // Quick-reserve dialog state
     const [reserveOpen, setReserveOpen] = React.useState(false)
     const [reserveLoading, setReserveLoading] = React.useState(false)
     const [reserveSubmitting, setReserveSubmitting] = React.useState(false)
     const [books, setBooks] = React.useState<BookDTO[]>([])
     const [selectedBookId, setSelectedBookId] = React.useState<string>("")
 
-    // ✅ Always fetch the *current* user when the header mounts.
-    // No module-level cache – this avoids stale roles after logging in as
-    // a different account without a full page refresh.
     React.useEffect(() => {
         let cancelled = false
 
             ; (async () => {
                 try {
                     const u = await apiMe()
-                    if (!cancelled) {
-                        setUser(u)
-                    }
+                    if (!cancelled) setUser(u)
                 } catch {
-                    // silently ignore – header will just not show the name
-                    if (!cancelled) {
-                        setUser(null)
-                    }
+                    if (!cancelled) setUser(null)
                 }
             })()
 
@@ -123,19 +118,16 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         }
     }, [])
 
-    // Close any open menus/dialogs when navigating to a new route
     React.useEffect(() => {
         setUserMenuOpen(false)
         setLogoutConfirmOpen(false)
     }, [location.pathname])
 
     function inferRoleFromPath(path: string): string | undefined {
-        // Check more specific sub-sections first
         if (path.startsWith("/dashboard/librarian")) return "librarian"
         if (path.startsWith("/dashboard/faculty")) return "faculty"
         if (path.startsWith("/dashboard/admin")) return "admin"
-        // Generic borrower section (/dashboard, /dashboard/books, /dashboard/circulation, /dashboard/insights)
-        if (path.startsWith("/dashboard")) return "student" // fallback label for borrower area
+        if (path.startsWith("/dashboard")) return "student"
         return undefined
     }
 
@@ -143,7 +135,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         if (!raw) return ""
         const map: Record<string, string> = {
             student: "Student",
-            other: "Guest", // ✅ show "Guest" for role "other"
+            other: "Guest",
             librarian: "Librarian",
             faculty: "Faculty",
             admin: "Admin",
@@ -151,7 +143,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
     }
 
-    // Prefer the real user role, fall back to inferred role from the path
     const rawRole =
         (user?.accountType as string | undefined) ??
         (user?.role as string | undefined) ??
@@ -168,19 +159,10 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         ""
 
     const showWelcome = !!roleLabel || !!displayName
+    const showReserve = rawRole === "student" || rawRole === "other" || rawRole === "faculty"
 
-    // ✅ Student and Other share the same quick actions (plus faculty)
-    const showReserve =
-        rawRole === "student" || rawRole === "other" || rawRole === "faculty"
+    const availableBooks = React.useMemo(() => books.filter((b) => b.available), [books])
 
-    // ---- Reserve dialog logic ----
-
-    const availableBooks = React.useMemo(
-        () => books.filter((b) => b.available),
-        [books],
-    )
-
-    // Load books lazily when dialog is opened for the first time
     React.useEffect(() => {
         if (!reserveOpen) return
         if (books.length > 0) return
@@ -191,18 +173,14 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                 setReserveLoading(true)
                 try {
                     const data = await fetchBooks()
-                    if (!cancelled) {
-                        setBooks(data)
-                    }
+                    if (!cancelled) setBooks(data)
                 } catch (err: any) {
                     const msg =
                         err?.message ||
                         "Failed to load books for reservation. Please try again."
                     toast.error("Failed to load books", { description: msg })
                 } finally {
-                    if (!cancelled) {
-                        setReserveLoading(false)
-                    }
+                    if (!cancelled) setReserveLoading(false)
                 }
             })()
 
@@ -244,7 +222,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                 )}.`,
             })
 
-            // Optimistically mark as unavailable in this dialog
             setBooks((prev) =>
                 prev.map((b) =>
                     b.id === selectedBookId ? { ...b, available: false } : b,
@@ -265,17 +242,19 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
     function handleReserveOpenChange(open: boolean) {
         setReserveOpen(open)
-        if (!open) {
-            setSelectedBookId("")
-        }
+        if (!open) setSelectedBookId("")
     }
 
-    // ---- Header user (avatar-only) logic ----
     const userEmail: string = user?.email || ""
     const userFullName: string = user?.fullName || user?.name || user?.full_name || ""
     const initials = initialsFrom(userFullName, userEmail)
-    const headerName = (userFullName && userFullName.trim()) || (userEmail ? userEmail.split("@")[0] : "Guest") || "Guest"
+    const headerName =
+        (userFullName && userFullName.trim()) ||
+        (userEmail ? userEmail.split("@")[0] : "Guest") ||
+        "Guest"
     const headerEmail = userEmail || "Not signed in"
+
+    const avatarSrc = resolveAvatarUrl(user)
 
     function openLogoutConfirm() {
         setUserMenuOpen(false)
@@ -328,7 +307,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                     )}
                 </div>
 
-                {/* Right side: quick actions + avatar-only user dropdown */}
                 <div className="flex items-center gap-2">
                     {showReserve && (
                         <Dialog open={reserveOpen} onOpenChange={handleReserveOpenChange}>
@@ -430,7 +408,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                         </Dialog>
                     )}
 
-                    {/* ✅ Avatar-only dropdown trigger */}
                     <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
@@ -438,7 +415,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                 aria-label={`${headerName} account menu`}
                             >
                                 <Avatar className="h-8 w-8">
-                                    <AvatarImage src={""} alt={headerName} />
+                                    {/* ✅ crop instead of stretch */}
+                                    <AvatarImage
+                                        src={avatarSrc}
+                                        alt={headerName}
+                                        className="object-cover object-center"
+                                    />
                                     <AvatarFallback>
                                         {user === undefined ? (
                                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -457,7 +439,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                             <DropdownMenuLabel className="font-normal">
                                 <div className="flex items-center gap-2">
                                     <Avatar className="h-7 w-7">
-                                        <AvatarImage src={""} alt={headerName} />
+                                        {/* ✅ crop instead of stretch */}
+                                        <AvatarImage
+                                            src={avatarSrc}
+                                            alt={headerName}
+                                            className="object-cover object-center"
+                                        />
                                         <AvatarFallback>{initials}</AvatarFallback>
                                     </Avatar>
                                     <div className="text-xs">
@@ -502,7 +489,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {/* Logout confirmation */}
                     <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
                         <AlertDialogContent className="bg-slate-900 text-white border-white/10">
                             <AlertDialogHeader>
