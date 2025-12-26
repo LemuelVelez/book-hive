@@ -1,11 +1,32 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react"
-import { useLocation } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Plus, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { me as apiMe } from "@/lib/authentication"
+import { me as apiMe, logout as apiLogout } from "@/lib/authentication"
+import { clearSessionCache } from "@/hooks/use-session"
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 import {
     Dialog,
@@ -43,14 +64,32 @@ function fmtDate(d?: string | null) {
     }
 }
 
+/** small helpers */
+function initialsFrom(fullName?: string | null, email?: string | null) {
+    const src = (fullName && fullName.trim()) || (email && email.trim()) || ""
+    if (!src) return "U"
+    const parts = src.split(/\s+/).filter(Boolean)
+    const raw =
+        parts.length >= 2
+            ? (parts[0][0] || "") + (parts[1][0] || "")
+            : (src[0] || "") + (src[1] || "")
+    return raw.toUpperCase()
+}
+
 /** Top header shown inside the dashboard content area */
 export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const location = useLocation()
+    const navigate = useNavigate()
     const pathname = location.pathname
 
     // user === undefined -> still loading
     // user === null      -> not logged in or failed to load
     const [user, setUser] = React.useState<any | null | undefined>(undefined)
+
+    // Header user dropdown state (avatar only)
+    const [userMenuOpen, setUserMenuOpen] = React.useState(false)
+    const [logoutConfirmOpen, setLogoutConfirmOpen] = React.useState(false)
+    const [loggingOut, setLoggingOut] = React.useState(false)
 
     // Quick-reserve dialog state
     const [reserveOpen, setReserveOpen] = React.useState(false)
@@ -83,6 +122,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             cancelled = true
         }
     }, [])
+
+    // Close any open menus/dialogs when navigating to a new route
+    React.useEffect(() => {
+        setUserMenuOpen(false)
+        setLogoutConfirmOpen(false)
+    }, [location.pathname])
 
     function inferRoleFromPath(path: string): string | undefined {
         // Check more specific sub-sections first
@@ -225,6 +270,37 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         }
     }
 
+    // ---- Header user (avatar-only) logic ----
+    const userEmail: string = user?.email || ""
+    const userFullName: string = user?.fullName || user?.name || user?.full_name || ""
+    const initials = initialsFrom(userFullName, userEmail)
+    const headerName = (userFullName && userFullName.trim()) || (userEmail ? userEmail.split("@")[0] : "Guest") || "Guest"
+    const headerEmail = userEmail || "Not signed in"
+
+    function openLogoutConfirm() {
+        setUserMenuOpen(false)
+        setLogoutConfirmOpen(true)
+    }
+
+    async function onLogoutConfirmed() {
+        try {
+            setLoggingOut(true)
+            await apiLogout()
+            clearSessionCache()
+            setUser(null)
+
+            toast.success("You’ve been logged out.")
+            setUserMenuOpen(false)
+            setLogoutConfirmOpen(false)
+            navigate("/", { replace: true })
+        } catch (err: any) {
+            const msg = String(err?.message || "Failed to log out. Please try again.")
+            toast.error("Logout failed", { description: msg })
+        } finally {
+            setLoggingOut(false)
+        }
+    }
+
     return (
         <header className="sticky top-0 z-10 bg-slate-800/60 backdrop-blur supports-backdrop-filter:bg-slate-800/60 border-b border-white/10">
             <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-3">
@@ -252,8 +328,8 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                     )}
                 </div>
 
-                {/* Quick actions */}
-                <div className="flex items-center gap-1.5">
+                {/* Right side: quick actions + avatar-only user dropdown */}
+                <div className="flex items-center gap-2">
                     {showReserve && (
                         <Dialog open={reserveOpen} onOpenChange={handleReserveOpenChange}>
                             <DialogTrigger asChild>
@@ -290,35 +366,33 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                             again later or browse the catalog.
                                         </p>
                                     ) : (
-                                        <>
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-medium text-white/80">
-                                                    Select book to reserve
-                                                </label>
-                                                <Select
-                                                    value={selectedBookId}
-                                                    onValueChange={(v) => setSelectedBookId(v)}
-                                                >
-                                                    <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
-                                                        <SelectValue placeholder="Choose a book" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-slate-900 text-white border-white/10 max-h-64">
-                                                        {availableBooks.map((b) => (
-                                                            <SelectItem key={b.id} value={b.id}>
-                                                                {b.title} — {b.author}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <p className="text-[11px] text-white/50">
-                                                    Only books currently marked as{" "}
-                                                    <span className="font-semibold text-emerald-300">
-                                                        Available
-                                                    </span>{" "}
-                                                    are shown here.
-                                                </p>
-                                            </div>
-                                        </>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-white/80">
+                                                Select book to reserve
+                                            </label>
+                                            <Select
+                                                value={selectedBookId}
+                                                onValueChange={(v) => setSelectedBookId(v)}
+                                            >
+                                                <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                                                    <SelectValue placeholder="Choose a book" />
+                                                </SelectTrigger>
+                                                <SelectContent className="bg-slate-900 text-white border-white/10 max-h-64">
+                                                    {availableBooks.map((b) => (
+                                                        <SelectItem key={b.id} value={b.id}>
+                                                            {b.title} — {b.author}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-[11px] text-white/50">
+                                                Only books currently marked as{" "}
+                                                <span className="font-semibold text-emerald-300">
+                                                    Available
+                                                </span>{" "}
+                                                are shown here.
+                                            </p>
+                                        </div>
                                     )}
                                 </div>
 
@@ -355,6 +429,112 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                             </DialogContent>
                         </Dialog>
                     )}
+
+                    {/* ✅ Avatar-only dropdown trigger */}
+                    <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                aria-label={`${headerName} account menu`}
+                            >
+                                <Avatar className="h-8 w-8">
+                                    <AvatarImage src={""} alt={headerName} />
+                                    <AvatarFallback>
+                                        {user === undefined ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            initials
+                                        )}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </button>
+                        </DropdownMenuTrigger>
+
+                        <DropdownMenuContent
+                            align="end"
+                            className="w-[220px] bg-slate-900 text-white border-white/10"
+                        >
+                            <DropdownMenuLabel className="font-normal">
+                                <div className="flex items-center gap-2">
+                                    <Avatar className="h-7 w-7">
+                                        <AvatarImage src={""} alt={headerName} />
+                                        <AvatarFallback>{initials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="text-xs">
+                                        <div className="font-medium">{headerName}</div>
+                                        <div className="opacity-70">{headerEmail}</div>
+                                    </div>
+                                </div>
+                            </DropdownMenuLabel>
+
+                            <DropdownMenuSeparator className="bg-white/10" />
+
+                            {user ? (
+                                <>
+                                    <DropdownMenuItem
+                                        onClick={() => navigate("/dashboard")}
+                                        className="focus:bg-white/10"
+                                    >
+                                        My dashboard
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onClick={() => toast.info("Settings (coming soon)")}
+                                        className="focus:bg-white/10"
+                                    >
+                                        Settings
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator className="bg-white/10" />
+                                    <DropdownMenuItem
+                                        onClick={openLogoutConfirm}
+                                        className="text-red-400 focus:bg-red-500/10"
+                                    >
+                                        Log out
+                                    </DropdownMenuItem>
+                                </>
+                            ) : (
+                                <DropdownMenuItem
+                                    onClick={() => navigate("/auth")}
+                                    className="focus:bg-white/10"
+                                >
+                                    Sign in
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Logout confirmation */}
+                    <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+                        <AlertDialogContent className="bg-slate-900 text-white border-white/10">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Log out of Book-Hive?</AlertDialogTitle>
+                                <AlertDialogDescription className="text-white/70">
+                                    You’ll be signed out from this device and will need to sign in again
+                                    to access your dashboard.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel
+                                    disabled={loggingOut}
+                                    className="bg-slate-800 border-white/10"
+                                >
+                                    Cancel
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                    disabled={loggingOut}
+                                    onClick={onLogoutConfirmed}
+                                    className="bg-red-600 hover:bg-red-600/90 text-white focus:ring-red-500"
+                                >
+                                    {loggingOut ? (
+                                        <span className="inline-flex items-center gap-2">
+                                            <Loader2 className="h-4 w-4 animate-spin" /> Logging out…
+                                        </span>
+                                    ) : (
+                                        "Log out"
+                                    )}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 </div>
             </div>
         </header>
