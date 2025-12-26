@@ -53,6 +53,10 @@ export const ROUTES = {
   users: {
     checkStudentId: (studentId: string) =>
       api(`/users/check-student-id?studentId=${encodeURIComponent(studentId)}`),
+
+    // ✅ NEW: profile update + avatar upload/remove
+    me: api("/users/me"), // PATCH
+    meAvatar: api("/users/me/avatar"), // POST (upload), DELETE (remove)
   },
   support: {
     ticket: api("/support/ticket"),

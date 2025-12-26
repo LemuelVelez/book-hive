@@ -11,7 +11,17 @@ import { toast } from "sonner"
 import { me as apiMe } from "@/lib/authentication"
 import * as auth from "@/lib/authentication"
 
-import { Loader2, Eye, EyeOff, KeyRound, UserRound } from "lucide-react"
+import {
+    Loader2,
+    Eye,
+    EyeOff,
+    KeyRound,
+    UserRound,
+    ImagePlus,
+    Trash2,
+    Save,
+    X,
+} from "lucide-react"
 
 type Role = "student" | "other" | "faculty" | "librarian" | "admin"
 
@@ -33,8 +43,16 @@ function roleLabel(raw: string | undefined) {
     return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
+function initialsFromName(name: string) {
+    const s = String(name || "").trim()
+    if (!s) return "U"
+    const parts = s.split(/\s+/).filter(Boolean)
+    const a = parts[0]?.[0] ?? "U"
+    const b = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : ""
+    return (a + b).toUpperCase()
+}
+
 async function tryChangePassword(currentPassword: string, newPassword: string) {
-    // Prefer an exported helper if your lib has it (safe, no TS errors)
     const anyAuth = auth as any
 
     if (typeof anyAuth.changePassword === "function") {
@@ -44,7 +62,6 @@ async function tryChangePassword(currentPassword: string, newPassword: string) {
         return await anyAuth.updatePassword(currentPassword, newPassword)
     }
 
-    // Fallback to common endpoints (first one that works wins)
     const endpoints = [
         "/api/auth/change-password",
         "/api/auth/changePassword",
@@ -88,9 +105,7 @@ async function tryChangePassword(currentPassword: string, newPassword: string) {
             return data ?? { ok: true }
         } catch (e: any) {
             lastErr = String(e?.message || e)
-            // keep trying other endpoints if it *looks* like routing mismatch
             if (/endpoint not found/i.test(lastErr)) continue
-            // otherwise fail fast
             throw e
         }
     }
@@ -99,6 +114,81 @@ async function tryChangePassword(currentPassword: string, newPassword: string) {
         lastErr ||
         "Password change endpoint is not available. Please add an API endpoint or export changePassword() in lib/authentication."
     )
+}
+
+async function tryUpdateProfile(payload: { fullName?: string; course?: string; yearLevel?: string }) {
+    const anyAuth = auth as any
+    if (typeof anyAuth.updateMyProfile === "function") {
+        return await anyAuth.updateMyProfile(payload)
+    }
+
+    const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    })
+
+    const text = await res.text()
+    let data: any = null
+    try {
+        data = text ? JSON.parse(text) : null
+    } catch {
+        data = null
+    }
+
+    if (!res.ok) throw new Error(data?.message || text || "Failed to update profile.")
+    return data
+}
+
+async function tryUploadAvatar(file: File) {
+    const anyAuth = auth as any
+    if (typeof anyAuth.uploadMyAvatar === "function") {
+        return await anyAuth.uploadMyAvatar(file)
+    }
+
+    const fd = new FormData()
+    fd.append("avatar", file)
+
+    const res = await fetch("/api/users/me/avatar", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+    })
+
+    const text = await res.text()
+    let data: any = null
+    try {
+        data = text ? JSON.parse(text) : null
+    } catch {
+        data = null
+    }
+
+    if (!res.ok) throw new Error(data?.message || text || "Failed to upload avatar.")
+    return data
+}
+
+async function tryRemoveAvatar() {
+    const anyAuth = auth as any
+    if (typeof anyAuth.removeMyAvatar === "function") {
+        return await anyAuth.removeMyAvatar()
+    }
+
+    const res = await fetch("/api/users/me/avatar", {
+        method: "DELETE",
+        credentials: "include",
+    })
+
+    const text = await res.text()
+    let data: any = null
+    try {
+        data = text ? JSON.parse(text) : null
+    } catch {
+        data = null
+    }
+
+    if (!res.ok) throw new Error(data?.message || text || "Failed to remove avatar.")
+    return data
 }
 
 export default function StudentSettingsPage() {
@@ -112,6 +202,20 @@ export default function StudentSettingsPage() {
     const [showCurrent, setShowCurrent] = React.useState(false)
     const [showNext, setShowNext] = React.useState(false)
     const [showConfirm, setShowConfirm] = React.useState(false)
+
+    // profile edit
+    const [editing, setEditing] = React.useState(false)
+    const [profileBusy, setProfileBusy] = React.useState(false)
+
+    const [fullNameInput, setFullNameInput] = React.useState("")
+    const [courseInput, setCourseInput] = React.useState("")
+    const [yearLevelInput, setYearLevelInput] = React.useState("")
+
+    // avatar upload
+    const fileRef = React.useRef<HTMLInputElement | null>(null)
+    const [avatarBusy, setAvatarBusy] = React.useState(false)
+    const [avatarFile, setAvatarFile] = React.useState<File | null>(null)
+    const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null)
 
     React.useEffect(() => {
         let cancelled = false
@@ -147,15 +251,64 @@ export default function StudentSettingsPage() {
 
     const email = user?.email || "—"
 
-    // Student-only fields (only show if role needs it AND there is a value)
     const studentId =
         user?.studentId || user?.student_id || user?.studentID || user?.idNumber || null
+
     const program =
         user?.course || user?.program || user?.courseName || user?.department || null
+
     const yearLevel =
         user?.yearLevel || user?.year_level || user?.year || user?.level || null
+
     const college =
         user?.college || user?.school || user?.collegeName || null
+
+    const avatarUrl =
+        avatarPreview ||
+        user?.avatarUrl ||
+        user?.avatar_url ||
+        null
+
+    // ✅ FIX: include `user` (and `editing`) as deps; avoid overriding while editing
+    React.useEffect(() => {
+        if (!user) return
+        if (editing) return
+
+        const uFullName =
+            user?.fullName ||
+            user?.name ||
+            user?.full_name ||
+            user?.student_name ||
+            ""
+
+        setFullNameInput(String(uFullName || ""))
+        setCourseInput(String(user?.course || user?.program || user?.courseName || user?.department || ""))
+        setYearLevelInput(String(user?.yearLevel || user?.year_level || user?.year || user?.level || ""))
+    }, [user, editing])
+
+    // ✅ FIX: proper dependency for cleanup
+    React.useEffect(() => {
+        if (!avatarPreview) return
+        return () => {
+            URL.revokeObjectURL(avatarPreview)
+        }
+    }, [avatarPreview])
+
+    const profileDirty =
+        String(fullNameInput || "").trim() !== String(fullName === "—" ? "" : fullName || "").trim() ||
+        (isStudent && String(courseInput || "").trim() !== String(program || "").trim()) ||
+        (isStudent && String(yearLevelInput || "").trim() !== String(yearLevel || "").trim())
+
+    function resetProfileForm() {
+        setFullNameInput(String(fullName === "—" ? "" : fullName || ""))
+        setCourseInput(String(program || ""))
+        setYearLevelInput(String(yearLevel || ""))
+        setEditing(false)
+
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+        setAvatarPreview(null)
+        setAvatarFile(null)
+    }
 
     async function onSubmitPassword(e: React.FormEvent) {
         e.preventDefault()
@@ -201,20 +354,163 @@ export default function StudentSettingsPage() {
         }
     }
 
+    async function onSaveProfile() {
+        const name = String(fullNameInput || "").trim()
+        if (!name) {
+            toast.warning("Full name required", { description: "Please enter your full name." })
+            return
+        }
+
+        if (isStudent) {
+            if (!String(courseInput || "").trim()) {
+                toast.warning("Program / Course required", { description: "Please enter your program/course." })
+                return
+            }
+            if (!String(yearLevelInput || "").trim()) {
+                toast.warning("Year level required", { description: "Please enter your year level." })
+                return
+            }
+        }
+
+        setProfileBusy(true)
+        try {
+            const payload: any = { fullName: name }
+            if (isStudent) {
+                payload.course = String(courseInput || "").trim()
+                payload.yearLevel = String(yearLevelInput || "").trim()
+            }
+
+            const r = await tryUpdateProfile(payload)
+            const updatedUser = r?.user ?? null
+            if (!updatedUser) throw new Error("Invalid response from server.")
+
+            setUser(updatedUser)
+            setEditing(false)
+            toast.success("Profile updated", { description: "Your personal information has been saved." })
+        } catch (err: any) {
+            toast.error("Update failed", { description: String(err?.message || err || "Failed to update profile.") })
+        } finally {
+            setProfileBusy(false)
+        }
+    }
+
+    function pickAvatar() {
+        fileRef.current?.click()
+    }
+
+    function onAvatarSelected(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0] || null
+        if (!file) return
+
+        if (!file.type.startsWith("image/")) {
+            toast.error("Invalid file", { description: "Please select an image file." })
+            return
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("File too large", { description: "Max avatar size is 5MB." })
+            return
+        }
+
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+        const url = URL.createObjectURL(file)
+        setAvatarPreview(url)
+        setAvatarFile(file)
+    }
+
+    async function onUploadAvatar() {
+        if (!avatarFile) {
+            toast.warning("No image selected", { description: "Choose an image first." })
+            return
+        }
+
+        setAvatarBusy(true)
+        try {
+            const r = await tryUploadAvatar(avatarFile)
+            const updatedUser = r?.user ?? null
+            if (!updatedUser) throw new Error("Invalid response from server.")
+
+            setUser(updatedUser)
+
+            if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+            setAvatarPreview(null)
+            setAvatarFile(null)
+
+            toast.success("Display picture updated", { description: "Your avatar has been uploaded successfully." })
+        } catch (err: any) {
+            toast.error("Upload failed", { description: String(err?.message || err || "Failed to upload avatar.") })
+        } finally {
+            setAvatarBusy(false)
+        }
+    }
+
+    async function onRemoveAvatar() {
+        setAvatarBusy(true)
+        try {
+            const r = await tryRemoveAvatar()
+            const updatedUser = r?.user ?? null
+            if (!updatedUser) throw new Error("Invalid response from server.")
+
+            setUser(updatedUser)
+
+            if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+            setAvatarPreview(null)
+            setAvatarFile(null)
+
+            toast.success("Avatar removed", { description: "Your display picture has been removed." })
+        } catch (err: any) {
+            toast.error("Remove failed", { description: String(err?.message || err || "Failed to remove avatar.") })
+        } finally {
+            setAvatarBusy(false)
+        }
+    }
+
     return (
         <DashboardLayout title="Settings">
             <div className="space-y-4">
                 {/* Personal Info */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <CardTitle className="inline-flex items-center gap-2">
-                            <UserRound className="h-5 w-5" />
-                            Personal information
-                        </CardTitle>
-                        <p className="text-xs text-white/70">
-                            This information is based on your registration details.
-                            {isGuest ? " (Guest accounts have fewer required fields.)" : ""}
-                        </p>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <CardTitle className="inline-flex items-center gap-2">
+                                    <UserRound className="h-5 w-5" />
+                                    Personal information
+                                </CardTitle>
+                                <p className="text-xs text-white/70">
+                                    Update your profile details and display picture.
+                                    {isGuest ? " (Guest accounts have fewer required fields.)" : ""}
+                                </p>
+                            </div>
+
+                            {user && (
+                                <div className="flex items-center gap-2">
+                                    {!editing ? (
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="bg-slate-900/60 border border-white/10 text-white hover:bg-slate-900/80"
+                                            onClick={() => setEditing(true)}
+                                        >
+                                            Edit
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="bg-slate-900/60 border border-white/10 text-white hover:bg-slate-900/80"
+                                            onClick={resetProfileForm}
+                                            disabled={profileBusy}
+                                        >
+                                            <span className="inline-flex items-center gap-2">
+                                                <X className="h-4 w-4" />
+                                                Cancel
+                                            </span>
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </CardHeader>
 
                     <CardContent className="pt-2">
@@ -228,49 +524,188 @@ export default function StudentSettingsPage() {
                                 Could not load your profile. Please refresh the page.
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                                <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                    <div className="text-xs text-white/60">Full name</div>
-                                    <div className="mt-0.5 font-medium">{fmtValue(fullName)}</div>
-                                </div>
-
-                                <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                    <div className="text-xs text-white/60">Email</div>
-                                    <div className="mt-0.5 font-medium">{fmtValue(email)}</div>
-                                </div>
-
-                                <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                    <div className="text-xs text-white/60">Account type</div>
-                                    <div className="mt-0.5 font-medium">{roleLabel(rawRole)}</div>
-                                </div>
-
-                                {/* Student-only: show only if role needs it */}
-                                {isStudent && (
-                                    <>
-                                        <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                            <div className="text-xs text-white/60">Student ID</div>
-                                            <div className="mt-0.5 font-medium">{fmtValue(studentId)}</div>
-                                        </div>
-
-                                        <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                            <div className="text-xs text-white/60">Program / Course</div>
-                                            <div className="mt-0.5 font-medium">{fmtValue(program)}</div>
-                                        </div>
-
-                                        <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                            <div className="text-xs text-white/60">Year level</div>
-                                            <div className="mt-0.5 font-medium">{fmtValue(yearLevel)}</div>
-                                        </div>
-
-                                        {/* College is optional; still student-only if it exists */}
-                                        {college ? (
-                                            <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                                <div className="text-xs text-white/60">College</div>
-                                                <div className="mt-0.5 font-medium">{fmtValue(college)}</div>
+                            <div className="space-y-4">
+                                {/* Avatar row */}
+                                <div className="flex items-center gap-4">
+                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center">
+                                        {avatarUrl ? (
+                                            <img
+                                                src={avatarUrl}
+                                                alt="Avatar"
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="text-white/80 font-semibold">
+                                                {initialsFromName(String(fullName))}
                                             </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex flex-col gap-2">
+                                        <div className="text-sm text-white/80 font-medium">Display picture</div>
+
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {/* ✅ Use UI Input for file upload */}
+                                            <Input
+                                                ref={fileRef}
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={onAvatarSelected}
+                                                disabled={avatarBusy}
+                                            />
+
+                                            <Button
+                                                type="button"
+                                                className="bg-slate-900/60 border border-white/10 text-white hover:bg-slate-900/80"
+                                                onClick={pickAvatar}
+                                                disabled={avatarBusy}
+                                            >
+                                                <span className="inline-flex items-center gap-2">
+                                                    <ImagePlus className="h-4 w-4" />
+                                                    Choose image
+                                                </span>
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                className="bg-purple-600 hover:bg-purple-700 text-white"
+                                                onClick={onUploadAvatar}
+                                                disabled={avatarBusy || !avatarFile}
+                                            >
+                                                {avatarBusy ? (
+                                                    <span className="inline-flex items-center gap-2">
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                        Uploading…
+                                                    </span>
+                                                ) : (
+                                                    "Upload"
+                                                )}
+                                            </Button>
+
+                                            <Button
+                                                type="button"
+                                                variant="destructive"
+                                                className="bg-red-600 hover:bg-red-700 text-white"
+                                                onClick={onRemoveAvatar}
+                                                disabled={avatarBusy || (!user?.avatarUrl && !user?.avatar_url)}
+                                            >
+                                                <span className="inline-flex items-center gap-2">
+                                                    <Trash2 className="h-4 w-4" />
+                                                    Remove
+                                                </span>
+                                            </Button>
+                                        </div>
+
+                                        <div className="text-[11px] text-white/50">
+                                            PNG/JPG/WebP • Max 5MB
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Info grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                        <div className="text-xs text-white/60">Full name</div>
+                                        {!editing ? (
+                                            <div className="mt-0.5 font-medium">{fmtValue(fullName)}</div>
+                                        ) : (
+                                            <div className="mt-2 space-y-1">
+                                                <Label className="text-xs text-white/80">Full name</Label>
+                                                <Input
+                                                    value={fullNameInput}
+                                                    onChange={(e) => setFullNameInput(e.target.value)}
+                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                        <div className="text-xs text-white/60">Email</div>
+                                        <div className="mt-0.5 font-medium">{fmtValue(email)}</div>
+                                    </div>
+
+                                    <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                        <div className="text-xs text-white/60">Account type</div>
+                                        <div className="mt-0.5 font-medium">{roleLabel(rawRole)}</div>
+                                    </div>
+
+                                    {isStudent && (
+                                        <>
+                                            <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                                <div className="text-xs text-white/60">Student ID</div>
+                                                <div className="mt-0.5 font-medium">{fmtValue(studentId)}</div>
+                                            </div>
+
+                                            <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                                <div className="text-xs text-white/60">Program / Course</div>
+                                                {!editing ? (
+                                                    <div className="mt-0.5 font-medium">{fmtValue(program)}</div>
+                                                ) : (
+                                                    <div className="mt-2 space-y-1">
+                                                        <Label className="text-xs text-white/80">Program / Course</Label>
+                                                        <Input
+                                                            value={courseInput}
+                                                            onChange={(e) => setCourseInput(e.target.value)}
+                                                            className="bg-slate-900/70 border-white/20 text-white"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                                <div className="text-xs text-white/60">Year level</div>
+                                                {!editing ? (
+                                                    <div className="mt-0.5 font-medium">{fmtValue(yearLevel)}</div>
+                                                ) : (
+                                                    <div className="mt-2 space-y-1">
+                                                        <Label className="text-xs text-white/80">Year level</Label>
+                                                        <Input
+                                                            value={yearLevelInput}
+                                                            onChange={(e) => setYearLevelInput(e.target.value)}
+                                                            className="bg-slate-900/70 border-white/20 text-white"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {college ? (
+                                                <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                                    <div className="text-xs text-white/60">College</div>
+                                                    <div className="mt-0.5 font-medium">{fmtValue(college)}</div>
+                                                </div>
+                                            ) : null}
+                                        </>
+                                    )}
+                                </div>
+
+                                {editing ? (
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            className="bg-purple-600 hover:bg-purple-700 text-white"
+                                            onClick={onSaveProfile}
+                                            disabled={profileBusy || !profileDirty}
+                                        >
+                                            {profileBusy ? (
+                                                <span className="inline-flex items-center gap-2">
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    Saving…
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-2">
+                                                    <Save className="h-4 w-4" />
+                                                    Save changes
+                                                </span>
+                                            )}
+                                        </Button>
+
+                                        {!profileDirty ? (
+                                            <span className="text-xs text-white/50">No changes to save.</span>
                                         ) : null}
-                                    </>
-                                )}
+                                    </div>
+                                ) : null}
                             </div>
                         )}
                     </CardContent>
@@ -290,7 +725,6 @@ export default function StudentSettingsPage() {
 
                     <CardContent className="pt-2">
                         <form onSubmit={onSubmitPassword} className="space-y-3 max-w-xl">
-                            {/* Current */}
                             <div className="space-y-1">
                                 <Label className="text-xs text-white/80">Current password</Label>
                                 <div className="relative">
@@ -312,7 +746,6 @@ export default function StudentSettingsPage() {
                                 </div>
                             </div>
 
-                            {/* New */}
                             <div className="space-y-1">
                                 <Label className="text-xs text-white/80">New password</Label>
                                 <div className="relative">
@@ -335,7 +768,6 @@ export default function StudentSettingsPage() {
                                 <p className="text-[11px] text-white/50">Minimum 8 characters.</p>
                             </div>
 
-                            {/* Confirm */}
                             <div className="space-y-1">
                                 <Label className="text-xs text-white/80">Confirm new password</Label>
                                 <div className="relative">

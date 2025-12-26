@@ -10,7 +10,16 @@ export type UserDTO = {
   accountType: Role;
   // Optional explicit role field if backend stores both
   role?: Role;
+
   isEmailVerified: boolean;
+
+  // ✅ profile fields
+  studentId?: string | null;
+  course?: string | null;
+  yearLevel?: string | null;
+
+  // ✅ avatar
+  avatarUrl?: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -142,6 +151,9 @@ export async function register(payload: {
   studentId?: string;
   course?: string; // program
   yearLevel?: string;
+
+  // ✅ optional avatar url (if you ever want to set on registration)
+  avatarUrl?: string | null;
 }) {
   type Resp = JsonOk<{ user: UserDTO }>;
   return requestJSON<Resp>(ROUTES.auth.register, {
@@ -172,5 +184,37 @@ export async function submitSupportTicket(form: FormData) {
     method: "POST",
     body: form,
     asFormData: true,
+  });
+}
+
+/* ---------------- NEW: profile update + avatar upload ---------------- */
+
+export async function updateMyProfile(payload: {
+  fullName?: string;
+  course?: string;
+  yearLevel?: string;
+}) {
+  type Resp = JsonOk<{ user: UserDTO }>;
+  return requestJSON<Resp>(ROUTES.users.me, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function uploadMyAvatar(file: File) {
+  type Resp = JsonOk<{ user: UserDTO }>;
+  const form = new FormData();
+  form.append("avatar", file);
+  return requestJSON<Resp>(ROUTES.users.meAvatar, {
+    method: "POST",
+    body: form,
+    asFormData: true,
+  });
+}
+
+export async function removeMyAvatar() {
+  type Resp = JsonOk<{ user: UserDTO }>;
+  return requestJSON<Resp>(ROUTES.users.meAvatar, {
+    method: "DELETE",
   });
 }
