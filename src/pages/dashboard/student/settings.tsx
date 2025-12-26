@@ -7,6 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
 import { toast } from "sonner"
 import { me as apiMe } from "@/lib/authentication"
 import * as auth from "@/lib/authentication"
@@ -48,8 +59,14 @@ function initialsFromName(name: string) {
     if (!s) return "U"
     const parts = s.split(/\s+/).filter(Boolean)
     const a = parts[0]?.[0] ?? "U"
-    const b = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : ""
+    const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""
     return (a + b).toUpperCase()
+}
+
+function isValidEmail(email: string) {
+    // simple, practical validation
+    const s = String(email || "").trim()
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
 }
 
 async function tryChangePassword(currentPassword: string, newPassword: string) {
@@ -116,7 +133,12 @@ async function tryChangePassword(currentPassword: string, newPassword: string) {
     )
 }
 
-async function tryUpdateProfile(payload: { fullName?: string; course?: string; yearLevel?: string }) {
+async function tryUpdateProfile(payload: {
+    fullName?: string
+    email?: string
+    course?: string
+    yearLevel?: string
+}) {
     const anyAuth = auth as any
     if (typeof anyAuth.updateMyProfile === "function") {
         return await anyAuth.updateMyProfile(payload)
@@ -191,6 +213,44 @@ async function tryRemoveAvatar() {
     return data
 }
 
+async function tryResendVerifyEmail(email: string) {
+    const anyAuth = auth as any
+
+    if (typeof anyAuth.resendVerifyEmail === "function") {
+        return await anyAuth.resendVerifyEmail(email)
+    }
+    if (typeof anyAuth.resendVerificationEmail === "function") {
+        return await anyAuth.resendVerificationEmail(email)
+    }
+
+    // best-effort fallback endpoints (won't break if missing)
+    const endpoints = [
+        "/api/auth/resend-verify-email",
+        "/api/auth/resendVerifyEmail",
+        "/api/auth/verify-email/resend",
+    ]
+
+    for (const url of endpoints) {
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            })
+
+            if (res.status === 404 || res.status === 405) continue
+            if (!res.ok) continue
+            return { ok: true }
+        } catch {
+            // ignore and try next
+            continue
+        }
+    }
+
+    return { ok: false }
+}
+
 export default function StudentSettingsPage() {
     const [user, setUser] = React.useState<any | null | undefined>(undefined)
 
@@ -208,6 +268,7 @@ export default function StudentSettingsPage() {
     const [profileBusy, setProfileBusy] = React.useState(false)
 
     const [fullNameInput, setFullNameInput] = React.useState("")
+    const [emailInput, setEmailInput] = React.useState("")
     const [courseInput, setCourseInput] = React.useState("")
     const [yearLevelInput, setYearLevelInput] = React.useState("")
 
@@ -216,6 +277,9 @@ export default function StudentSettingsPage() {
     const [avatarBusy, setAvatarBusy] = React.useState(false)
     const [avatarFile, setAvatarFile] = React.useState<File | null>(null)
     const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null)
+
+    // alert dialog state for remove
+    const [removeConfirmOpen, setRemoveConfirmOpen] = React.useState(false)
 
     React.useEffect(() => {
         let cancelled = false
@@ -243,16 +307,16 @@ export default function StudentSettingsPage() {
     const isGuest = rawRole === "other"
 
     const fullName =
-        user?.fullName ||
-        user?.name ||
-        user?.full_name ||
-        user?.student_name ||
-        "—"
+        user?.fullName || user?.name || user?.full_name || user?.student_name || "—"
 
     const email = user?.email || "—"
 
     const studentId =
-        user?.studentId || user?.student_id || user?.studentID || user?.idNumber || null
+        user?.studentId ||
+        user?.student_id ||
+        user?.studentID ||
+        user?.idNumber ||
+        null
 
     const program =
         user?.course || user?.program || user?.courseName || user?.department || null
@@ -260,33 +324,29 @@ export default function StudentSettingsPage() {
     const yearLevel =
         user?.yearLevel || user?.year_level || user?.year || user?.level || null
 
-    const college =
-        user?.college || user?.school || user?.collegeName || null
+    const college = user?.college || user?.school || user?.collegeName || null
 
-    const avatarUrl =
-        avatarPreview ||
-        user?.avatarUrl ||
-        user?.avatar_url ||
-        null
+    const avatarUrl = avatarPreview || user?.avatarUrl || user?.avatar_url || null
 
-    // ✅ FIX: include `user` (and `editing`) as deps; avoid overriding while editing
+    // populate inputs from user (avoid overriding while editing)
     React.useEffect(() => {
         if (!user) return
         if (editing) return
 
         const uFullName =
-            user?.fullName ||
-            user?.name ||
-            user?.full_name ||
-            user?.student_name ||
-            ""
+            user?.fullName || user?.name || user?.full_name || user?.student_name || ""
 
         setFullNameInput(String(uFullName || ""))
-        setCourseInput(String(user?.course || user?.program || user?.courseName || user?.department || ""))
-        setYearLevelInput(String(user?.yearLevel || user?.year_level || user?.year || user?.level || ""))
+        setEmailInput(String(user?.email || ""))
+        setCourseInput(
+            String(user?.course || user?.program || user?.courseName || user?.department || "")
+        )
+        setYearLevelInput(
+            String(user?.yearLevel || user?.year_level || user?.year || user?.level || "")
+        )
     }, [user, editing])
 
-    // ✅ FIX: proper dependency for cleanup
+    // cleanup avatar preview
     React.useEffect(() => {
         if (!avatarPreview) return
         return () => {
@@ -294,13 +354,21 @@ export default function StudentSettingsPage() {
         }
     }, [avatarPreview])
 
+    const oldEmailTrim = String(email === "—" ? "" : email || "").trim()
+    const newEmailTrim = String(emailInput || "").trim()
+    const emailChanged =
+        !!oldEmailTrim && !!newEmailTrim && oldEmailTrim.toLowerCase() !== newEmailTrim.toLowerCase()
+
     const profileDirty =
-        String(fullNameInput || "").trim() !== String(fullName === "—" ? "" : fullName || "").trim() ||
+        String(fullNameInput || "").trim() !==
+        String(fullName === "—" ? "" : fullName || "").trim() ||
+        String(emailInput || "").trim() !== oldEmailTrim ||
         (isStudent && String(courseInput || "").trim() !== String(program || "").trim()) ||
         (isStudent && String(yearLevelInput || "").trim() !== String(yearLevel || "").trim())
 
     function resetProfileForm() {
         setFullNameInput(String(fullName === "—" ? "" : fullName || ""))
+        setEmailInput(String(oldEmailTrim || ""))
         setCourseInput(String(program || ""))
         setYearLevelInput(String(yearLevel || ""))
         setEditing(false)
@@ -308,6 +376,7 @@ export default function StudentSettingsPage() {
         if (avatarPreview) URL.revokeObjectURL(avatarPreview)
         setAvatarPreview(null)
         setAvatarFile(null)
+        setRemoveConfirmOpen(false)
     }
 
     async function onSubmitPassword(e: React.FormEvent) {
@@ -356,25 +425,39 @@ export default function StudentSettingsPage() {
 
     async function onSaveProfile() {
         const name = String(fullNameInput || "").trim()
+        const nextEmail = String(emailInput || "").trim()
+
         if (!name) {
             toast.warning("Full name required", { description: "Please enter your full name." })
+            return
+        }
+        if (!nextEmail) {
+            toast.warning("Email required", { description: "Please enter your email." })
+            return
+        }
+        if (!isValidEmail(nextEmail)) {
+            toast.warning("Invalid email", { description: "Please enter a valid email address." })
             return
         }
 
         if (isStudent) {
             if (!String(courseInput || "").trim()) {
-                toast.warning("Program / Course required", { description: "Please enter your program/course." })
+                toast.warning("Program / Course required", {
+                    description: "Please enter your program/course.",
+                })
                 return
             }
             if (!String(yearLevelInput || "").trim()) {
-                toast.warning("Year level required", { description: "Please enter your year level." })
+                toast.warning("Year level required", {
+                    description: "Please enter your year level.",
+                })
                 return
             }
         }
 
         setProfileBusy(true)
         try {
-            const payload: any = { fullName: name }
+            const payload: any = { fullName: name, email: nextEmail }
             if (isStudent) {
                 payload.course = String(courseInput || "").trim()
                 payload.yearLevel = String(yearLevelInput || "").trim()
@@ -386,9 +469,28 @@ export default function StudentSettingsPage() {
 
             setUser(updatedUser)
             setEditing(false)
-            toast.success("Profile updated", { description: "Your personal information has been saved." })
+
+            if (emailChanged) {
+                // best-effort: ask backend to send a verification email (doesn't break if endpoint missing)
+                try {
+                    await tryResendVerifyEmail(nextEmail)
+                } catch {
+                    // ignore
+                }
+
+                toast.success("Profile updated", {
+                    description:
+                        "Your email was changed. It will be marked as unverified and must be verified the next time you log in.",
+                })
+            } else {
+                toast.success("Profile updated", {
+                    description: "Your personal information has been saved.",
+                })
+            }
         } catch (err: any) {
-            toast.error("Update failed", { description: String(err?.message || err || "Failed to update profile.") })
+            toast.error("Update failed", {
+                description: String(err?.message || err || "Failed to update profile."),
+            })
         } finally {
             setProfileBusy(false)
         }
@@ -436,15 +538,19 @@ export default function StudentSettingsPage() {
             setAvatarPreview(null)
             setAvatarFile(null)
 
-            toast.success("Display picture updated", { description: "Your avatar has been uploaded successfully." })
+            toast.success("Display picture updated", {
+                description: "Your avatar has been uploaded successfully.",
+            })
         } catch (err: any) {
-            toast.error("Upload failed", { description: String(err?.message || err || "Failed to upload avatar.") })
+            toast.error("Upload failed", {
+                description: String(err?.message || err || "Failed to upload avatar."),
+            })
         } finally {
             setAvatarBusy(false)
         }
     }
 
-    async function onRemoveAvatar() {
+    async function onRemoveAvatarConfirmed() {
         setAvatarBusy(true)
         try {
             const r = await tryRemoveAvatar()
@@ -457,13 +563,20 @@ export default function StudentSettingsPage() {
             setAvatarPreview(null)
             setAvatarFile(null)
 
-            toast.success("Avatar removed", { description: "Your display picture has been removed." })
+            toast.success("Avatar removed", {
+                description: "Your display picture has been removed.",
+            })
+            setRemoveConfirmOpen(false)
         } catch (err: any) {
-            toast.error("Remove failed", { description: String(err?.message || err || "Failed to remove avatar.") })
+            toast.error("Remove failed", {
+                description: String(err?.message || err || "Failed to remove avatar."),
+            })
         } finally {
             setAvatarBusy(false)
         }
     }
+
+    const hasAvatar = !!(user?.avatarUrl || user?.avatar_url)
 
     return (
         <DashboardLayout title="Settings">
@@ -532,7 +645,7 @@ export default function StudentSettingsPage() {
                                             <img
                                                 src={avatarUrl}
                                                 alt="Avatar"
-                                                className="h-full w-full object-cover"
+                                                className="h-full w-full object-cover object-center"
                                             />
                                         ) : (
                                             <div className="text-white/80 font-semibold">
@@ -545,7 +658,6 @@ export default function StudentSettingsPage() {
                                         <div className="text-sm text-white/80 font-medium">Display picture</div>
 
                                         <div className="flex flex-wrap items-center gap-2">
-                                            {/* ✅ Use UI Input for file upload */}
                                             <Input
                                                 ref={fileRef}
                                                 type="file"
@@ -583,23 +695,55 @@ export default function StudentSettingsPage() {
                                                 )}
                                             </Button>
 
-                                            <Button
-                                                type="button"
-                                                variant="destructive"
-                                                className="bg-red-600 hover:bg-red-700 text-white"
-                                                onClick={onRemoveAvatar}
-                                                disabled={avatarBusy || (!user?.avatarUrl && !user?.avatar_url)}
-                                            >
-                                                <span className="inline-flex items-center gap-2">
-                                                    <Trash2 className="h-4 w-4" />
-                                                    Remove
-                                                </span>
-                                            </Button>
+                                            <AlertDialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
+                                                <Button
+                                                    type="button"
+                                                    variant="destructive"
+                                                    className="bg-red-600 hover:bg-red-700 text-white"
+                                                    onClick={() => setRemoveConfirmOpen(true)}
+                                                    disabled={avatarBusy || !hasAvatar}
+                                                >
+                                                    <span className="inline-flex items-center gap-2">
+                                                        <Trash2 className="h-4 w-4" />
+                                                        Remove
+                                                    </span>
+                                                </Button>
+
+                                                <AlertDialogContent className="bg-slate-900 text-white border-white/10">
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Remove display picture?</AlertDialogTitle>
+                                                        <AlertDialogDescription className="text-white/70">
+                                                            This will delete your current display picture. You can upload a new one
+                                                            anytime.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel
+                                                            disabled={avatarBusy}
+                                                            className="bg-slate-800 border-white/10 text-white hover:bg-slate-800/80"
+                                                        >
+                                                            Cancel
+                                                        </AlertDialogCancel>
+                                                        <AlertDialogAction
+                                                            disabled={avatarBusy}
+                                                            onClick={() => void onRemoveAvatarConfirmed()}
+                                                            className="bg-red-600 hover:bg-red-600/90 text-white focus:ring-red-500"
+                                                        >
+                                                            {avatarBusy ? (
+                                                                <span className="inline-flex items-center gap-2">
+                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    Removing…
+                                                                </span>
+                                                            ) : (
+                                                                "Remove"
+                                                            )}
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                         </div>
 
-                                        <div className="text-[11px] text-white/50">
-                                            PNG/JPG/WebP • Max 5MB
-                                        </div>
+                                        <div className="text-[11px] text-white/50">PNG/JPG/WebP • Max 5MB</div>
                                     </div>
                                 </div>
 
@@ -623,7 +767,25 @@ export default function StudentSettingsPage() {
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                         <div className="text-xs text-white/60">Email</div>
-                                        <div className="mt-0.5 font-medium">{fmtValue(email)}</div>
+                                        {!editing ? (
+                                            <div className="mt-0.5 font-medium">{fmtValue(email)}</div>
+                                        ) : (
+                                            <div className="mt-2 space-y-1">
+                                                <Label className="text-xs text-white/80">Email</Label>
+                                                <Input
+                                                    value={emailInput}
+                                                    onChange={(e) => setEmailInput(e.target.value)}
+                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    type="email"
+                                                    autoComplete="email"
+                                                />
+                                                <p className="text-[11px] text-white/50">
+                                                    Changing your email will mark it as{" "}
+                                                    <span className="font-semibold text-amber-300">unverified</span> and you’ll
+                                                    need to verify it the next time you log in.
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">

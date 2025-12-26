@@ -31,6 +31,8 @@ import { me as apiMe, logout as apiLogout, type UserDTO } from "@/lib/authentica
 import { Loader2 } from "lucide-react"
 import { clearSessionCache } from "@/hooks/use-session"
 
+type Role = "student" | "other" | "faculty" | "librarian" | "admin"
+
 type UserWithAvatar = UserDTO & {
     avatarUrl?: string | null
     avatar_url?: string | null
@@ -52,14 +54,17 @@ function initialsFrom(fullName?: string | null, email?: string | null) {
             : (src[0] || "") + (src[1] || "")
     return raw.toUpperCase()
 }
+
 function displayName(user: UserDTO | null) {
     if (!user) return "Guest"
     return user.fullName?.trim() || user.email?.split("@")[0] || "User"
 }
+
 function displayEmail(user: UserDTO | null) {
     if (!user) return "Not signed in"
     return user.email
 }
+
 function resolveAvatarUrl(u: UserWithAvatar | null): string | undefined {
     const v =
         u?.avatarUrl ??
@@ -72,6 +77,28 @@ function resolveAvatarUrl(u: UserWithAvatar | null): string | undefined {
         null
     const s = typeof v === "string" ? v.trim() : ""
     return s ? s : undefined
+}
+
+function inferRoleFromPath(path: string): Role | undefined {
+    if (path.startsWith("/dashboard/librarian")) return "librarian"
+    if (path.startsWith("/dashboard/faculty")) return "faculty"
+    if (path.startsWith("/dashboard/admin")) return "admin"
+    if (path.startsWith("/dashboard")) return "student"
+    return undefined
+}
+
+function dashboardHomeForRole(role?: Role): string {
+    if (role === "librarian") return "/dashboard/librarian"
+    if (role === "faculty") return "/dashboard/faculty"
+    if (role === "admin") return "/dashboard/admin"
+    // student + other share /dashboard in your routes
+    return "/dashboard"
+}
+
+function settingsPathForRole(role?: Role): string | null {
+    // ✅ only route that exists in your App.tsx
+    if (role === "student" || role === "other" || role === undefined) return "/dashboard/settings"
+    return null
 }
 
 /** ---------- module-level cache to avoid refetch flicker across routes ---------- */
@@ -123,6 +150,14 @@ export function NavUser() {
         }
     }, [])
 
+    const rawRole: Role | undefined =
+        (user?.accountType as Role | undefined) ??
+        (user?.role as Role | undefined) ??
+        inferRoleFromPath(location.pathname)
+
+    const dashboardHome = dashboardHomeForRole(rawRole)
+    const settingsPath = settingsPathForRole(rawRole)
+
     async function onLogoutConfirmed() {
         try {
             setLoggingOut(true)
@@ -151,6 +186,22 @@ export function NavUser() {
         setConfirmOpen(true)
     }
 
+    function goDashboard() {
+        setMenuOpen(false)
+        navigate(dashboardHome)
+    }
+
+    function goSettings() {
+        setMenuOpen(false)
+        if (settingsPath) {
+            navigate(settingsPath)
+            return
+        }
+        toast.info("Settings", {
+            description: "Settings is only available for Student/Guest accounts right now.",
+        })
+    }
+
     const name = displayName(user)
     const email = displayEmail(user)
     const initials = initialsFrom(user?.fullName, user?.email)
@@ -168,17 +219,14 @@ export function NavUser() {
                             >
                                 <Avatar className="h-8 w-8">
                                     {/* ✅ crop instead of stretch */}
-                                    <AvatarImage
-                                        src={avatarSrc}
-                                        alt={name}
-                                        className="object-cover object-center"
-                                    />
+                                    <AvatarImage src={avatarSrc} alt={name} className="object-cover object-center" />
                                     <AvatarFallback>
                                         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : initials}
                                     </AvatarFallback>
                                 </Avatar>
                             </button>
                         </DropdownMenuTrigger>
+
                         <DropdownMenuContent
                             align="start"
                             side="top"
@@ -187,12 +235,7 @@ export function NavUser() {
                             <DropdownMenuLabel className="font-normal">
                                 <div className="flex items-center gap-2">
                                     <Avatar className="h-7 w-7">
-                                        {/* ✅ crop instead of stretch */}
-                                        <AvatarImage
-                                            src={avatarSrc}
-                                            alt={name}
-                                            className="object-cover object-center"
-                                        />
+                                        <AvatarImage src={avatarSrc} alt={name} className="object-cover object-center" />
                                         <AvatarFallback>{initials}</AvatarFallback>
                                     </Avatar>
                                     <div className="text-xs">
@@ -201,22 +244,21 @@ export function NavUser() {
                                     </div>
                                 </div>
                             </DropdownMenuLabel>
+
                             <DropdownMenuSeparator className="bg-white/10" />
+
                             {user ? (
                                 <>
-                                    <DropdownMenuItem
-                                        onClick={() => navigate("/dashboard")}
-                                        className="focus:bg-white/10"
-                                    >
+                                    <DropdownMenuItem onClick={goDashboard} className="focus:bg-white/10">
                                         My dashboard
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => toast.info("Settings (coming soon)")}
-                                        className="focus:bg-white/10"
-                                    >
+
+                                    <DropdownMenuItem onClick={goSettings} className="focus:bg-white/10">
                                         Settings
                                     </DropdownMenuItem>
+
                                     <DropdownMenuSeparator className="bg-white/10" />
+
                                     <DropdownMenuItem
                                         onClick={openLogoutConfirm}
                                         className="text-red-400 focus:bg-red-500/10"
@@ -225,10 +267,7 @@ export function NavUser() {
                                     </DropdownMenuItem>
                                 </>
                             ) : (
-                                <DropdownMenuItem
-                                    onClick={() => navigate("/auth")}
-                                    className="focus:bg-white/10"
-                                >
+                                <DropdownMenuItem onClick={() => navigate("/auth")} className="focus:bg-white/10">
                                     Sign in
                                 </DropdownMenuItem>
                             )}
@@ -241,8 +280,8 @@ export function NavUser() {
                         <AlertDialogHeader>
                             <AlertDialogTitle>Log out of Book-Hive?</AlertDialogTitle>
                             <AlertDialogDescription className="text-white/70">
-                                You’ll be signed out from this device and will need to sign in again
-                                to access your dashboard.
+                                You’ll be signed out from this device and will need to sign in again to access your
+                                dashboard.
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -277,25 +316,18 @@ export function NavUser() {
                         <SidebarMenuButton size="lg" className="data-[active=true]:bg-transparent">
                             <Avatar className="h-6 w-6">
                                 {/* ✅ crop instead of stretch */}
-                                <AvatarImage
-                                    src={avatarSrc}
-                                    alt={name}
-                                    className="object-cover object-center"
-                                />
+                                <AvatarImage src={avatarSrc} alt={name} className="object-cover object-center" />
                                 <AvatarFallback>
                                     {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : initials}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="grid flex-1 text-left text-sm leading-tight">
-                                <span className="truncate font-medium">
-                                    {loading ? "Loading…" : name}
-                                </span>
-                                <span className="truncate text-xs opacity-70">
-                                    {loading ? " " : email}
-                                </span>
+                                <span className="truncate font-medium">{loading ? "Loading…" : name}</span>
+                                <span className="truncate text-xs opacity-70">{loading ? " " : email}</span>
                             </div>
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
+
                     <DropdownMenuContent
                         align="start"
                         side="top"
@@ -304,12 +336,7 @@ export function NavUser() {
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex items-center gap-2">
                                 <Avatar className="h-7 w-7">
-                                    {/* ✅ crop instead of stretch */}
-                                    <AvatarImage
-                                        src={avatarSrc}
-                                        alt={name}
-                                        className="object-cover object-center"
-                                    />
+                                    <AvatarImage src={avatarSrc} alt={name} className="object-cover object-center" />
                                     <AvatarFallback>{initials}</AvatarFallback>
                                 </Avatar>
                                 <div className="text-xs">
@@ -318,22 +345,21 @@ export function NavUser() {
                                 </div>
                             </div>
                         </DropdownMenuLabel>
+
                         <DropdownMenuSeparator className="bg-white/10" />
+
                         {user ? (
                             <>
-                                <DropdownMenuItem
-                                    onClick={() => navigate("/dashboard")}
-                                    className="focus:bg-white/10"
-                                >
+                                <DropdownMenuItem onClick={goDashboard} className="focus:bg-white/10">
                                     My dashboard
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onClick={() => toast.info("Settings (coming soon)")}
-                                    className="focus:bg-white/10"
-                                >
+
+                                <DropdownMenuItem onClick={goSettings} className="focus:bg-white/10">
                                     Settings
                                 </DropdownMenuItem>
+
                                 <DropdownMenuSeparator className="bg-white/10" />
+
                                 <DropdownMenuItem
                                     onClick={openLogoutConfirm}
                                     className="text-red-400 focus:bg-red-500/10"
@@ -342,10 +368,7 @@ export function NavUser() {
                                 </DropdownMenuItem>
                             </>
                         ) : (
-                            <DropdownMenuItem
-                                onClick={() => navigate("/auth")}
-                                className="focus:bg-white/10"
-                            >
+                            <DropdownMenuItem onClick={() => navigate("/auth")} className="focus:bg-white/10">
                                 Sign in
                             </DropdownMenuItem>
                         )}
@@ -358,8 +381,8 @@ export function NavUser() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Log out of Book-Hive?</AlertDialogTitle>
                         <AlertDialogDescription className="text-white/70">
-                            You’ll be signed out from this device and will need to sign in again
-                            to access your dashboard.
+                            You’ll be signed out from this device and will need to sign in again to access your
+                            dashboard.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

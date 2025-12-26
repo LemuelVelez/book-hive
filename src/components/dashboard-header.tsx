@@ -1,3 +1,4 @@
+// src/components/dashboard-header.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -48,6 +49,8 @@ import {
 import { fetchBooks, type BookDTO } from "@/lib/books"
 import { createSelfBorrow } from "@/lib/borrows"
 
+type Role = "student" | "other" | "faculty" | "librarian" | "admin"
+
 function fmtDate(d?: string | null) {
     if (!d) return "—"
     try {
@@ -82,6 +85,19 @@ function resolveAvatarUrl(u: any): string | undefined {
         null
     const s = typeof v === "string" ? v.trim() : ""
     return s ? s : undefined
+}
+
+function dashboardHomeForRole(role?: Role): string {
+    if (role === "librarian") return "/dashboard/librarian"
+    if (role === "faculty") return "/dashboard/faculty"
+    if (role === "admin") return "/dashboard/admin"
+    return "/dashboard" // student + other
+}
+
+function settingsPathForRole(role?: Role): string | null {
+    // ✅ only route that exists in your App.tsx
+    if (role === "student" || role === "other" || role === undefined) return "/dashboard/settings"
+    return null
 }
 
 export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
@@ -123,7 +139,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         setLogoutConfirmOpen(false)
     }, [location.pathname])
 
-    function inferRoleFromPath(path: string): string | undefined {
+    function inferRoleFromPath(path: string): Role | undefined {
         if (path.startsWith("/dashboard/librarian")) return "librarian"
         if (path.startsWith("/dashboard/faculty")) return "faculty"
         if (path.startsWith("/dashboard/admin")) return "admin"
@@ -143,9 +159,9 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
     }
 
-    const rawRole =
-        (user?.accountType as string | undefined) ??
-        (user?.role as string | undefined) ??
+    const rawRole: Role | undefined =
+        (user?.accountType as Role | undefined) ??
+        (user?.role as Role | undefined) ??
         inferRoleFromPath(pathname)
 
     const roleLabel = formatRole(rawRole)
@@ -175,9 +191,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                     const data = await fetchBooks()
                     if (!cancelled) setBooks(data)
                 } catch (err: any) {
-                    const msg =
-                        err?.message ||
-                        "Failed to load books for reservation. Please try again."
+                    const msg = err?.message || "Failed to load books for reservation. Please try again."
                     toast.error("Failed to load books", { description: msg })
                 } finally {
                     if (!cancelled) setReserveLoading(false)
@@ -199,9 +213,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
         const chosen = books.find((b) => b.id === selectedBookId)
         if (!chosen) {
-            toast.error("Invalid selection", {
-                description: "The selected book could not be found.",
-            })
+            toast.error("Invalid selection", { description: "The selected book could not be found." })
             return
         }
 
@@ -217,23 +229,15 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             const record = await createSelfBorrow(selectedBookId)
 
             toast.success("Book reserved", {
-                description: `"${chosen.title}" has been reserved/borrowed. Due on ${fmtDate(
-                    record.dueDate,
-                )}.`,
+                description: `"${chosen.title}" has been reserved/borrowed. Due on ${fmtDate(record.dueDate)}.`,
             })
 
-            setBooks((prev) =>
-                prev.map((b) =>
-                    b.id === selectedBookId ? { ...b, available: false } : b,
-                ),
-            )
+            setBooks((prev) => prev.map((b) => (b.id === selectedBookId ? { ...b, available: false } : b)))
 
             setReserveOpen(false)
             setSelectedBookId("")
         } catch (err: any) {
-            const msg =
-                err?.message ||
-                "Could not reserve this book right now. Please try again later."
+            const msg = err?.message || "Could not reserve this book right now. Please try again later."
             toast.error("Reservation failed", { description: msg })
         } finally {
             setReserveSubmitting(false)
@@ -261,6 +265,23 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         setLogoutConfirmOpen(true)
     }
 
+    function goDashboard() {
+        setUserMenuOpen(false)
+        navigate(dashboardHomeForRole(rawRole))
+    }
+
+    function goSettings() {
+        setUserMenuOpen(false)
+        const p = settingsPathForRole(rawRole)
+        if (p) {
+            navigate(p)
+            return
+        }
+        toast.info("Settings", {
+            description: "Settings is only available for Student/Guest accounts right now.",
+        })
+    }
+
     async function onLogoutConfirmed() {
         try {
             setLoggingOut(true)
@@ -286,9 +307,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                 <SidebarTrigger />
 
                 <div className="flex-1 min-w-0">
-                    <h1 className="text-base md:text-lg font-semibold tracking-tight truncate">
-                        {title}
-                    </h1>
+                    <h1 className="text-base md:text-lg font-semibold tracking-tight truncate">{title}</h1>
                     {showWelcome && (
                         <p className="mt-0.5 text-xs md:text-sm text-white/70 truncate">
                             Welcome
@@ -323,35 +342,27 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
                             <DialogContent className="bg-slate-900 text-white border-white/10">
                                 <DialogHeaderUI>
-                                    <DialogTitle className="text-sm md:text-base">
-                                        Quick reserve
-                                    </DialogTitle>
+                                    <DialogTitle className="text-sm md:text-base">Quick reserve</DialogTitle>
                                     <DialogDescription className="text-white/70 text-xs md:text-sm">
-                                        Choose a book to reserve/borrow. This works the same as
-                                        borrowing from the{" "}
+                                        Choose a book to reserve/borrow. This works the same as borrowing from the{" "}
                                         <span className="font-semibold">Browse Books</span> page.
                                     </DialogDescription>
                                 </DialogHeaderUI>
 
                                 <div className="mt-3 space-y-3 text-sm">
                                     {reserveLoading ? (
-                                        <p className="text-xs text-white/60">
-                                            Loading available books…
-                                        </p>
+                                        <p className="text-xs text-white/60">Loading available books…</p>
                                     ) : availableBooks.length === 0 ? (
                                         <p className="text-xs text-white/60">
-                                            There are currently no books available to reserve. Try
-                                            again later or browse the catalog.
+                                            There are currently no books available to reserve. Try again later or browse
+                                            the catalog.
                                         </p>
                                     ) : (
                                         <div className="space-y-1.5">
                                             <label className="text-xs font-medium text-white/80">
                                                 Select book to reserve
                                             </label>
-                                            <Select
-                                                value={selectedBookId}
-                                                onValueChange={(v) => setSelectedBookId(v)}
-                                            >
+                                            <Select value={selectedBookId} onValueChange={(v) => setSelectedBookId(v)}>
                                                 <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
                                                     <SelectValue placeholder="Choose a book" />
                                                 </SelectTrigger>
@@ -365,10 +376,8 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                             </Select>
                                             <p className="text-[11px] text-white/50">
                                                 Only books currently marked as{" "}
-                                                <span className="font-semibold text-emerald-300">
-                                                    Available
-                                                </span>{" "}
-                                                are shown here.
+                                                <span className="font-semibold text-emerald-300">Available</span> are shown
+                                                here.
                                             </p>
                                         </div>
                                     )}
@@ -388,11 +397,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                         type="button"
                                         className="bg-purple-600 hover:bg-purple-700 text-white"
                                         onClick={() => void handleReserveConfirm()}
-                                        disabled={
-                                            reserveSubmitting ||
-                                            reserveLoading ||
-                                            availableBooks.length === 0
-                                        }
+                                        disabled={reserveSubmitting || reserveLoading || availableBooks.length === 0}
                                     >
                                         {reserveSubmitting ? (
                                             <span className="inline-flex items-center gap-2">
@@ -416,17 +421,9 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                             >
                                 <Avatar className="h-8 w-8">
                                     {/* ✅ crop instead of stretch */}
-                                    <AvatarImage
-                                        src={avatarSrc}
-                                        alt={headerName}
-                                        className="object-cover object-center"
-                                    />
+                                    <AvatarImage src={avatarSrc} alt={headerName} className="object-cover object-center" />
                                     <AvatarFallback>
-                                        {user === undefined ? (
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                            initials
-                                        )}
+                                        {user === undefined ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : initials}
                                     </AvatarFallback>
                                 </Avatar>
                             </button>
@@ -439,12 +436,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                             <DropdownMenuLabel className="font-normal">
                                 <div className="flex items-center gap-2">
                                     <Avatar className="h-7 w-7">
-                                        {/* ✅ crop instead of stretch */}
-                                        <AvatarImage
-                                            src={avatarSrc}
-                                            alt={headerName}
-                                            className="object-cover object-center"
-                                        />
+                                        <AvatarImage src={avatarSrc} alt={headerName} className="object-cover object-center" />
                                         <AvatarFallback>{initials}</AvatarFallback>
                                     </Avatar>
                                     <div className="text-xs">
@@ -458,19 +450,16 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
                             {user ? (
                                 <>
-                                    <DropdownMenuItem
-                                        onClick={() => navigate("/dashboard")}
-                                        className="focus:bg-white/10"
-                                    >
+                                    <DropdownMenuItem onClick={goDashboard} className="focus:bg-white/10">
                                         My dashboard
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => toast.info("Settings (coming soon)")}
-                                        className="focus:bg-white/10"
-                                    >
+
+                                    <DropdownMenuItem onClick={goSettings} className="focus:bg-white/10">
                                         Settings
                                     </DropdownMenuItem>
+
                                     <DropdownMenuSeparator className="bg-white/10" />
+
                                     <DropdownMenuItem
                                         onClick={openLogoutConfirm}
                                         className="text-red-400 focus:bg-red-500/10"
@@ -479,10 +468,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                     </DropdownMenuItem>
                                 </>
                             ) : (
-                                <DropdownMenuItem
-                                    onClick={() => navigate("/auth")}
-                                    className="focus:bg-white/10"
-                                >
+                                <DropdownMenuItem onClick={() => navigate("/auth")} className="focus:bg-white/10">
                                     Sign in
                                 </DropdownMenuItem>
                             )}
@@ -494,15 +480,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Log out of Book-Hive?</AlertDialogTitle>
                                 <AlertDialogDescription className="text-white/70">
-                                    You’ll be signed out from this device and will need to sign in again
-                                    to access your dashboard.
+                                    You’ll be signed out from this device and will need to sign in again to access
+                                    your dashboard.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                                <AlertDialogCancel
-                                    disabled={loggingOut}
-                                    className="bg-slate-800 border-white/10"
-                                >
+                                <AlertDialogCancel disabled={loggingOut} className="bg-slate-800 border-white/10">
                                     Cancel
                                 </AlertDialogCancel>
                                 <AlertDialogAction
