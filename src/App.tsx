@@ -38,6 +38,9 @@ const StudentInsightsHubPage = lazy(
 const StudentFinesPage = lazy(
   () => import('./pages/dashboard/student/fines')
 )
+const StudentSettingsPage = lazy(
+  () => import('./pages/dashboard/student/settings')
+)
 
 const LibrarianDashboard = lazy(
   () => import('./pages/dashboard/librarian/dashboard')
@@ -167,6 +170,16 @@ function App() {
             element={
               <RequireRole allow={['student', 'other']}>
                 <StudentInsightsHubPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Student / Other settings page */}
+          <Route
+            path="/dashboard/settings"
+            element={
+              <RequireRole allow={['student', 'other']}>
+                <StudentSettingsPage />
               </RequireRole>
             }
           />

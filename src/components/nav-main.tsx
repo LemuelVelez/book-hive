@@ -16,6 +16,7 @@ import {
     MessageSquare,
     ShieldAlert,
     ReceiptText,
+    Settings,
 } from "lucide-react"
 
 type Item = {
@@ -77,6 +78,11 @@ export function NavMain() {
                 label: "Insights Hub",
                 icon: MessageSquare,
                 to: "/dashboard/insights",
+            },
+            {
+                label: "Settings",
+                icon: Settings,
+                to: "/dashboard/settings",
             },
         ]
     } else if (isLibrarian) {
