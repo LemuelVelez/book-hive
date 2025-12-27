@@ -170,6 +170,15 @@ export async function resendVerifyEmail(email: string) {
   });
 }
 
+/** ✅ NEW: confirm verification using token (lets Settings verify without logout) */
+export async function confirmVerifyEmail(token: string) {
+  type Resp = JsonOk<{ message: string }>;
+  return requestJSON<Resp>(ROUTES.auth.verifyConfirm, {
+    method: "POST",
+    body: { token },
+  });
+}
+
 export async function checkStudentIdAvailability(studentId: string) {
   return requestJSON<{ available: boolean }>(
     ROUTES.users.checkStudentId(studentId),
@@ -191,6 +200,7 @@ export async function submitSupportTicket(form: FormData) {
 
 export async function updateMyProfile(payload: {
   fullName?: string;
+  email?: string; // ✅ now supported
   course?: string;
   yearLevel?: string;
 }) {
@@ -216,5 +226,15 @@ export async function removeMyAvatar() {
   type Resp = JsonOk<{ user: UserDTO }>;
   return requestJSON<Resp>(ROUTES.users.meAvatar, {
     method: "DELETE",
+  });
+}
+
+/* ---------------- NEW: change password (logged-in) ---------------- */
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  type Resp = JsonOk<{ message?: string }>;
+  return requestJSON<Resp>(ROUTES.users.mePassword, {
+    method: "PATCH",
+    body: { currentPassword, newPassword },
   });
 }

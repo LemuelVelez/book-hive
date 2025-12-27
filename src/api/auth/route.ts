@@ -15,7 +15,6 @@ function stripTrailingSlash(u: string) {
 function guessDevApi() {
   if (typeof window === "undefined") return undefined;
   const origin = window.location.origin;
-  // Support both localhost and 127.0.0.1 on standard Vite port
   const isViteDev = /^http:\/\/(localhost|127\.0\.0\.1):5173$/.test(origin);
   return isViteDev ? "http://localhost:5000" : undefined;
 }
@@ -23,9 +22,7 @@ function guessDevApi() {
 const base =
   (raw && stripTrailingSlash(String(raw))) ||
   (guessDevApi() && stripTrailingSlash(String(guessDevApi()))) ||
-  (typeof window !== "undefined"
-    ? stripTrailingSlash(window.location.origin)
-    : "");
+  (typeof window !== "undefined" ? stripTrailingSlash(window.location.origin) : "");
 
 export const API_BASE = base;
 
@@ -33,7 +30,6 @@ export const API_BASE = base;
 const api = (p: string) => `${API_BASE}/api${p}`;
 
 if (import.meta.env.DEV) {
-  // Helpful during dev to ensure we're talking to the right server
   console.info("[Book-Hive] API_BASE ->", API_BASE);
 }
 
@@ -45,8 +41,7 @@ export const ROUTES = {
     logout: api("/auth/logout"),
     register: api("/auth/register"),
     verifyEmail: api("/auth/verify-email"), // POST (re-send)
-    verifyConfirm: api("/auth/verify-email/confirm"), // GET/POST with ?token=...
-    // Added for password reset flow
+    verifyConfirm: api("/auth/verify-email/confirm"), // POST token
     forgotPassword: api("/auth/forgot-password"),
     resetPassword: api("/auth/reset-password"),
   },
@@ -54,9 +49,12 @@ export const ROUTES = {
     checkStudentId: (studentId: string) =>
       api(`/users/check-student-id?studentId=${encodeURIComponent(studentId)}`),
 
-    // ✅ NEW: profile update + avatar upload/remove
     me: api("/users/me"), // PATCH
-    meAvatar: api("/users/me/avatar"), // POST (upload), DELETE (remove)
+    meAvatar: api("/users/me/avatar"), // POST/DELETE
+    mePassword: api("/users/me/password"), // PATCH
+
+    // ✅ NEW: manual verification send for logged-in user
+    meVerifyEmail: api("/users/me/verify-email"), // POST
   },
   support: {
     ticket: api("/support/ticket"),

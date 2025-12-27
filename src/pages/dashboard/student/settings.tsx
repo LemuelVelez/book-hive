@@ -69,6 +69,29 @@ function isValidEmail(email: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
 }
 
+function extractVerifyToken(input: string) {
+    const s = String(input || "").trim()
+    if (!s) return null
+
+    // If user pasted a full URL
+    try {
+        const u = new URL(s)
+        const t = u.searchParams.get("token")
+        if (t) return t.trim()
+    } catch {
+        // ignore
+    }
+
+    // If user pasted something containing token=...
+    const m = s.match(/[?&]token=([a-f0-9]{16,})/i)
+    if (m?.[1]) return m[1].trim()
+
+    // If user pasted raw token
+    if (/^[a-f0-9]{32,}$/i.test(s)) return s
+
+    return null
+}
+
 async function tryChangePassword(currentPassword: string, newPassword: string) {
     const anyAuth = auth as any
 
@@ -228,6 +251,7 @@ async function tryResendVerifyEmail(email: string) {
         "/api/auth/resend-verify-email",
         "/api/auth/resendVerifyEmail",
         "/api/auth/verify-email/resend",
+        "/api/auth/verify-email",
     ]
 
     for (const url of endpoints) {
@@ -249,6 +273,60 @@ async function tryResendVerifyEmail(email: string) {
     }
 
     return { ok: false }
+}
+
+async function tryConfirmVerifyEmail(token: string) {
+    const anyAuth = auth as any
+
+    // ✅ preferred: lib/authentication.ts
+    if (typeof anyAuth.confirmVerifyEmail === "function") {
+        return await anyAuth.confirmVerifyEmail(token)
+    }
+
+    // best-effort fallback
+    const endpoints = [
+        "/api/auth/verify-email/confirm",
+        "/api/auth/verifyEmail/confirm",
+    ]
+
+    let lastErr: string | null = null
+
+    for (const url of endpoints) {
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token }),
+            })
+
+            if (res.status === 404 || res.status === 405) {
+                lastErr = `Endpoint not found: ${url}`
+                continue
+            }
+
+            const text = await res.text()
+            let data: any = null
+            try {
+                data = text ? JSON.parse(text) : null
+            } catch {
+                data = null
+            }
+
+            if (!res.ok) {
+                const msg = data?.message || data?.error || text || "Failed to verify email."
+                throw new Error(msg)
+            }
+
+            return data ?? { ok: true }
+        } catch (e: any) {
+            lastErr = String(e?.message || e)
+            if (/endpoint not found/i.test(lastErr)) continue
+            throw e
+        }
+    }
+
+    throw new Error(lastErr || "Verify confirm endpoint is not available.")
 }
 
 export default function StudentSettingsPage() {
@@ -281,6 +359,14 @@ export default function StudentSettingsPage() {
     // alert dialog state for remove
     const [removeConfirmOpen, setRemoveConfirmOpen] = React.useState(false)
 
+    // ✅ email verification UI state
+    const [resendBusy, setResendBusy] = React.useState(false)
+    const [resendCooldown, setResendCooldown] = React.useState(0)
+    const [verifyDialogOpen, setVerifyDialogOpen] = React.useState(false)
+    const [verifyTokenInput, setVerifyTokenInput] = React.useState("")
+    const [verifyBusy, setVerifyBusy] = React.useState(false)
+    const [refreshBusy, setRefreshBusy] = React.useState(false)
+
     React.useEffect(() => {
         let cancelled = false
 
@@ -298,6 +384,14 @@ export default function StudentSettingsPage() {
         }
     }, [])
 
+    React.useEffect(() => {
+        if (resendCooldown <= 0) return
+        const t = window.setInterval(() => {
+            setResendCooldown((c) => Math.max(0, c - 1))
+        }, 1000)
+        return () => window.clearInterval(t)
+    }, [resendCooldown])
+
     const rawRole: Role | undefined =
         (user?.accountType as Role | undefined) ??
         (user?.role as Role | undefined) ??
@@ -310,6 +404,14 @@ export default function StudentSettingsPage() {
         user?.fullName || user?.name || user?.full_name || user?.student_name || "—"
 
     const email = user?.email || "—"
+
+    const isEmailVerified = Boolean(
+        user?.isEmailVerified ??
+        user?.is_email_verified ??
+        user?.emailVerified ??
+        user?.email_verified ??
+        false
+    )
 
     const studentId =
         user?.studentId ||
@@ -377,6 +479,9 @@ export default function StudentSettingsPage() {
         setAvatarPreview(null)
         setAvatarFile(null)
         setRemoveConfirmOpen(false)
+
+        setVerifyDialogOpen(false)
+        setVerifyTokenInput("")
     }
 
     async function onSubmitPassword(e: React.FormEvent) {
@@ -471,16 +576,10 @@ export default function StudentSettingsPage() {
             setEditing(false)
 
             if (emailChanged) {
-                // best-effort: ask backend to send a verification email (doesn't break if endpoint missing)
-                try {
-                    await tryResendVerifyEmail(nextEmail)
-                } catch {
-                    // ignore
-                }
-
+                // ✅ FIX: Don't resend here — backend already sends on email change
                 toast.success("Profile updated", {
                     description:
-                        "Your email was changed. It will be marked as unverified and must be verified the next time you log in.",
+                        "Your email was changed and marked as unverified. A verification email should be sent to your new address. You can resend/verify from this Settings page.",
                 })
             } else {
                 toast.success("Profile updated", {
@@ -493,6 +592,81 @@ export default function StudentSettingsPage() {
             })
         } finally {
             setProfileBusy(false)
+        }
+    }
+
+    async function onResendVerification() {
+        const targetEmail = String(user?.email || "").trim()
+        if (!targetEmail || !isValidEmail(targetEmail)) {
+            toast.warning("Valid email required", {
+                description: "Please make sure your email is saved and valid before sending verification.",
+            })
+            return
+        }
+        if (resendCooldown > 0) return
+
+        setResendBusy(true)
+        try {
+            const r = await tryResendVerifyEmail(targetEmail)
+            if (r?.ok === false) {
+                throw new Error("Resend endpoint is not available.")
+            }
+
+            toast.success("Verification email sent", {
+                description: `We sent a verification email to ${targetEmail}.`,
+            })
+            setResendCooldown(60)
+        } catch (err: any) {
+            toast.error("Failed to send verification", {
+                description: String(err?.message || err || "Could not send verification email."),
+            })
+        } finally {
+            setResendBusy(false)
+        }
+    }
+
+    async function onVerifyWithToken() {
+        const token = extractVerifyToken(verifyTokenInput)
+        if (!token) {
+            toast.warning("Token required", {
+                description: "Paste the verification link or token from your email.",
+            })
+            return
+        }
+
+        setVerifyBusy(true)
+        try {
+            await tryConfirmVerifyEmail(token)
+
+            toast.success("Email verified", {
+                description: "Your email has been verified successfully.",
+            })
+
+            setVerifyDialogOpen(false)
+            setVerifyTokenInput("")
+
+            // refresh /me to reflect isEmailVerified=true
+            const u = await apiMe()
+            setUser(u)
+        } catch (err: any) {
+            toast.error("Verification failed", {
+                description: String(err?.message || err || "Could not verify email."),
+            })
+        } finally {
+            setVerifyBusy(false)
+        }
+    }
+
+    async function onRefreshVerificationStatus() {
+        setRefreshBusy(true)
+        try {
+            const u = await apiMe()
+            setUser(u)
+            toast.success("Status refreshed", { description: "Your email verification status was refreshed." })
+        } catch {
+            toast.error("Refresh failed", { description: "Could not refresh your profile. Please try again." })
+        } finally {
+            setRefreshBusy(false)
         }
     }
 
@@ -766,7 +940,20 @@ export default function StudentSettingsPage() {
                                     </div>
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                        <div className="text-xs text-white/60">Email</div>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="text-xs text-white/60">Email</div>
+                                            <span
+                                                className={[
+                                                    "text-[11px] px-2 py-0.5 rounded border",
+                                                    isEmailVerified
+                                                        ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                                                        : "bg-amber-500/10 text-amber-300 border-amber-500/20",
+                                                ].join(" ")}
+                                            >
+                                                {isEmailVerified ? "Verified" : "Unverified"}
+                                            </span>
+                                        </div>
+
                                         {!editing ? (
                                             <div className="mt-0.5 font-medium">{fmtValue(email)}</div>
                                         ) : (
@@ -781,11 +968,115 @@ export default function StudentSettingsPage() {
                                                 />
                                                 <p className="text-[11px] text-white/50">
                                                     Changing your email will mark it as{" "}
-                                                    <span className="font-semibold text-amber-300">unverified</span> and you’ll
-                                                    need to verify it the next time you log in.
+                                                    <span className="font-semibold text-amber-300">unverified</span>. After saving,
+                                                    you can resend/verify it here without logging out.
                                                 </p>
                                             </div>
                                         )}
+
+                                        {/* ✅ Email verification controls */}
+                                        {!isEmailVerified ? (
+                                            <div className="mt-3 space-y-2">
+                                                <p className="text-[11px] text-amber-200/80">
+                                                    Your email is not verified. Use the buttons below to resend the verification email
+                                                    and verify using the token/link from your inbox.
+                                                </p>
+
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        className="bg-slate-900/60 border border-white/10 text-white hover:bg-slate-900/80"
+                                                        onClick={() => void onResendVerification()}
+                                                        disabled={resendBusy || resendCooldown > 0}
+                                                    >
+                                                        {resendBusy ? (
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                                Sending…
+                                                            </span>
+                                                        ) : resendCooldown > 0 ? (
+                                                            `Resend in ${resendCooldown}s`
+                                                        ) : (
+                                                            "Send verification email"
+                                                        )}
+                                                    </Button>
+
+                                                    <Button
+                                                        type="button"
+                                                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                                                        onClick={() => setVerifyDialogOpen(true)}
+                                                        disabled={verifyBusy}
+                                                    >
+                                                        Verify email
+                                                    </Button>
+
+                                                    <Button
+                                                        type="button"
+                                                        className="bg-slate-900/60 border border-white/10 text-white hover:bg-slate-900/80"
+                                                        onClick={() => void onRefreshVerificationStatus()}
+                                                        disabled={refreshBusy}
+                                                    >
+                                                        {refreshBusy ? (
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                                Refreshing…
+                                                            </span>
+                                                        ) : (
+                                                            "Refresh status"
+                                                        )}
+                                                    </Button>
+                                                </div>
+
+                                                <AlertDialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>
+                                                    <AlertDialogContent className="bg-slate-900 text-white border-white/10">
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Verify your email</AlertDialogTitle>
+                                                            <AlertDialogDescription className="text-white/70">
+                                                                Paste the verification link or token from the email you received.
+                                                                (You can paste the whole link — we’ll extract the token.)
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+
+                                                        <div className="space-y-2">
+                                                            <Label className="text-xs text-white/80">Verification link / token</Label>
+                                                            <Input
+                                                                value={verifyTokenInput}
+                                                                onChange={(e) => setVerifyTokenInput(e.target.value)}
+                                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                                placeholder="Paste link or token…"
+                                                                disabled={verifyBusy}
+                                                            />
+                                                            <p className="text-[11px] text-white/50">
+                                                                Tip: If you clicked the link already, press “Refresh status”.
+                                                            </p>
+                                                        </div>
+
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel
+                                                                disabled={verifyBusy}
+                                                                className="bg-slate-800 border-white/10 text-white hover:bg-slate-800/80"
+                                                            >
+                                                                Cancel
+                                                            </AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                disabled={verifyBusy}
+                                                                onClick={() => void onVerifyWithToken()}
+                                                                className="bg-purple-600 hover:bg-purple-600/90 text-white focus:ring-purple-500"
+                                                            >
+                                                                {verifyBusy ? (
+                                                                    <span className="inline-flex items-center gap-2">
+                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                        Verifying…
+                                                                    </span>
+                                                                ) : (
+                                                                    "Verify"
+                                                                )}
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        ) : null}
                                     </div>
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
