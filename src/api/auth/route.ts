@@ -60,6 +60,7 @@ export const ROUTES = {
     list: api("/users"), // GET
     pending: api("/users/pending"), // GET
     approve: (id: string) => api(`/users/${encodeURIComponent(id)}/approve`), // PATCH
+    disapprove: (id: string) => api(`/users/${encodeURIComponent(id)}/disapprove`), // PATCH
     delete: (id: string) => api(`/users/${encodeURIComponent(id)}`), // DELETE
   },
   support: {

@@ -77,14 +77,16 @@ function normalizeUserDTO(u: any): UserDTO {
   const email = String(u?.email ?? "").trim();
   const fullName = String(u?.fullName ?? u?.full_name ?? "").trim();
 
-  const accountType = normalizeRole(u?.accountType ?? u?.account_type ?? u?.role ?? "student");
+  const accountType = normalizeRole(
+    u?.accountType ?? u?.account_type ?? u?.role ?? "student"
+  );
 
-  const isEmailVerified = Boolean(u?.isEmailVerified ?? u?.is_email_verified ?? false);
+  const isEmailVerified = Boolean(
+    u?.isEmailVerified ?? u?.is_email_verified ?? false
+  );
 
-  const isApproved =
-    u?.isApproved ?? u?.is_approved ?? undefined;
-  const approvedAt =
-    (u?.approvedAt ?? u?.approved_at ?? null) as string | null;
+  const isApproved = u?.isApproved ?? u?.is_approved ?? undefined;
+  const approvedAt = (u?.approvedAt ?? u?.approved_at ?? null) as string | null;
 
   const studentId = (u?.studentId ?? u?.student_id ?? null) as string | null;
   const course = (u?.course ?? null) as string | null;
@@ -361,6 +363,14 @@ export async function listPendingUsers(): Promise<UserListItemDTO[]> {
 export async function approveUserById(id: string) {
   type Resp = JsonOk<{ message?: string }>;
   return requestJSON<Resp>(ROUTES.users.approve(id), {
+    method: "PATCH",
+    body: {},
+  });
+}
+
+export async function disapproveUserById(id: string) {
+  type Resp = JsonOk<{ message?: string }>;
+  return requestJSON<Resp>(ROUTES.users.disapprove(id), {
     method: "PATCH",
     body: {},
   });

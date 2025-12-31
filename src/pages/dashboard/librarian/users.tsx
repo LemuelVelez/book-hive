@@ -16,12 +16,21 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Users2, RefreshCcw, Loader2, Search, Check, Trash2 } from "lucide-react";
+import {
+    Users2,
+    RefreshCcw,
+    Loader2,
+    Search,
+    Check,
+    X,
+    Trash2,
+} from "lucide-react";
 import {
     type Role,
     type UserListItemDTO,
     listUsers,
     approveUserById,
+    disapproveUserById,
     deleteUserById,
 } from "@/lib/authentication";
 
@@ -46,13 +55,17 @@ function approvalBadgeClasses(approved: boolean) {
         : "bg-orange-600/80 hover:bg-orange-600 text-white border-orange-500/70";
 }
 
+type BusyState =
+    | { id: string; action: "approve" | "disapprove" | "delete" }
+    | null;
+
 export default function LibrarianUsersPage() {
     const [users, setUsers] = React.useState<UserListItemDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [search, setSearch] = React.useState("");
-    const [busyId, setBusyId] = React.useState<string | null>(null);
+    const [busy, setBusy] = React.useState<BusyState>(null);
 
     const loadUsers = React.useCallback(async () => {
         setError(null);
@@ -104,7 +117,7 @@ export default function LibrarianUsersPage() {
     );
 
     const onApprove = async (id: string) => {
-        setBusyId(id);
+        setBusy({ id, action: "approve" });
         try {
             await approveUserById(id);
             toast.success("User approved");
@@ -112,12 +125,27 @@ export default function LibrarianUsersPage() {
         } catch (e: any) {
             toast.error("Approve failed", { description: e?.message || "Unknown error" });
         } finally {
-            setBusyId(null);
+            setBusy(null);
+        }
+    };
+
+    const onDisapprove = async (id: string) => {
+        setBusy({ id, action: "disapprove" });
+        try {
+            await disapproveUserById(id);
+            toast.success("User disapproved");
+            await loadUsers();
+        } catch (e: any) {
+            toast.error("Disapprove failed", {
+                description: e?.message || "Unknown error",
+            });
+        } finally {
+            setBusy(null);
         }
     };
 
     const onDelete = async (id: string) => {
-        setBusyId(id);
+        setBusy({ id, action: "delete" });
         try {
             await deleteUserById(id);
             toast.success("User deleted");
@@ -125,7 +153,7 @@ export default function LibrarianUsersPage() {
         } catch (e: any) {
             toast.error("Delete failed", { description: e?.message || "Unknown error" });
         } finally {
-            setBusyId(null);
+            setBusy(null);
         }
     };
 
@@ -137,7 +165,7 @@ export default function LibrarianUsersPage() {
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Users directory</h2>
                         <p className="text-xs text-white/70">
-                            Manage newly registered users (approve/delete). Pending:{" "}
+                            Manage newly registered users (approve/disapprove/delete). Pending:{" "}
                             <span className="font-semibold text-orange-200">{pendingCount}</span>
                         </p>
                     </div>
@@ -151,13 +179,13 @@ export default function LibrarianUsersPage() {
                         className="border-white/20 text-white/90 hover:bg-white/10"
                         onClick={handleRefresh}
                         disabled={refreshing || loading}
+                        aria-label="Refresh"
                     >
                         {refreshing || loading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                             <RefreshCcw className="h-4 w-4" />
                         )}
-                        <span className="sr-only">Refresh</span>
                     </Button>
                 </div>
             </div>
@@ -215,11 +243,18 @@ export default function LibrarianUsersPage() {
                             </TableHeader>
                             <TableBody>
                                 {filtered.map((u) => {
-                                    const busy = busyId === u.id;
+                                    const isBusyApprove = busy?.id === u.id && busy?.action === "approve";
+                                    const isBusyDisapprove = busy?.id === u.id && busy?.action === "disapprove";
+                                    const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
+                                    const anyBusyForRow = busy?.id === u.id;
 
-                                    // Match backend rules: actions only for non-exempt + pending
+                                    // Match backend rules: actions only for non-exempt roles
                                     const exempt = u.accountType === "admin" || u.accountType === "librarian";
+
                                     const canApprove = !u.isApproved && !exempt;
+                                    const canDisapprove = u.isApproved && !exempt;
+
+                                    // keep delete restricted to pending/non-exempt (same as before)
                                     const canDelete = !u.isApproved && !exempt;
 
                                     return (
@@ -246,37 +281,57 @@ export default function LibrarianUsersPage() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="inline-flex items-center gap-2">
+                                                    {/* ✅ Approve (icon-only, Lucide) */}
                                                     <Button
                                                         type="button"
-                                                        size="sm"
                                                         variant="outline"
+                                                        size="icon"
                                                         className="border-white/20 text-white/90 hover:bg-white/10"
                                                         onClick={() => onApprove(u.id)}
-                                                        disabled={!canApprove || busy}
-                                                        title={canApprove ? "Approve user" : "Already approved or exempt role"}
+                                                        disabled={!canApprove || anyBusyForRow}
+                                                        title={canApprove ? "Approve user" : "Cannot approve (already approved or exempt role)"}
+                                                        aria-label="Approve user"
                                                     >
-                                                        {busy ? (
+                                                        {isBusyApprove ? (
                                                             <Loader2 className="h-4 w-4 animate-spin" />
                                                         ) : (
                                                             <Check className="h-4 w-4" />
                                                         )}
-                                                        <span className="ml-1">Approve</span>
                                                     </Button>
 
+                                                    {/* ✅ Disapprove (icon-only, Lucide) */}
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                                        onClick={() => onDisapprove(u.id)}
+                                                        disabled={!canDisapprove || anyBusyForRow}
+                                                        title={canDisapprove ? "Disapprove user" : "Cannot disapprove (pending or exempt role)"}
+                                                        aria-label="Disapprove user"
+                                                    >
+                                                        {isBusyDisapprove ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <X className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+
+                                                    {/* Delete (kept as-is behavior-wise) */}
                                                     <Button
                                                         type="button"
                                                         size="sm"
                                                         variant="destructive"
                                                         className="hover:opacity-95"
                                                         onClick={() => onDelete(u.id)}
-                                                        disabled={!canDelete || busy}
+                                                        disabled={!canDelete || anyBusyForRow}
                                                         title={
                                                             canDelete
                                                                 ? "Delete newly registered user"
                                                                 : "Only pending, non-exempt users can be deleted"
                                                         }
                                                     >
-                                                        {busy ? (
+                                                        {isBusyDelete ? (
                                                             <Loader2 className="h-4 w-4 animate-spin" />
                                                         ) : (
                                                             <Trash2 className="h-4 w-4" />
