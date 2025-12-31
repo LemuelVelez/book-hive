@@ -13,6 +13,10 @@ export type UserDTO = {
 
   isEmailVerified: boolean;
 
+  // ✅ NEW: approval fields (for newly registered users)
+  isApproved?: boolean;
+  approvedAt?: string | null;
+
   // ✅ profile fields
   studentId?: string | null;
   course?: string | null;
@@ -20,6 +24,21 @@ export type UserDTO = {
 
   // ✅ avatar
   avatarUrl?: string | null;
+};
+
+export type UserListItemDTO = {
+  id: string;
+  email: string;
+  fullName: string;
+  accountType: Role;
+  avatarUrl?: string | null;
+
+  // approval
+  isApproved: boolean;
+  approvedAt?: string | null;
+
+  // optional timestamps
+  createdAt?: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -42,6 +61,78 @@ function getErrorMessage(e: unknown): string {
   } catch {
     return "";
   }
+}
+
+function normalizeRole(raw: unknown): Role {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (v === "student") return "student";
+  if (v === "librarian") return "librarian";
+  if (v === "faculty") return "faculty";
+  if (v === "admin") return "admin";
+  return "other";
+}
+
+function normalizeUserDTO(u: any): UserDTO {
+  const id = String(u?.id ?? "").trim();
+  const email = String(u?.email ?? "").trim();
+  const fullName = String(u?.fullName ?? u?.full_name ?? "").trim();
+
+  const accountType = normalizeRole(u?.accountType ?? u?.account_type ?? u?.role ?? "student");
+
+  const isEmailVerified = Boolean(u?.isEmailVerified ?? u?.is_email_verified ?? false);
+
+  const isApproved =
+    u?.isApproved ?? u?.is_approved ?? undefined;
+  const approvedAt =
+    (u?.approvedAt ?? u?.approved_at ?? null) as string | null;
+
+  const studentId = (u?.studentId ?? u?.student_id ?? null) as string | null;
+  const course = (u?.course ?? null) as string | null;
+  const yearLevel = (u?.yearLevel ?? u?.year_level ?? null) as string | null;
+
+  const avatarUrl = (u?.avatarUrl ?? u?.avatar_url ?? null) as string | null;
+
+  return {
+    id,
+    email,
+    fullName,
+    accountType,
+    role: u?.role ? normalizeRole(u.role) : undefined,
+    isEmailVerified,
+    isApproved: isApproved === undefined ? undefined : Boolean(isApproved),
+    approvedAt,
+    studentId,
+    course,
+    yearLevel,
+    avatarUrl,
+  };
+}
+
+function normalizeUserListItem(u: any): UserListItemDTO | null {
+  if (!u) return null;
+
+  const id = String(u.id ?? "").trim();
+  const email = String(u.email ?? "").trim();
+  if (!id || !email) return null;
+
+  const fullName = String(u.fullName ?? u.full_name ?? "").trim();
+  const accountType = normalizeRole(u.accountType ?? u.account_type ?? u.role ?? "student");
+
+  const isApproved = Boolean(u.isApproved ?? u.is_approved ?? false);
+  const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
+  const createdAt = (u.createdAt ?? u.created_at ?? null) as string | null;
+  const avatarUrl = (u.avatarUrl ?? u.avatar_url ?? null) as string | null;
+
+  return {
+    id,
+    email,
+    fullName,
+    accountType,
+    avatarUrl,
+    isApproved,
+    approvedAt,
+    createdAt,
+  };
 }
 
 async function requestJSON<T = unknown>(
@@ -115,21 +206,22 @@ async function requestJSON<T = unknown>(
 // -------- Public API --------
 
 export async function me() {
-  type Resp = JsonOk<{ user: UserDTO }>;
+  type Resp = JsonOk<{ user: any }>;
   try {
     const r = await requestJSON<Resp>(ROUTES.auth.me, { method: "GET" });
-    return r.user;
+    return normalizeUserDTO(r.user);
   } catch {
     return null;
   }
 }
 
 export async function login(email: string, password: string) {
-  type Resp = JsonOk<{ user: UserDTO }>;
-  return requestJSON<Resp>(ROUTES.auth.login, {
+  type Resp = JsonOk<{ user: any }>;
+  const r = await requestJSON<Resp>(ROUTES.auth.login, {
     method: "POST",
     body: { email, password },
   });
+  return { ...r, user: normalizeUserDTO(r.user) } as JsonOk<{ user: UserDTO }>;
 }
 
 export async function logout() {
@@ -155,11 +247,12 @@ export async function register(payload: {
   // ✅ optional avatar url (if you ever want to set on registration)
   avatarUrl?: string | null;
 }) {
-  type Resp = JsonOk<{ user: UserDTO }>;
-  return requestJSON<Resp>(ROUTES.auth.register, {
+  type Resp = JsonOk<{ user: any }>;
+  const r = await requestJSON<Resp>(ROUTES.auth.register, {
     method: "POST",
     body: payload,
   });
+  return { ...r, user: normalizeUserDTO(r.user) } as JsonOk<{ user: UserDTO }>;
 }
 
 export async function resendVerifyEmail(email: string) {
@@ -170,12 +263,21 @@ export async function resendVerifyEmail(email: string) {
   });
 }
 
-/** ✅ NEW: confirm verification using token (lets Settings verify without logout) */
+/** ✅ confirm verification using token (lets Settings verify without logout) */
 export async function confirmVerifyEmail(token: string) {
   type Resp = JsonOk<{ message: string }>;
   return requestJSON<Resp>(ROUTES.auth.verifyConfirm, {
     method: "POST",
     body: { token },
+  });
+}
+
+/** ✅ NEW: send verification email for currently logged-in user */
+export async function sendMyVerifyEmail() {
+  type Resp = JsonOk<{ message: string }>;
+  return requestJSON<Resp>(ROUTES.users.meVerifyEmail, {
+    method: "POST",
+    body: {},
   });
 }
 
@@ -196,7 +298,7 @@ export async function submitSupportTicket(form: FormData) {
   });
 }
 
-/* ---------------- NEW: profile update + avatar upload ---------------- */
+/* ---------------- profile update + avatar upload ---------------- */
 
 export async function updateMyProfile(payload: {
   fullName?: string;
@@ -204,37 +306,69 @@ export async function updateMyProfile(payload: {
   course?: string;
   yearLevel?: string;
 }) {
-  type Resp = JsonOk<{ user: UserDTO }>;
-  return requestJSON<Resp>(ROUTES.users.me, {
+  type Resp = JsonOk<{ user: any }>;
+  const r = await requestJSON<Resp>(ROUTES.users.me, {
     method: "PATCH",
     body: payload,
   });
+  return { ...r, user: normalizeUserDTO(r.user) } as JsonOk<{ user: UserDTO }>;
 }
 
 export async function uploadMyAvatar(file: File) {
-  type Resp = JsonOk<{ user: UserDTO }>;
+  type Resp = JsonOk<{ user: any }>;
   const form = new FormData();
   form.append("avatar", file);
-  return requestJSON<Resp>(ROUTES.users.meAvatar, {
+  const r = await requestJSON<Resp>(ROUTES.users.meAvatar, {
     method: "POST",
     body: form,
     asFormData: true,
   });
+  return { ...r, user: normalizeUserDTO(r.user) } as JsonOk<{ user: UserDTO }>;
 }
 
 export async function removeMyAvatar() {
-  type Resp = JsonOk<{ user: UserDTO }>;
-  return requestJSON<Resp>(ROUTES.users.meAvatar, {
+  type Resp = JsonOk<{ user: any }>;
+  const r = await requestJSON<Resp>(ROUTES.users.meAvatar, {
     method: "DELETE",
   });
+  return { ...r, user: normalizeUserDTO(r.user) } as JsonOk<{ user: UserDTO }>;
 }
 
-/* ---------------- NEW: change password (logged-in) ---------------- */
+/* ---------------- change password (logged-in) ---------------- */
 
 export async function changePassword(currentPassword: string, newPassword: string) {
   type Resp = JsonOk<{ message?: string }>;
   return requestJSON<Resp>(ROUTES.users.mePassword, {
     method: "PATCH",
     body: { currentPassword, newPassword },
+  });
+}
+
+/* ---------------- librarian/admin user management ---------------- */
+
+export async function listUsers(): Promise<UserListItemDTO[]> {
+  const data = await requestJSON<any>(ROUTES.users.list, { method: "GET" });
+  const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
+  return arr.map(normalizeUserListItem).filter(Boolean) as UserListItemDTO[];
+}
+
+export async function listPendingUsers(): Promise<UserListItemDTO[]> {
+  const data = await requestJSON<any>(ROUTES.users.pending, { method: "GET" });
+  const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
+  return arr.map(normalizeUserListItem).filter(Boolean) as UserListItemDTO[];
+}
+
+export async function approveUserById(id: string) {
+  type Resp = JsonOk<{ message?: string }>;
+  return requestJSON<Resp>(ROUTES.users.approve(id), {
+    method: "PATCH",
+    body: {},
+  });
+}
+
+export async function deleteUserById(id: string) {
+  type Resp = JsonOk<{ message?: string }>;
+  return requestJSON<Resp>(ROUTES.users.delete(id), {
+    method: "DELETE",
   });
 }

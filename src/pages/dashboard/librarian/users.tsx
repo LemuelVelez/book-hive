@@ -16,67 +16,14 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Users2, RefreshCcw, Loader2, Search } from "lucide-react";
-import { API_BASE } from "@/api/auth/route";
-
-type Role = "student" | "librarian" | "faculty" | "admin" | "other";
-
-type UserRow = {
-    id: string;
-    email: string;
-    fullName: string;
-    accountType: Role;
-};
-
-// Try to normalize possibly different server payload shapes
-function normalizeUser(u: any): UserRow | null {
-    if (!u) return null;
-    const id = String(u.id ?? "").trim();
-    const email = String(u.email ?? "").trim();
-    const fullName = String(u.fullName ?? u.full_name ?? "").trim();
-    const roleRaw = (u.accountType ?? u.role ?? "student") as string;
-
-    if (!id || !email) return null;
-
-    const accountType: Role =
-        roleRaw === "librarian" ||
-            roleRaw === "faculty" ||
-            roleRaw === "admin" ||
-            roleRaw === "other"
-            ? (roleRaw as Role)
-            : "student";
-
-    return { id, email, fullName, accountType };
-}
-
-async function fetchUsersFromApi(): Promise<UserRow[]> {
-    const endpoint = `${API_BASE}/api/users`;
-    const res = await fetch(endpoint, { method: "GET", credentials: "include" });
-
-    // If the endpoint doesn't exist yet, surface a helpful message.
-    if (!res.ok) {
-        const msgText = (await res.text()).trim() || `HTTP ${res.status}`;
-        throw new Error(
-            `Failed to fetch users from ${endpoint}. ${msgText || ""}`.trim()
-        );
-    }
-
-    // Accept either an array or an object with { users: [...] }
-    let data: any = null;
-    try {
-        data = await res.json();
-    } catch {
-        throw new Error("Server responded with invalid JSON.");
-    }
-
-    const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
-
-    const normalized: UserRow[] = arr
-        .map(normalizeUser)
-        .filter(Boolean) as UserRow[];
-
-    return normalized;
-}
+import { Users2, RefreshCcw, Loader2, Search, Check, Trash2 } from "lucide-react";
+import {
+    type Role,
+    type UserListItemDTO,
+    listUsers,
+    approveUserById,
+    deleteUserById,
+} from "@/lib/authentication";
 
 function roleBadgeClasses(role: Role) {
     switch (role) {
@@ -93,18 +40,25 @@ function roleBadgeClasses(role: Role) {
     }
 }
 
+function approvalBadgeClasses(approved: boolean) {
+    return approved
+        ? "bg-emerald-600/80 hover:bg-emerald-600 text-white border-emerald-500/70"
+        : "bg-orange-600/80 hover:bg-orange-600 text-white border-orange-500/70";
+}
+
 export default function LibrarianUsersPage() {
-    const [users, setUsers] = React.useState<UserRow[]>([]);
+    const [users, setUsers] = React.useState<UserListItemDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [search, setSearch] = React.useState("");
+    const [busyId, setBusyId] = React.useState<string | null>(null);
 
     const loadUsers = React.useCallback(async () => {
         setError(null);
         setLoading(true);
         try {
-            const list = await fetchUsersFromApi();
+            const list = await listUsers();
             setUsers(list);
         } catch (err: any) {
             const msg =
@@ -137,11 +91,43 @@ export default function LibrarianUsersPage() {
             return (
                 u.id.toLowerCase().includes(q) ||
                 u.email.toLowerCase().includes(q) ||
-                u.fullName.toLowerCase().includes(q) ||
-                u.accountType.toLowerCase().includes(q)
+                (u.fullName || "").toLowerCase().includes(q) ||
+                u.accountType.toLowerCase().includes(q) ||
+                (u.isApproved ? "approved" : "pending").includes(q)
             );
         });
     }, [users, search]);
+
+    const pendingCount = React.useMemo(
+        () => users.filter((u) => !u.isApproved).length,
+        [users]
+    );
+
+    const onApprove = async (id: string) => {
+        setBusyId(id);
+        try {
+            await approveUserById(id);
+            toast.success("User approved");
+            await loadUsers();
+        } catch (e: any) {
+            toast.error("Approve failed", { description: e?.message || "Unknown error" });
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const onDelete = async (id: string) => {
+        setBusyId(id);
+        try {
+            await deleteUserById(id);
+            toast.success("User deleted");
+            await loadUsers();
+        } catch (e: any) {
+            toast.error("Delete failed", { description: e?.message || "Unknown error" });
+        } finally {
+            setBusyId(null);
+        }
+    };
 
     return (
         <DashboardLayout title="Users">
@@ -151,7 +137,8 @@ export default function LibrarianUsersPage() {
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Users directory</h2>
                         <p className="text-xs text-white/70">
-                            Read-only list of registered users (ID, Email, Name, Role).
+                            Manage newly registered users (approve/delete). Pending:{" "}
+                            <span className="font-semibold text-orange-200">{pendingCount}</span>
                         </p>
                     </div>
                 </div>
@@ -180,12 +167,12 @@ export default function LibrarianUsersPage() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <CardTitle>Users</CardTitle>
 
-                        <div className="relative w-full md:w-64">
+                        <div className="relative w-full md:w-72">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                             <Input
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search by ID, email, name, role…"
+                                placeholder="Search by ID, email, name, role, approved…"
                                 className="pl-9 bg-slate-900/70 border-white/20 text-white"
                             />
                         </div>
@@ -205,9 +192,7 @@ export default function LibrarianUsersPage() {
                         <div className="py-10 text-center text-sm text-white/70">
                             No users found.
                             <br />
-                            <span className="text-xs opacity-80">
-                                Try a different search.
-                            </span>
+                            <span className="text-xs opacity-80">Try a different search.</span>
                         </div>
                     ) : (
                         <Table>
@@ -219,47 +204,95 @@ export default function LibrarianUsersPage() {
                                     <TableHead className="w-[90px] text-xs font-semibold text-white/70">
                                         User ID
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Email
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Full name
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Role
+                                    <TableHead className="text-xs font-semibold text-white/70">Email</TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">Full name</TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">Role</TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">Approval</TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70 text-right">
+                                        Actions
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filtered.map((u) => (
-                                    <TableRow
-                                        key={u.id}
-                                        className="border-white/5 hover:bg-white/5 transition-colors"
-                                    >
-                                        <TableCell className="text-xs opacity-80 max-w-[180px] truncate font-mono">
-                                            {u.id}
-                                        </TableCell>
-                                        <TableCell className="text-sm opacity-90">{u.email}</TableCell>
-                                        <TableCell className="text-sm">
-                                            {u.fullName || <span className="opacity-50">—</span>}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge
-                                                variant="default"
-                                                className={roleBadgeClasses(u.accountType)}
-                                            >
-                                                {u.accountType}
-                                            </Badge>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                {filtered.map((u) => {
+                                    const busy = busyId === u.id;
+
+                                    // Match backend rules: actions only for non-exempt + pending
+                                    const exempt = u.accountType === "admin" || u.accountType === "librarian";
+                                    const canApprove = !u.isApproved && !exempt;
+                                    const canDelete = !u.isApproved && !exempt;
+
+                                    return (
+                                        <TableRow
+                                            key={u.id}
+                                            className="border-white/5 hover:bg-white/5 transition-colors"
+                                        >
+                                            <TableCell className="text-xs opacity-80 max-w-[180px] truncate font-mono">
+                                                {u.id}
+                                            </TableCell>
+                                            <TableCell className="text-sm opacity-90">{u.email}</TableCell>
+                                            <TableCell className="text-sm">
+                                                {u.fullName || <span className="opacity-50">—</span>}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="default" className={roleBadgeClasses(u.accountType)}>
+                                                    {u.accountType}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
+                                                    {u.isApproved ? "approved" : "pending"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="inline-flex items-center gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                                        onClick={() => onApprove(u.id)}
+                                                        disabled={!canApprove || busy}
+                                                        title={canApprove ? "Approve user" : "Already approved or exempt role"}
+                                                    >
+                                                        {busy ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Check className="h-4 w-4" />
+                                                        )}
+                                                        <span className="ml-1">Approve</span>
+                                                    </Button>
+
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        className="hover:opacity-95"
+                                                        onClick={() => onDelete(u.id)}
+                                                        disabled={!canDelete || busy}
+                                                        title={
+                                                            canDelete
+                                                                ? "Delete newly registered user"
+                                                                : "Only pending, non-exempt users can be deleted"
+                                                        }
+                                                    >
+                                                        {busy ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-4 w-4" />
+                                                        )}
+                                                        <span className="ml-1">Delete</span>
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     )}
                 </CardContent>
             </Card>
-
-            {/* Note: This page is intentionally read-only for the Librarian role. */}
         </DashboardLayout>
     );
 }

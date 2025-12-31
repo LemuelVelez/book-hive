@@ -53,8 +53,14 @@ export const ROUTES = {
     meAvatar: api("/users/me/avatar"), // POST/DELETE
     mePassword: api("/users/me/password"), // PATCH
 
-    // ✅ NEW: manual verification send for logged-in user
+    // ✅ manual verification send for logged-in user
     meVerifyEmail: api("/users/me/verify-email"), // POST
+
+    // ✅ NEW: librarian/admin user management
+    list: api("/users"), // GET
+    pending: api("/users/pending"), // GET
+    approve: (id: string) => api(`/users/${encodeURIComponent(id)}/approve`), // PATCH
+    delete: (id: string) => api(`/users/${encodeURIComponent(id)}`), // DELETE
   },
   support: {
     ticket: api("/support/ticket"),
