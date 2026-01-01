@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import {
     Plus,
@@ -52,8 +52,6 @@ import {
     type BookDTO,
     type LibraryArea,
 } from "@/lib/books";
-
-// ✅ shadcn AlertDialog for delete confirmation
 import {
     AlertDialog,
     AlertDialogAction,
@@ -66,7 +64,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const LIBRARY_AREA_HELP: LibraryArea[] = [
+const LIBRARY_AREA_OPTIONS: LibraryArea[] = [
     "filipiniana",
     "general_circulation",
     "maritime",
@@ -79,6 +77,30 @@ const LIBRARY_AREA_HELP: LibraryArea[] = [
     "fiction",
 ];
 
+const LIBRARY_AREA_OTHER_VALUE = "others";
+
+function isKnownLibraryArea(value: string): value is LibraryArea {
+    return LIBRARY_AREA_OPTIONS.includes(value as LibraryArea);
+}
+
+function formatLibraryAreaLabel(value: string) {
+    return value
+        .replaceAll("_", " ")
+        .split(" ")
+        .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+        .join(" ");
+}
+
+function normalizeOtherLibraryArea(raw: string) {
+    return raw.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function getErrorMessage(err: unknown) {
+    if (err instanceof Error) return err.message;
+    if (typeof err === "string") return err;
+    return "Something went wrong. Please try again later.";
+}
+
 export default function LibrarianBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -87,22 +109,19 @@ export default function LibrarianBooksPage() {
 
     const [search, setSearch] = React.useState("");
 
-    // Dialog + form state (Add)
     const [addOpen, setAddOpen] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
 
-    // Required-ish
     const [title, setTitle] = React.useState("");
     const [author, setAuthor] = React.useState("");
-    const [statementOfResponsibility, setStatementOfResponsibility] = React.useState("");
+    const [statementOfResponsibility, setStatementOfResponsibility] =
+        React.useState("");
 
-    // IDs / legacy
     const [isbn, setIsbn] = React.useState("");
     const [issn, setIssn] = React.useState("");
     const [accessionNumber, setAccessionNumber] = React.useState("");
     const [genre, setGenre] = React.useState("");
 
-    // Publication
     const [subtitle, setSubtitle] = React.useState("");
     const [edition, setEdition] = React.useState("");
     const [pubYear, setPubYear] = React.useState("");
@@ -110,7 +129,6 @@ export default function LibrarianBooksPage() {
     const [placeOfPublication, setPlaceOfPublication] = React.useState("");
     const [publisher, setPublisher] = React.useState("");
 
-    // Physical / notes
     const [pages, setPages] = React.useState("");
     const [otherDetails, setOtherDetails] = React.useState("");
     const [dimensions, setDimensions] = React.useState("");
@@ -119,27 +137,27 @@ export default function LibrarianBooksPage() {
     const [category, setCategory] = React.useState("");
     const [addedEntries, setAddedEntries] = React.useState("");
 
-    // Copy details (NOW REQUIRED: barcode, callNumber, libraryArea)
     const [barcode, setBarcode] = React.useState("");
     const [callNumber, setCallNumber] = React.useState("");
     const [copyNumber, setCopyNumber] = React.useState("");
     const [volumeNumber, setVolumeNumber] = React.useState("");
-    const [libraryArea, setLibraryArea] = React.useState("");
 
-    // Availability / loan rules
+    const [libraryAreaOption, setLibraryAreaOption] = React.useState<string>("");
+    const [libraryAreaOther, setLibraryAreaOther] = React.useState("");
+
     const [borrowDuration, setBorrowDuration] = React.useState("7");
     const [available, setAvailable] = React.useState(true);
 
     const [formError, setFormError] = React.useState<string>("");
 
-    // Dialog + form state (Edit)
     const [editOpen, setEditOpen] = React.useState(false);
     const [editing, setEditing] = React.useState(false);
     const [editBookId, setEditBookId] = React.useState<string | null>(null);
 
     const [editTitle, setEditTitle] = React.useState("");
     const [editAuthor, setEditAuthor] = React.useState("");
-    const [editStatementOfResponsibility, setEditStatementOfResponsibility] = React.useState("");
+    const [editStatementOfResponsibility, setEditStatementOfResponsibility] =
+        React.useState("");
 
     const [editIsbn, setEditIsbn] = React.useState("");
     const [editIssn, setEditIssn] = React.useState("");
@@ -161,12 +179,14 @@ export default function LibrarianBooksPage() {
     const [editCategory, setEditCategory] = React.useState("");
     const [editAddedEntries, setEditAddedEntries] = React.useState("");
 
-    // Copy details (NOW REQUIRED: editBarcode, editCallNumber, editLibraryArea)
     const [editBarcode, setEditBarcode] = React.useState("");
     const [editCallNumber, setEditCallNumber] = React.useState("");
     const [editCopyNumber, setEditCopyNumber] = React.useState("");
     const [editVolumeNumber, setEditVolumeNumber] = React.useState("");
-    const [editLibraryArea, setEditLibraryArea] = React.useState("");
+
+    const [editLibraryAreaOption, setEditLibraryAreaOption] =
+        React.useState<string>("");
+    const [editLibraryAreaOther, setEditLibraryAreaOther] = React.useState("");
 
     const [editBorrowDuration, setEditBorrowDuration] = React.useState("");
     const [editAvailable, setEditAvailable] = React.useState(true);
@@ -201,7 +221,9 @@ export default function LibrarianBooksPage() {
         setCallNumber("");
         setCopyNumber("");
         setVolumeNumber("");
-        setLibraryArea("");
+
+        setLibraryAreaOption("");
+        setLibraryAreaOther("");
 
         setBorrowDuration("7");
         setAvailable(true);
@@ -239,7 +261,9 @@ export default function LibrarianBooksPage() {
         setEditCallNumber("");
         setEditCopyNumber("");
         setEditVolumeNumber("");
-        setEditLibraryArea("");
+
+        setEditLibraryAreaOption("");
+        setEditLibraryAreaOther("");
 
         setEditBorrowDuration("");
         setEditAvailable(true);
@@ -252,9 +276,8 @@ export default function LibrarianBooksPage() {
         try {
             const data = await fetchBooks();
             setBooks(data);
-        } catch (err: any) {
-            const msg =
-                err?.message || "Failed to load books. Please try again later.";
+        } catch (err: unknown) {
+            const msg = getErrorMessage(err) || "Failed to load books. Please try again later.";
             setError(msg);
             toast.error("Failed to load books", { description: msg });
         } finally {
@@ -290,16 +313,6 @@ export default function LibrarianBooksPage() {
         if (!Number.isFinite(n) || n <= 0) return null;
         return n;
     };
-
-    const normalizeLibraryAreaInput = (raw: string): LibraryArea | null => {
-        const v = raw.trim().toLowerCase();
-        if (!v) return null;
-        return LIBRARY_AREA_HELP.includes(v as LibraryArea) ? (v as LibraryArea) : null;
-    };
-
-    const libraryAreaValidationMessage = `Library area is required and must be one of: ${LIBRARY_AREA_HELP.join(
-        ", "
-    )}.`;
 
     const handleCreateBook = async () => {
         setFormError("");
@@ -346,7 +359,6 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        // ✅ REQUIRED copy fields
         if (!barcode.trim()) {
             const msg = "Barcode is required.";
             setFormError(msg);
@@ -361,11 +373,30 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        const libArea = normalizeLibraryAreaInput(libraryArea);
-        if (!libArea) {
-            setFormError(libraryAreaValidationMessage);
-            toast.error("Validation error", { description: libraryAreaValidationMessage });
+        if (!libraryAreaOption) {
+            const msg = "Library area is required.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
             return;
+        }
+
+        let resolvedLibraryArea = "";
+        if (libraryAreaOption === LIBRARY_AREA_OTHER_VALUE) {
+            resolvedLibraryArea = normalizeOtherLibraryArea(libraryAreaOther);
+            if (!resolvedLibraryArea) {
+                const msg = "Please specify the library area.";
+                setFormError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
+            }
+        } else {
+            if (!isKnownLibraryArea(libraryAreaOption)) {
+                const msg = "Please select a valid library area.";
+                setFormError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
+            }
+            resolvedLibraryArea = libraryAreaOption;
         }
 
         if (!borrowDuration.trim()) {
@@ -392,7 +423,9 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        const copyNum = copyNumber.trim() ? parsePositiveIntOrNull(copyNumber) : null;
+        const copyNum = copyNumber.trim()
+            ? parsePositiveIntOrNull(copyNumber)
+            : null;
         if (copyNumber.trim() && copyNum === null) {
             const msg = "Copy number must be a positive number.";
             setFormError(msg);
@@ -428,12 +461,11 @@ export default function LibrarianBooksPage() {
                 category: category.trim(),
                 addedEntries: addedEntries.trim(),
 
-                // ✅ required fields sent
                 barcode: barcode.trim(),
                 callNumber: callNumber.trim(),
                 copyNumber: copyNum,
                 volumeNumber: volumeNumber.trim(),
-                libraryArea: libArea,
+                libraryArea: resolvedLibraryArea as unknown as LibraryArea,
 
                 available,
                 borrowDurationDays: borrowDaysInt,
@@ -446,9 +478,8 @@ export default function LibrarianBooksPage() {
 
             resetForm();
             setAddOpen(false);
-        } catch (err: any) {
-            const msg =
-                err?.message || "Failed to create book. Please try again later.";
+        } catch (err: unknown) {
+            const msg = getErrorMessage(err) || "Failed to create book. Please try again later.";
             setFormError(msg);
             toast.error("Failed to create book", { description: msg });
         } finally {
@@ -456,7 +487,6 @@ export default function LibrarianBooksPage() {
         }
     };
 
-    // ✅ Open edit dialog with selected book data
     const openEditDialog = (book: BookDTO) => {
         setEditBookId(book.id);
 
@@ -473,9 +503,7 @@ export default function LibrarianBooksPage() {
         setEditEdition(book.edition || "");
 
         setEditPubYear(
-            typeof book.publicationYear === "number"
-                ? String(book.publicationYear)
-                : ""
+            typeof book.publicationYear === "number" ? String(book.publicationYear) : ""
         );
         setEditCopyrightYear(
             typeof book.copyrightYear === "number" ? String(book.copyrightYear) : ""
@@ -494,9 +522,22 @@ export default function LibrarianBooksPage() {
 
         setEditBarcode(book.barcode || "");
         setEditCallNumber(book.callNumber || "");
-        setEditCopyNumber(typeof book.copyNumber === "number" ? String(book.copyNumber) : "");
+        setEditCopyNumber(
+            typeof book.copyNumber === "number" ? String(book.copyNumber) : ""
+        );
         setEditVolumeNumber(book.volumeNumber || "");
-        setEditLibraryArea(book.libraryArea || "");
+
+        const currentArea = (book.libraryArea || "").trim();
+        if (currentArea && isKnownLibraryArea(currentArea)) {
+            setEditLibraryAreaOption(currentArea);
+            setEditLibraryAreaOther("");
+        } else if (currentArea) {
+            setEditLibraryAreaOption(LIBRARY_AREA_OTHER_VALUE);
+            setEditLibraryAreaOther(currentArea);
+        } else {
+            setEditLibraryAreaOption("");
+            setEditLibraryAreaOther("");
+        }
 
         setEditBorrowDuration(
             typeof book.borrowDurationDays === "number" && book.borrowDurationDays > 0
@@ -555,7 +596,6 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        // ✅ REQUIRED copy fields
         if (!editBarcode.trim()) {
             const msg = "Barcode is required.";
             setEditError(msg);
@@ -570,11 +610,30 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        const libArea = normalizeLibraryAreaInput(editLibraryArea);
-        if (!libArea) {
-            setEditError(libraryAreaValidationMessage);
-            toast.error("Validation error", { description: libraryAreaValidationMessage });
+        if (!editLibraryAreaOption) {
+            const msg = "Library area is required.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
             return;
+        }
+
+        let resolvedLibraryArea = "";
+        if (editLibraryAreaOption === LIBRARY_AREA_OTHER_VALUE) {
+            resolvedLibraryArea = normalizeOtherLibraryArea(editLibraryAreaOther);
+            if (!resolvedLibraryArea) {
+                const msg = "Please specify the library area.";
+                setEditError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
+            }
+        } else {
+            if (!isKnownLibraryArea(editLibraryAreaOption)) {
+                const msg = "Please select a valid library area.";
+                setEditError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
+            }
+            resolvedLibraryArea = editLibraryAreaOption;
         }
 
         if (!editBorrowDuration.trim()) {
@@ -601,7 +660,9 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        const copyNum = editCopyNumber.trim() ? parsePositiveIntOrNull(editCopyNumber) : null;
+        const copyNum = editCopyNumber.trim()
+            ? parsePositiveIntOrNull(editCopyNumber)
+            : null;
         if (editCopyNumber.trim() && copyNum === null) {
             const msg = "Copy number must be a positive number.";
             setEditError(msg);
@@ -637,20 +698,17 @@ export default function LibrarianBooksPage() {
                 category: editCategory.trim(),
                 addedEntries: editAddedEntries.trim(),
 
-                // ✅ required fields sent
                 barcode: editBarcode.trim(),
                 callNumber: editCallNumber.trim(),
                 copyNumber: copyNum,
                 volumeNumber: editVolumeNumber.trim(),
-                libraryArea: libArea,
+                libraryArea: resolvedLibraryArea as unknown as LibraryArea,
 
                 available: editAvailable,
                 borrowDurationDays: borrowDaysInt,
             });
 
-            setBooks((prev) =>
-                prev.map((b) => (b.id === updated.id ? updated : b))
-            );
+            setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
 
             toast.success("Book updated", {
                 description: `"${updated.title}" has been updated.`,
@@ -658,9 +716,8 @@ export default function LibrarianBooksPage() {
 
             setEditOpen(false);
             resetEditForm();
-        } catch (err: any) {
-            const msg =
-                err?.message || "Failed to update book. Please try again later.";
+        } catch (err: unknown) {
+            const msg = getErrorMessage(err) || "Failed to update book. Please try again later.";
             setEditError(msg);
             toast.error("Failed to update book", { description: msg });
         } finally {
@@ -668,9 +725,7 @@ export default function LibrarianBooksPage() {
         }
     };
 
-    // ✅ Now only does the actual delete work (no confirm here)
     const handleDelete = async (book: BookDTO) => {
-        // Optimistic remove
         const previous = books;
         setBooks((prev) => prev.filter((b) => b.id !== book.id));
 
@@ -679,10 +734,9 @@ export default function LibrarianBooksPage() {
             toast.success("Book deleted", {
                 description: `"${book.title}" has been removed from the catalog.`,
             });
-        } catch (err: any) {
+        } catch (err: unknown) {
             setBooks(previous);
-            const msg =
-                err?.message || "Failed to delete book. Please try again later.";
+            const msg = getErrorMessage(err) || "Failed to delete book. Please try again later.";
             toast.error("Delete failed", { description: msg });
         }
     };
@@ -746,7 +800,6 @@ export default function LibrarianBooksPage() {
                         <span className="sr-only">Refresh</span>
                     </Button>
 
-                    {/* Add book dialog */}
                     <Dialog
                         open={addOpen}
                         onOpenChange={(open) => {
@@ -782,7 +835,6 @@ export default function LibrarianBooksPage() {
                             </DialogHeader>
 
                             <div className="space-y-5 py-2">
-                                {/* Core */}
                                 <div className="space-y-4">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                         Core details
@@ -837,7 +889,9 @@ export default function LibrarianBooksPage() {
                                         <FieldContent>
                                             <Input
                                                 value={statementOfResponsibility}
-                                                onChange={(e) => setStatementOfResponsibility(e.target.value)}
+                                                onChange={(e) =>
+                                                    setStatementOfResponsibility(e.target.value)
+                                                }
                                                 placeholder="Optional (can be used instead of Author)"
                                                 className="bg-slate-900/70 border-white/20 text-white"
                                                 autoComplete="off"
@@ -859,14 +913,15 @@ export default function LibrarianBooksPage() {
                                     </Field>
                                 </div>
 
-                                {/* Identifiers */}
                                 <div className="space-y-4 pt-2 border-t border-white/10">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                         Identifiers
                                     </div>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Accession Number</FieldLabel>
+                                        <FieldLabel className="text-white">
+                                            Accession Number
+                                        </FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={accessionNumber}
@@ -931,7 +986,6 @@ export default function LibrarianBooksPage() {
                                     </Field>
                                 </div>
 
-                                {/* Publication */}
                                 <div className="space-y-4 pt-2 border-t border-white/10">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                         Publication
@@ -969,7 +1023,9 @@ export default function LibrarianBooksPage() {
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Place of publication</FieldLabel>
+                                        <FieldLabel className="text-white">
+                                            Place of publication
+                                        </FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={placeOfPublication}
@@ -995,7 +1051,6 @@ export default function LibrarianBooksPage() {
                                     </Field>
                                 </div>
 
-                                {/* Physical */}
                                 <div className="space-y-4 pt-2 border-t border-white/10">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                         Physical description & notes
@@ -1081,7 +1136,6 @@ export default function LibrarianBooksPage() {
                                     </Field>
                                 </div>
 
-                                {/* Copy / circulation */}
                                 <div className="space-y-4 pt-2 border-t border-white/10">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                         Copy & circulation
@@ -1143,17 +1197,60 @@ export default function LibrarianBooksPage() {
                                     <Field>
                                         <FieldLabel className="text-white">Library area *</FieldLabel>
                                         <FieldContent>
-                                            <Input
-                                                value={libraryArea}
-                                                onChange={(e) => setLibraryArea(e.target.value)}
-                                                placeholder="e.g., general_circulation"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
+                                            <RadioGroup
+                                                value={libraryAreaOption}
+                                                onValueChange={(v) => {
+                                                    setLibraryAreaOption(v);
+                                                    if (v !== LIBRARY_AREA_OTHER_VALUE) setLibraryAreaOther("");
+                                                }}
+                                                className="space-y-2"
+                                            >
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {LIBRARY_AREA_OPTIONS.map((opt) => {
+                                                        const id = `lib-area-${opt}`;
+                                                        return (
+                                                            <div
+                                                                key={opt}
+                                                                className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2"
+                                                            >
+                                                                <RadioGroupItem value={opt} id={id} />
+                                                                <Label
+                                                                    htmlFor={id}
+                                                                    className="text-sm text-white/80 cursor-pointer"
+                                                                >
+                                                                    {formatLibraryAreaLabel(opt)}
+                                                                </Label>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
+                                                        <RadioGroupItem
+                                                            value={LIBRARY_AREA_OTHER_VALUE}
+                                                            id="lib-area-others"
+                                                        />
+                                                        <Label
+                                                            htmlFor="lib-area-others"
+                                                            className="text-sm text-white/80 cursor-pointer"
+                                                        >
+                                                            Others (please specify)
+                                                        </Label>
+                                                    </div>
+                                                </div>
+
+                                                {libraryAreaOption === LIBRARY_AREA_OTHER_VALUE ? (
+                                                    <div className="pt-2">
+                                                        <Input
+                                                            value={libraryAreaOther}
+                                                            onChange={(e) => setLibraryAreaOther(e.target.value)}
+                                                            placeholder="Please specify (e.g., archives)"
+                                                            className="bg-slate-900/70 border-white/20 text-white"
+                                                            autoComplete="off"
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                            </RadioGroup>
                                         </FieldContent>
-                                        <p className="mt-1 text-[11px] text-white/60">
-                                            Allowed: {LIBRARY_AREA_HELP.join(", ")}
-                                        </p>
                                     </Field>
 
                                     <Field>
@@ -1225,7 +1322,6 @@ export default function LibrarianBooksPage() {
                 </div>
             </div>
 
-            {/* Edit book dialog (global) */}
             <Dialog
                 open={editOpen}
                 onOpenChange={(open) => {
@@ -1251,7 +1347,6 @@ export default function LibrarianBooksPage() {
                     </DialogHeader>
 
                     <div className="space-y-5 py-2">
-                        {/* Core */}
                         <div className="space-y-4">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                 Core details
@@ -1306,7 +1401,9 @@ export default function LibrarianBooksPage() {
                                 <FieldContent>
                                     <Input
                                         value={editStatementOfResponsibility}
-                                        onChange={(e) => setEditStatementOfResponsibility(e.target.value)}
+                                        onChange={(e) =>
+                                            setEditStatementOfResponsibility(e.target.value)
+                                        }
                                         placeholder="Optional (can be used instead of Author)"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
@@ -1328,7 +1425,6 @@ export default function LibrarianBooksPage() {
                             </Field>
                         </div>
 
-                        {/* Identifiers */}
                         <div className="space-y-4 pt-2 border-t border-white/10">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                 Identifiers
@@ -1400,7 +1496,6 @@ export default function LibrarianBooksPage() {
                             </Field>
                         </div>
 
-                        {/* Publication */}
                         <div className="space-y-4 pt-2 border-t border-white/10">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                 Publication
@@ -1464,7 +1559,6 @@ export default function LibrarianBooksPage() {
                             </Field>
                         </div>
 
-                        {/* Physical */}
                         <div className="space-y-4 pt-2 border-t border-white/10">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                 Physical description & notes
@@ -1550,7 +1644,6 @@ export default function LibrarianBooksPage() {
                             </Field>
                         </div>
 
-                        {/* Copy / circulation */}
                         <div className="space-y-4 pt-2 border-t border-white/10">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                 Copy & circulation
@@ -1612,17 +1705,60 @@ export default function LibrarianBooksPage() {
                             <Field>
                                 <FieldLabel className="text-white">Library area *</FieldLabel>
                                 <FieldContent>
-                                    <Input
-                                        value={editLibraryArea}
-                                        onChange={(e) => setEditLibraryArea(e.target.value)}
-                                        placeholder="e.g., general_circulation"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
+                                    <RadioGroup
+                                        value={editLibraryAreaOption}
+                                        onValueChange={(v) => {
+                                            setEditLibraryAreaOption(v);
+                                            if (v !== LIBRARY_AREA_OTHER_VALUE) setEditLibraryAreaOther("");
+                                        }}
+                                        className="space-y-2"
+                                    >
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {LIBRARY_AREA_OPTIONS.map((opt) => {
+                                                const id = `edit-lib-area-${opt}`;
+                                                return (
+                                                    <div
+                                                        key={opt}
+                                                        className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2"
+                                                    >
+                                                        <RadioGroupItem value={opt} id={id} />
+                                                        <Label
+                                                            htmlFor={id}
+                                                            className="text-sm text-white/80 cursor-pointer"
+                                                        >
+                                                            {formatLibraryAreaLabel(opt)}
+                                                        </Label>
+                                                    </div>
+                                                );
+                                            })}
+
+                                            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
+                                                <RadioGroupItem
+                                                    value={LIBRARY_AREA_OTHER_VALUE}
+                                                    id="edit-lib-area-others"
+                                                />
+                                                <Label
+                                                    htmlFor="edit-lib-area-others"
+                                                    className="text-sm text-white/80 cursor-pointer"
+                                                >
+                                                    Others (please specify)
+                                                </Label>
+                                            </div>
+                                        </div>
+
+                                        {editLibraryAreaOption === LIBRARY_AREA_OTHER_VALUE ? (
+                                            <div className="pt-2">
+                                                <Input
+                                                    value={editLibraryAreaOther}
+                                                    onChange={(e) => setEditLibraryAreaOther(e.target.value)}
+                                                    placeholder="Please specify (e.g., archives)"
+                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                        ) : null}
+                                    </RadioGroup>
                                 </FieldContent>
-                                <p className="mt-1 text-[11px] text-white/60">
-                                    Allowed: {LIBRARY_AREA_HELP.join(", ")}
-                                </p>
                             </Field>
 
                             <Field>
@@ -1652,10 +1788,7 @@ export default function LibrarianBooksPage() {
                                     checked={editAvailable}
                                     onCheckedChange={(v) => setEditAvailable(v === true)}
                                 />
-                                <Label
-                                    htmlFor="edit-available"
-                                    className="text-sm text-white/80"
-                                >
+                                <Label htmlFor="edit-available" className="text-sm text-white/80">
                                     Mark as available in the catalog
                                 </Label>
                             </div>
@@ -1696,7 +1829,6 @@ export default function LibrarianBooksPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Search + table */}
             <Card className="bg-slate-800/60 border-white/10">
                 <CardHeader className="pb-2">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1722,9 +1854,7 @@ export default function LibrarianBooksPage() {
                             <Skeleton className="h-9 w-full" />
                         </div>
                     ) : error ? (
-                        <div className="py-6 text-center text-sm text-red-300">
-                            {error}
-                        </div>
+                        <div className="py-6 text-center text-sm text-red-300">{error}</div>
                     ) : filteredBooks.length === 0 ? (
                         <div className="py-10 text-center text-sm text-white/70">
                             No books found in the catalog.
@@ -1788,18 +1918,16 @@ export default function LibrarianBooksPage() {
                                         key={book.id}
                                         className="border-white/5 hover:bg-white/5 transition-colors"
                                     >
-                                        <TableCell className="text-xs opacity-80">
-                                            {book.id}
-                                        </TableCell>
-                                        <TableCell className="text-sm font-medium">
-                                            {book.title}
-                                        </TableCell>
-                                        <TableCell className="text-sm opacity-90">
-                                            {book.author}
-                                        </TableCell>
+                                        <TableCell className="text-xs opacity-80">{book.id}</TableCell>
+                                        <TableCell className="text-sm font-medium">{book.title}</TableCell>
+                                        <TableCell className="text-sm opacity-90">{book.author}</TableCell>
 
                                         <TableCell className="text-sm opacity-80">
-                                            {book.accessionNumber ? book.accessionNumber : <span className="opacity-50">—</span>}
+                                            {book.accessionNumber ? (
+                                                book.accessionNumber
+                                            ) : (
+                                                <span className="opacity-50">—</span>
+                                            )}
                                         </TableCell>
 
                                         <TableCell className="text-sm opacity-80">
@@ -1807,11 +1935,19 @@ export default function LibrarianBooksPage() {
                                         </TableCell>
 
                                         <TableCell className="text-sm opacity-80">
-                                            {book.callNumber ? book.callNumber : <span className="opacity-50">—</span>}
+                                            {book.callNumber ? (
+                                                book.callNumber
+                                            ) : (
+                                                <span className="opacity-50">—</span>
+                                            )}
                                         </TableCell>
 
                                         <TableCell className="text-sm opacity-80">
-                                            {book.libraryArea ? book.libraryArea : <span className="opacity-50">—</span>}
+                                            {book.libraryArea ? (
+                                                book.libraryArea
+                                            ) : (
+                                                <span className="opacity-50">—</span>
+                                            )}
                                         </TableCell>
 
                                         <TableCell className="text-sm opacity-80">
@@ -1823,9 +1959,7 @@ export default function LibrarianBooksPage() {
                                         </TableCell>
 
                                         <TableCell className="text-sm opacity-80">
-                                            {book.publicationYear || (
-                                                <span className="opacity-50">—</span>
-                                            )}
+                                            {book.publicationYear || <span className="opacity-50">—</span>}
                                         </TableCell>
 
                                         <TableCell className="text-sm opacity-80">
@@ -1894,8 +2028,8 @@ export default function LibrarianBooksPage() {
                                                                 Delete “{book.title}”?
                                                             </AlertDialogTitle>
                                                             <AlertDialogDescription className="text-white/70">
-                                                                This action cannot be undone. This will
-                                                                permanently remove the book from the catalog.
+                                                                This action cannot be undone. This will permanently
+                                                                remove the book from the catalog.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
