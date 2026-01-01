@@ -117,6 +117,29 @@ function computeOverdueDays(d?: string | null) {
     return rawDays > 0 ? rawDays : 0;
 }
 
+function fmtLibraryArea(area?: BookDTO["libraryArea"] | null) {
+    if (!area) return "—";
+    const map: Record<string, string> = {
+        filipiniana: "Filipiniana",
+        general_circulation: "General Circulation",
+        maritime: "Maritime",
+        periodicals: "Periodicals",
+        thesis_dissertations: "Thesis & Dissertations",
+        rizaliana: "Rizaliana",
+        special_collection: "Special Collection",
+        fil_gen_reference: "Fil/Gen Reference",
+        general_reference: "General Reference",
+        fiction: "Fiction",
+    };
+    return map[String(area)] ?? String(area);
+}
+
+function fmtDurationDays(days?: number | null) {
+    if (days === null || days === undefined) return "—";
+    if (typeof days !== "number" || Number.isNaN(days) || days <= 0) return "—";
+    return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 export default function StudentBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [myRecords, setMyRecords] = React.useState<BorrowRecordDTO[]>([]);
@@ -207,8 +230,31 @@ export default function StudentBooksPage() {
         const q = search.trim().toLowerCase();
         if (q) {
             filtered = filtered.filter((b) => {
-                const haystack =
-                    `${b.title} ${b.author} ${b.genre} ${b.isbn}`.toLowerCase();
+                // ✅ include more BookDTO attributes in search (missing before)
+                const haystack = [
+                    b.id,
+                    b.accessionNumber,
+                    b.title,
+                    b.subtitle,
+                    b.author,
+                    b.statementOfResponsibility,
+                    b.edition,
+                    b.isbn,
+                    b.issn,
+                    b.publisher,
+                    b.placeOfPublication,
+                    b.genre,
+                    b.category,
+                    b.series,
+                    b.callNumber,
+                    b.barcode,
+                    b.libraryArea ? fmtLibraryArea(b.libraryArea) : "",
+                    b.volumeNumber,
+                ]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase();
+
                 return haystack.includes(q);
             });
         }
@@ -277,7 +323,7 @@ export default function StudentBooksPage() {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                     <div className="flex items-center gap-2">
-                        <BookOpen className="h-5 w-5" />
+                        <BookOpen className="h-5 w-5" aria-hidden="true" />
                         <div>
                             <h2 className="text-lg font-semibold leading-tight">
                                 Library catalog
@@ -296,11 +342,15 @@ export default function StudentBooksPage() {
                             className="border-white/20 text-white/90 hover:bg-white/10"
                             onClick={handleRefresh}
                             disabled={refreshing || loading}
+                            aria-label="Refresh books"
                         >
                             {refreshing || loading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <Loader2
+                                    className="h-4 w-4 animate-spin"
+                                    aria-hidden="true"
+                                />
                             ) : (
-                                <RefreshCcw className="h-4 w-4" />
+                                <RefreshCcw className="h-4 w-4" aria-hidden="true" />
                             )}
                             <span className="sr-only">Refresh</span>
                         </Button>
@@ -316,12 +366,18 @@ export default function StudentBooksPage() {
                             <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
                                 {/* Search */}
                                 <div className="relative w-full md:w-64">
-                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
+                                    <Search
+                                        className="absolute left-3 top-2.5 h-4 w-4 text-white/50"
+                                        aria-hidden="true"
+                                    />
                                     <Input
+                                        type="search"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         placeholder="Search by title, author, ISBN…"
-                                        className="pl-9 bg-slate-900/70 border-white/20 text:white"
+                                        autoComplete="off"
+                                        aria-label="Search books"
+                                        className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                     />
                                 </div>
 
@@ -331,7 +387,10 @@ export default function StudentBooksPage() {
                                         value={filterMode}
                                         onValueChange={(v) => setFilterMode(v as FilterMode)}
                                     >
-                                        <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                                        <SelectTrigger
+                                            className="h-9 w-full bg-slate-900/70 border-white/20 text-white"
+                                            aria-label="Filter books"
+                                        >
                                             <SelectValue placeholder="Filter books" />
                                         </SelectTrigger>
                                         <SelectContent className="bg-slate-900 text-white border-white/10">
@@ -382,7 +441,7 @@ export default function StudentBooksPage() {
                             </div>
                         ) : (
                             <>
-                                {/* DESKTOP / TABLET: normal table; wide cells scroll horizontally instead of expanding page */}
+                                {/* DESKTOP / TABLET */}
                                 <div className="hidden md:block overflow-x-auto">
                                     <Table className="min-w-full">
                                         <TableCaption className="text-xs text-white/60">
@@ -396,28 +455,39 @@ export default function StudentBooksPage() {
                                         </TableCaption>
                                         <TableHeader>
                                             <TableRow className="border-white/10">
-                                                <TableHead className="w-[70px] text-xs font-semibold text-white/70">
+                                                <TableHead className="w-[90px] text-xs font-semibold text-white/70">
                                                     ID
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
+
+                                                {/* ✅ add per-cell horizontal scrollbar like librarian/books.tsx */}
+                                                <TableHead className="w-[120px] text-xs font-semibold text-white/70">
+                                                    Accession #
+                                                </TableHead>
+                                                <TableHead className="w-[200px] text-xs font-semibold text-white/70">
                                                     Title
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
+                                                <TableHead className="w-[150px] text-xs font-semibold text-white/70">
                                                     Author
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text:white/70">
+                                                <TableHead className="w-[130px] text-xs font-semibold text-white/70">
                                                     ISBN
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
+                                                <TableHead className="w-[140px] text-xs font-semibold text-white/70">
+                                                    Call no.
+                                                </TableHead>
+                                                <TableHead className="w-[140px] text-xs font-semibold text-white/70">
+                                                    Area
+                                                </TableHead>
+                                                <TableHead className="w-[130px] text-xs font-semibold text-white/70">
                                                     Genre
                                                 </TableHead>
+
                                                 <TableHead className="text-xs font-semibold text-white/70">
                                                     Pub. year
                                                 </TableHead>
                                                 <TableHead className="text-xs font-semibold text-white/70">
                                                     Availability
                                                 </TableHead>
-                                                {/* Due date column */}
                                                 <TableHead className="text-xs font-semibold text-white/70">
                                                     Due date
                                                 </TableHead>
@@ -429,6 +499,7 @@ export default function StudentBooksPage() {
                                                 </TableHead>
                                             </TableRow>
                                         </TableHeader>
+
                                         <TableBody>
                                             {rows.map((book) => {
                                                 const { myStatus, activeRecord, lastRecord } = book;
@@ -457,22 +528,96 @@ export default function StudentBooksPage() {
                                                         <TableCell className="text-xs opacity-80">
                                                             {book.id}
                                                         </TableCell>
-                                                        <TableCell className="text-sm font-medium">
-                                                            {book.title}
+
+                                                        {/* Accession # (scrollable) */}
+                                                        <TableCell
+                                                            className={
+                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                cellScrollbarClasses
+                                                            }
+                                                        >
+                                                            {book.accessionNumber || (
+                                                                <span className="opacity-50">—</span>
+                                                            )}
                                                         </TableCell>
-                                                        <TableCell className="text-sm opacity-90">
+
+                                                        {/* Title (scrollable) */}
+                                                        <TableCell
+                                                            className={
+                                                                "text-sm font-medium align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                cellScrollbarClasses
+                                                            }
+                                                        >
+                                                            <div className="flex flex-col">
+                                                                <span>{book.title}</span>
+                                                                {book.subtitle ? (
+                                                                    <span className="text-xs text-white/60">
+                                                                        {book.subtitle}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        </TableCell>
+
+                                                        {/* Author (scrollable) */}
+                                                        <TableCell
+                                                            className={
+                                                                "text-sm opacity-90 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                cellScrollbarClasses
+                                                            }
+                                                        >
                                                             {book.author}
                                                         </TableCell>
-                                                        <TableCell className="text-sm opacity-80">
+
+                                                        {/* ISBN (scrollable) */}
+                                                        <TableCell
+                                                            className={
+                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                cellScrollbarClasses
+                                                            }
+                                                        >
                                                             {book.isbn || (
                                                                 <span className="opacity-50">—</span>
                                                             )}
                                                         </TableCell>
-                                                        <TableCell className="text-sm opacity-80">
+
+                                                        {/* Call no. (scrollable) */}
+                                                        <TableCell
+                                                            className={
+                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                cellScrollbarClasses
+                                                            }
+                                                        >
+                                                            {book.callNumber || (
+                                                                <span className="opacity-50">—</span>
+                                                            )}
+                                                        </TableCell>
+
+                                                        {/* Area (scrollable) */}
+                                                        <TableCell
+                                                            className={
+                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                cellScrollbarClasses
+                                                            }
+                                                        >
+                                                            {book.libraryArea ? (
+                                                                fmtLibraryArea(book.libraryArea)
+                                                            ) : (
+                                                                <span className="opacity-50">—</span>
+                                                            )}
+                                                        </TableCell>
+
+                                                        {/* Genre (scrollable) */}
+                                                        <TableCell
+                                                            className={
+                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                cellScrollbarClasses
+                                                            }
+                                                        >
                                                             {book.genre || (
                                                                 <span className="opacity-50">—</span>
                                                             )}
                                                         </TableCell>
+
                                                         <TableCell className="text-sm opacity-80">
                                                             {book.publicationYear || (
                                                                 <span className="opacity-50">—</span>
@@ -482,28 +627,36 @@ export default function StudentBooksPage() {
                                                         {/* Availability */}
                                                         <TableCell>
                                                             <Badge
-                                                                variant={book.available ? "default" : "outline"}
+                                                                variant={
+                                                                    book.available ? "default" : "outline"
+                                                                }
                                                                 className={
                                                                     book.available
-                                                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text:white border-emerald-400/80"
+                                                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
                                                                         : "border-red-400/70 text-red-200 hover:bg-red-500/10"
                                                                 }
                                                             >
                                                                 {book.available ? (
                                                                     <span className="inline-flex items-center gap-1">
-                                                                        <CheckCircle2 className="h-3 w-3" />
+                                                                        <CheckCircle2
+                                                                            className="h-3 w-3"
+                                                                            aria-hidden="true"
+                                                                        />
                                                                         Available
                                                                     </span>
                                                                 ) : (
                                                                     <span className="inline-flex items-center gap-1">
-                                                                        <CircleOff className="h-3 w-3" />
+                                                                        <CircleOff
+                                                                            className="h-3 w-3"
+                                                                            aria-hidden="true"
+                                                                        />
                                                                         Unavailable
                                                                     </span>
                                                                 )}
                                                             </Badge>
                                                         </TableCell>
 
-                                                        {/* Due date cell */}
+                                                        {/* Due date */}
                                                         <TableCell className="text-sm opacity-80">
                                                             {myDueDate === "—" ? (
                                                                 <span className="opacity-50">—</span>
@@ -512,7 +665,7 @@ export default function StudentBooksPage() {
                                                             )}
                                                         </TableCell>
 
-                                                        {/* My status – causes overflow; give it its own horizontal scrollbar */}
+                                                        {/* My status (scrollable) */}
                                                         <TableCell
                                                             className={
                                                                 "align-top w-[100px] max-w-[100px] pr-1 text-xs " +
@@ -529,7 +682,10 @@ export default function StudentBooksPage() {
                                                                 <>
                                                                     {isPendingPickup && (
                                                                         <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                            <Clock3 className="h-3 w-3 shrink-0" />
+                                                                            <Clock3
+                                                                                className="h-3 w-3 shrink-0"
+                                                                                aria-hidden="true"
+                                                                            />
                                                                             <span>
                                                                                 Pending pickup · Reserved on{" "}
                                                                                 <span className="font-medium">
@@ -552,7 +708,10 @@ export default function StudentBooksPage() {
                                                                         isOverdue &&
                                                                         isBorrowedActive && (
                                                                             <span className="inline-flex items-center gap-1 text-red-300">
-                                                                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                                                                <AlertTriangle
+                                                                                    className="h-3 w-3 shrink-0"
+                                                                                    aria-hidden="true"
+                                                                                />
                                                                                 <span>
                                                                                     Overdue · Borrowed:{" "}
                                                                                     <span className="font-medium">
@@ -583,7 +742,10 @@ export default function StudentBooksPage() {
                                                                         !isOverdue &&
                                                                         isBorrowedActive && (
                                                                             <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                                <Clock3 className="h-3 w-3 shrink-0" />
+                                                                                <Clock3
+                                                                                    className="h-3 w-3 shrink-0"
+                                                                                    aria-hidden="true"
+                                                                                />
                                                                                 <span>
                                                                                     Borrowed by you · Borrowed:{" "}
                                                                                     <span className="font-medium">
@@ -614,7 +776,10 @@ export default function StudentBooksPage() {
                                                                 lastRecord &&
                                                                 !activeRecord && (
                                                                     <span className="inline-flex items-center gap-1 text-white/70">
-                                                                        <CheckCircle2 className="h-3 w-3 text-emerald-300 shrink-0" />
+                                                                        <CheckCircle2
+                                                                            className="h-3 w-3 text-emerald-300 shrink-0"
+                                                                            aria-hidden="true"
+                                                                        />
                                                                         <span>
                                                                             Returned · Last returned:{" "}
                                                                             <span className="font-medium">
@@ -627,7 +792,7 @@ export default function StudentBooksPage() {
                                                                 )}
                                                         </TableCell>
 
-                                                        {/* Action – also gets its own horizontal scrollbar */}
+                                                        {/* Action (scrollable) */}
                                                         <TableCell
                                                             className={
                                                                 "text-right align-top w-[100px] max-w-[100px] " +
@@ -636,21 +801,17 @@ export default function StudentBooksPage() {
                                                         >
                                                             {book.available ? (
                                                                 <AlertDialog>
-                                                                    {/* Trigger button */}
                                                                     <AlertDialogTrigger asChild>
                                                                         <Button
                                                                             type="button"
                                                                             size="sm"
                                                                             className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                                                                            disabled={
-                                                                                borrowBusyId === book.id
-                                                                            }
+                                                                            disabled={borrowBusyId === book.id}
                                                                         >
                                                                             Borrow
                                                                         </Button>
                                                                     </AlertDialogTrigger>
 
-                                                                    {/* Confirmation dialog */}
                                                                     <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
                                                                         <AlertDialogHeader>
                                                                             <AlertDialogTitle>
@@ -672,9 +833,39 @@ export default function StudentBooksPage() {
                                                                         <div className="mt-3 text-sm text-white/80 space-y-1">
                                                                             <p>
                                                                                 <span className="text-white/60">
+                                                                                    Accession #:
+                                                                                </span>{" "}
+                                                                                {book.accessionNumber || "—"}
+                                                                            </p>
+                                                                            <p>
+                                                                                <span className="text-white/60">
+                                                                                    Call no.:
+                                                                                </span>{" "}
+                                                                                {book.callNumber || "—"}
+                                                                            </p>
+                                                                            <p>
+                                                                                <span className="text-white/60">
+                                                                                    Library area:
+                                                                                </span>{" "}
+                                                                                {fmtLibraryArea(book.libraryArea)}
+                                                                            </p>
+                                                                            <p>
+                                                                                <span className="text-white/60">
                                                                                     ISBN:
                                                                                 </span>{" "}
                                                                                 {book.isbn || "—"}
+                                                                            </p>
+                                                                            <p>
+                                                                                <span className="text-white/60">
+                                                                                    Edition:
+                                                                                </span>{" "}
+                                                                                {book.edition || "—"}
+                                                                            </p>
+                                                                            <p>
+                                                                                <span className="text-white/60">
+                                                                                    Publisher:
+                                                                                </span>{" "}
+                                                                                {book.publisher || "—"}
                                                                             </p>
                                                                             <p>
                                                                                 <span className="text-white/60">
@@ -688,6 +879,13 @@ export default function StudentBooksPage() {
                                                                                 </span>{" "}
                                                                                 {book.publicationYear || "—"}
                                                                             </p>
+                                                                            <p>
+                                                                                <span className="text-white/60">
+                                                                                    Default loan duration:
+                                                                                </span>{" "}
+                                                                                {fmtDurationDays(book.borrowDurationDays)}
+                                                                            </p>
+
                                                                             <p className="text-xs text-white/60 mt-2">
                                                                                 The due date will be set automatically
                                                                                 based on the library policy. Any overdue
@@ -698,24 +896,21 @@ export default function StudentBooksPage() {
                                                                         <AlertDialogFooter>
                                                                             <AlertDialogCancel
                                                                                 className="border-white/20 text-white hover:bg-black/20"
-                                                                                disabled={
-                                                                                    borrowBusyId === book.id
-                                                                                }
+                                                                                disabled={borrowBusyId === book.id}
                                                                             >
                                                                                 Cancel
                                                                             </AlertDialogCancel>
                                                                             <AlertDialogAction
                                                                                 className="bg-purple-600 hover:bg-purple-700 text-white"
-                                                                                disabled={
-                                                                                    borrowBusyId === book.id
-                                                                                }
-                                                                                onClick={() =>
-                                                                                    void handleBorrow(book)
-                                                                                }
+                                                                                disabled={borrowBusyId === book.id}
+                                                                                onClick={() => void handleBorrow(book)}
                                                                             >
                                                                                 {borrowBusyId === book.id ? (
                                                                                     <span className="inline-flex items-center gap-2">
-                                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                        <Loader2
+                                                                                            className="h-4 w-4 animate-spin"
+                                                                                            aria-hidden="true"
+                                                                                        />
                                                                                         Borrowing…
                                                                                     </span>
                                                                                 ) : (
@@ -726,12 +921,16 @@ export default function StudentBooksPage() {
                                                                     </AlertDialogContent>
                                                                 </AlertDialog>
                                                             ) : activeRecord &&
-                                                                (isPendingPickup || isBorrowedActive) ? (
+                                                                (activeRecord.status === "pending" ||
+                                                                    activeRecord.status === "borrowed") ? (
                                                                 <span className="inline-flex flex-col items-end text-xs text-amber-200">
-                                                                    {isPendingPickup && (
+                                                                    {activeRecord.status === "pending" && (
                                                                         <>
                                                                             <span className="inline-flex items-center gap-1">
-                                                                                <Clock3 className="h-3 w-3" />
+                                                                                <Clock3
+                                                                                    className="h-3 w-3"
+                                                                                    aria-hidden="true"
+                                                                                />
                                                                                 Pending pickup
                                                                             </span>
                                                                             <span className="text-white/60">
@@ -740,40 +939,48 @@ export default function StudentBooksPage() {
                                                                             </span>
                                                                         </>
                                                                     )}
-                                                                    {isBorrowedActive && !isOverdue && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1">
-                                                                                <Clock3 className="h-3 w-3" />
-                                                                                Borrowed by you
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Due on{" "}
-                                                                                <span className="font-semibold">
-                                                                                    {myDueDate}
+                                                                    {activeRecord.status === "borrowed" &&
+                                                                        !isOverdue && (
+                                                                            <>
+                                                                                <span className="inline-flex items-center gap-1">
+                                                                                    <Clock3
+                                                                                        className="h-3 w-3"
+                                                                                        aria-hidden="true"
+                                                                                    />
+                                                                                    Borrowed by you
                                                                                 </span>
-                                                                                .
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-                                                                    {isBorrowedActive && isOverdue && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1 text-red-300">
-                                                                                <AlertTriangle className="h-3 w-3" />
-                                                                                Overdue
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Overdue by{" "}
-                                                                                <span className="font-semibold">
-                                                                                    {overdueDays} day
-                                                                                    {overdueDays === 1
-                                                                                        ? ""
-                                                                                        : "s"}
+                                                                                <span className="text-white/60">
+                                                                                    Due on{" "}
+                                                                                    <span className="font-semibold">
+                                                                                        {myDueDate}
+                                                                                    </span>
+                                                                                    .
                                                                                 </span>
-                                                                                . Please return the
-                                                                                book as soon as possible.
-                                                                            </span>
-                                                                        </>
-                                                                    )}
+                                                                            </>
+                                                                        )}
+                                                                    {activeRecord.status === "borrowed" &&
+                                                                        isOverdue && (
+                                                                            <>
+                                                                                <span className="inline-flex items-center gap-1 text-red-300">
+                                                                                    <AlertTriangle
+                                                                                        className="h-3 w-3"
+                                                                                        aria-hidden="true"
+                                                                                    />
+                                                                                    Overdue
+                                                                                </span>
+                                                                                <span className="text-white/60">
+                                                                                    Overdue by{" "}
+                                                                                    <span className="font-semibold">
+                                                                                        {overdueDays} day
+                                                                                        {overdueDays === 1
+                                                                                            ? ""
+                                                                                            : "s"}
+                                                                                    </span>
+                                                                                    . Please return the
+                                                                                    book as soon as possible.
+                                                                                </span>
+                                                                            </>
+                                                                        )}
                                                                 </span>
                                                             ) : (
                                                                 <Button
@@ -794,7 +1001,7 @@ export default function StudentBooksPage() {
                                     </Table>
                                 </div>
 
-                                {/* MOBILE: row-level layout */}
+                                {/* MOBILE */}
                                 <div className="md:hidden space-y-3 mt-2">
                                     <p className="text-[11px] text-white/60 px-1">
                                         Swipe sideways inside each row to see full details.
@@ -827,6 +1034,11 @@ export default function StudentBooksPage() {
                                                         <div className="text-sm font-semibold text-white">
                                                             {book.title}
                                                         </div>
+                                                        {book.subtitle ? (
+                                                            <div className="text-[11px] text-white/60">
+                                                                {book.subtitle}
+                                                            </div>
+                                                        ) : null}
                                                         <div className="text-[11px] text-white/60">
                                                             {book.author}
                                                         </div>
@@ -841,12 +1053,18 @@ export default function StudentBooksPage() {
                                                     >
                                                         {book.available ? (
                                                             <span className="inline-flex items-center gap-1">
-                                                                <CheckCircle2 className="h-3 w-3" />
+                                                                <CheckCircle2
+                                                                    className="h-3 w-3"
+                                                                    aria-hidden="true"
+                                                                />
                                                                 Available
                                                             </span>
                                                         ) : (
                                                             <span className="inline-flex items-center gap-1">
-                                                                <CircleOff className="h-3 w-3" />
+                                                                <CircleOff
+                                                                    className="h-3 w-3"
+                                                                    aria-hidden="true"
+                                                                />
                                                                 Unavailable
                                                             </span>
                                                         )}
@@ -863,22 +1081,21 @@ export default function StudentBooksPage() {
                                                             {isPendingPickup && (
                                                                 <span>
                                                                     <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                        <Clock3 className="h-3 w-3" />
+                                                                        <Clock3
+                                                                            className="h-3 w-3"
+                                                                            aria-hidden="true"
+                                                                        />
                                                                         Pending pickup
                                                                     </span>
                                                                     <br />
                                                                     Reserved on:{" "}
                                                                     <span className="font-medium">
-                                                                        {fmtDate(
-                                                                            activeRecord.borrowDate
-                                                                        )}
+                                                                        {fmtDate(activeRecord.borrowDate)}
                                                                     </span>
                                                                     {" · "}
                                                                     Due:{" "}
                                                                     <span className="font-medium">
-                                                                        {fmtDate(
-                                                                            activeRecord.dueDate
-                                                                        )}
+                                                                        {fmtDate(activeRecord.dueDate)}
                                                                     </span>
                                                                 </span>
                                                             )}
@@ -887,30 +1104,27 @@ export default function StudentBooksPage() {
                                                                 isBorrowedActive && (
                                                                     <span>
                                                                         <span className="inline-flex items-center gap-1 text-red-300">
-                                                                            <AlertTriangle className="h-3 w-3" />
+                                                                            <AlertTriangle
+                                                                                className="h-3 w-3"
+                                                                                aria-hidden="true"
+                                                                            />
                                                                             Overdue
                                                                         </span>
                                                                         <br />
                                                                         Borrowed:{" "}
                                                                         <span className="font-medium">
-                                                                            {fmtDate(
-                                                                                activeRecord.borrowDate
-                                                                            )}
+                                                                            {fmtDate(activeRecord.borrowDate)}
                                                                         </span>
                                                                         {" · "}
                                                                         Due:{" "}
                                                                         <span className="font-medium">
-                                                                            {fmtDate(
-                                                                                activeRecord.dueDate
-                                                                            )}
+                                                                            {fmtDate(activeRecord.dueDate)}
                                                                         </span>
                                                                         <br />
                                                                         Overdue by{" "}
                                                                         <span className="font-semibold">
                                                                             {overdueDays} day
-                                                                            {overdueDays === 1
-                                                                                ? ""
-                                                                                : "s"}
+                                                                            {overdueDays === 1 ? "" : "s"}
                                                                         </span>
                                                                         .
                                                                         {activeRecord.fine > 0 && (
@@ -918,9 +1132,7 @@ export default function StudentBooksPage() {
                                                                                 <br />
                                                                                 <span className="text-red-300">
                                                                                     Current fine:{" "}
-                                                                                    {peso(
-                                                                                        activeRecord.fine
-                                                                                    )}
+                                                                                    {peso(activeRecord.fine)}
                                                                                 </span>
                                                                             </>
                                                                         )}
@@ -931,31 +1143,28 @@ export default function StudentBooksPage() {
                                                                 isBorrowedActive && (
                                                                     <span>
                                                                         <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                            <Clock3 className="h-3 w-3" />
+                                                                            <Clock3
+                                                                                className="h-3 w-3"
+                                                                                aria-hidden="true"
+                                                                            />
                                                                             Borrowed by you
                                                                         </span>
                                                                         <br />
                                                                         Borrowed:{" "}
                                                                         <span className="font-medium">
-                                                                            {fmtDate(
-                                                                                activeRecord.borrowDate
-                                                                            )}
+                                                                            {fmtDate(activeRecord.borrowDate)}
                                                                         </span>
                                                                         {" · "}
                                                                         Due:{" "}
                                                                         <span className="font-medium">
-                                                                            {fmtDate(
-                                                                                activeRecord.dueDate
-                                                                            )}
+                                                                            {fmtDate(activeRecord.dueDate)}
                                                                         </span>
                                                                         {activeRecord.fine > 0 && (
                                                                             <>
                                                                                 <br />
                                                                                 <span className="text-red-300">
                                                                                     Current fine:{" "}
-                                                                                    {peso(
-                                                                                        activeRecord.fine
-                                                                                    )}
+                                                                                    {peso(activeRecord.fine)}
                                                                                 </span>
                                                                             </>
                                                                         )}
@@ -968,7 +1177,10 @@ export default function StudentBooksPage() {
                                                         !activeRecord && (
                                                             <span>
                                                                 <span className="inline-flex items-center gap-1 text-emerald-200">
-                                                                    <CheckCircle2 className="h-3 w-3" />
+                                                                    <CheckCircle2
+                                                                        className="h-3 w-3"
+                                                                        aria-hidden="true"
+                                                                    />
                                                                     Returned
                                                                 </span>
                                                                 <br />
@@ -982,13 +1194,25 @@ export default function StudentBooksPage() {
 
                                                 {/* Row-level horizontal scroll with details */}
                                                 <div className="overflow-x-auto">
-                                                    <div className="flex gap-4 min-w-[520px] text-[11px] text-white/70 pt-1">
+                                                    <div className="flex gap-4 min-w-[820px] text-[11px] text-white/70 pt-1">
                                                         <div className="min-w-20">
                                                             <div className="text-[10px] uppercase text-white/40">
                                                                 ID
                                                             </div>
                                                             <div className="font-mono text-xs">{book.id}</div>
                                                         </div>
+
+                                                        <div className="min-w-[140px]">
+                                                            <div className="text-[10px] uppercase text-white/40">
+                                                                Accession #
+                                                            </div>
+                                                            <div className="text-xs">
+                                                                {book.accessionNumber || (
+                                                                    <span className="opacity-50">—</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
                                                         <div className="min-w-[110px]">
                                                             <div className="text-[10px] uppercase text-white/40">
                                                                 ISBN
@@ -999,6 +1223,27 @@ export default function StudentBooksPage() {
                                                                 )}
                                                             </div>
                                                         </div>
+
+                                                        <div className="min-w-[140px]">
+                                                            <div className="text-[10px] uppercase text-white/40">
+                                                                Call no.
+                                                            </div>
+                                                            <div className="text-xs">
+                                                                {book.callNumber || (
+                                                                    <span className="opacity-50">—</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="min-w-40">
+                                                            <div className="text-[10px] uppercase text-white/40">
+                                                                Area
+                                                            </div>
+                                                            <div className="text-xs">
+                                                                {fmtLibraryArea(book.libraryArea)}
+                                                            </div>
+                                                        </div>
+
                                                         <div className="min-w-[120px]">
                                                             <div className="text-[10px] uppercase text-white/40">
                                                                 Genre
@@ -1009,6 +1254,7 @@ export default function StudentBooksPage() {
                                                                 )}
                                                             </div>
                                                         </div>
+
                                                         <div className="min-w-[90px]">
                                                             <div className="text-[10px] uppercase text-white/40">
                                                                 Pub. year
@@ -1019,6 +1265,7 @@ export default function StudentBooksPage() {
                                                                 )}
                                                             </div>
                                                         </div>
+
                                                         <div className="min-w-[110px]">
                                                             <div className="text-[10px] uppercase text-white/40">
                                                                 Due date
@@ -1029,6 +1276,15 @@ export default function StudentBooksPage() {
                                                                 ) : (
                                                                     myDueDate
                                                                 )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="min-w-[150px]">
+                                                            <div className="text-[10px] uppercase text-white/40">
+                                                                Loan duration
+                                                            </div>
+                                                            <div className="text-xs">
+                                                                {fmtDurationDays(book.borrowDurationDays)}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1068,18 +1324,42 @@ export default function StudentBooksPage() {
 
                                                                 <div className="mt-3 text-sm text-white/80 space-y-1">
                                                                     <p>
+                                                                        <span className="text-white/60">
+                                                                            Accession #:
+                                                                        </span>{" "}
+                                                                        {book.accessionNumber || "—"}
+                                                                    </p>
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Call no.:
+                                                                        </span>{" "}
+                                                                        {book.callNumber || "—"}
+                                                                    </p>
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Library area:
+                                                                        </span>{" "}
+                                                                        {fmtLibraryArea(book.libraryArea)}
+                                                                    </p>
+                                                                    <p>
                                                                         <span className="text-white/60">ISBN:</span>{" "}
                                                                         {book.isbn || "—"}
                                                                     </p>
                                                                     <p>
-                                                                        <span className="text-white/60">Genre:</span>{" "}
-                                                                        {book.genre || "—"}
+                                                                        <span className="text-white/60">Edition:</span>{" "}
+                                                                        {book.edition || "—"}
                                                                     </p>
                                                                     <p>
                                                                         <span className="text-white/60">
                                                                             Publication year:
                                                                         </span>{" "}
                                                                         {book.publicationYear || "—"}
+                                                                    </p>
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Default loan duration:
+                                                                        </span>{" "}
+                                                                        {fmtDurationDays(book.borrowDurationDays)}
                                                                     </p>
                                                                     <p className="text-xs text-white/60 mt-2">
                                                                         The due date will be set automatically based
@@ -1102,7 +1382,10 @@ export default function StudentBooksPage() {
                                                                     >
                                                                         {borrowBusyId === book.id ? (
                                                                             <span className="inline-flex items-center gap-2">
-                                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                <Loader2
+                                                                                    className="h-4 w-4 animate-spin"
+                                                                                    aria-hidden="true"
+                                                                                />
                                                                                 Borrowing…
                                                                             </span>
                                                                         ) : (
@@ -1113,13 +1396,16 @@ export default function StudentBooksPage() {
                                                             </AlertDialogContent>
                                                         </AlertDialog>
                                                     ) : activeRecord &&
-                                                        (isPendingPickup || isBorrowedActive) ? (
+                                                        (activeRecord.status === "pending" ||
+                                                            activeRecord.status === "borrowed") ? (
                                                         <span className="inline-flex flex-col items-end text-xs text-amber-200">
-                                                            {isPendingPickup && (
+                                                            {activeRecord.status === "pending" && (
                                                                 <>
-
                                                                     <span className="inline-flex items-center gap-1">
-                                                                        <Clock3 className="h-3 w-3" />
+                                                                        <Clock3
+                                                                            className="h-3 w-3"
+                                                                            aria-hidden="true"
+                                                                        />
                                                                         Pending pickup
                                                                     </span>
                                                                     <span className="text-white/60">
@@ -1128,25 +1414,32 @@ export default function StudentBooksPage() {
                                                                     </span>
                                                                 </>
                                                             )}
-                                                            {isBorrowedActive && !isOverdue && (
-                                                                <>
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <Clock3 className="h-3 w-3" />
-                                                                        Borrowed by you
-                                                                    </span>
-                                                                    <span className="text-white/60">
-                                                                        Due on{" "}
-                                                                        <span className="font-semibold">
-                                                                            {myDueDate}
+                                                            {activeRecord.status === "borrowed" &&
+                                                                !isOverdue && (
+                                                                    <>
+                                                                        <span className="inline-flex items-center gap-1">
+                                                                            <Clock3
+                                                                                className="h-3 w-3"
+                                                                                aria-hidden="true"
+                                                                            />
+                                                                            Borrowed by you
                                                                         </span>
-                                                                        .
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                            {isBorrowedActive && isOverdue && (
+                                                                        <span className="text-white/60">
+                                                                            Due on{" "}
+                                                                            <span className="font-semibold">
+                                                                                {myDueDate}
+                                                                            </span>
+                                                                            .
+                                                                        </span>
+                                                                    </>
+                                                                )}
+                                                            {activeRecord.status === "borrowed" && isOverdue && (
                                                                 <>
                                                                     <span className="inline-flex items-center gap-1 text-red-300">
-                                                                        <AlertTriangle className="h-3 w-3" />
+                                                                        <AlertTriangle
+                                                                            className="h-3 w-3"
+                                                                            aria-hidden="true"
+                                                                        />
                                                                         Overdue
                                                                     </span>
                                                                     <span className="text-white/60">
