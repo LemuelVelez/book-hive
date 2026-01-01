@@ -3,14 +3,62 @@
 import { BOOK_ROUTES } from "@/api/books/route";
 import { API_BASE } from "@/api/auth/route";
 
+export type Role = "student" | "librarian" | "faculty" | "admin" | "other";
+
+export type LibraryArea =
+  | "filipiniana"
+  | "general_circulation"
+  | "maritime"
+  | "periodicals"
+  | "thesis_dissertations"
+  | "rizaliana"
+  | "special_collection"
+  | "fil_gen_reference"
+  | "general_reference"
+  | "fiction";
+
 export type BookDTO = {
   id: string;
+
+  // Primary
+  accessionNumber?: string;
   title: string;
+  subtitle?: string;
   author: string;
+  statementOfResponsibility?: string;
+  edition?: string;
+
+  // Identifiers
   isbn: string;
-  genre: string;
+  issn?: string;
+
+  // Publication
+  placeOfPublication?: string;
+  publisher?: string;
   publicationYear: number;
+  copyrightYear?: number | null;
+
+  // Physical description / notes
+  pages?: number | null;
+  otherDetails?: string; // maps to physical_details in DB
+  dimensions?: string;
+  notes?: string;
+  series?: string;
+  category?: string;
+  addedEntries?: string;
+
+  // Existing legacy field (kept)
+  genre: string;
+
+  // Copy details
+  barcode?: string;
+  callNumber?: string;
+  copyNumber?: number | null;
+  volumeNumber?: string;
+  libraryArea?: LibraryArea | null;
+
   available: boolean;
+
   /**
    * Default loan duration for this book in days.
    * Used by the server when a student borrows via /borrow-records/self.
@@ -107,12 +155,50 @@ async function requestJSON<T = unknown>(
 /* ----------------------- Public Books API ----------------------- */
 
 export type CreateBookPayload = {
+  // Required-ish on backend: title + (author OR statementOfResponsibility) + (publicationYear OR copyrightYear)
   title: string;
-  author: string;
-  isbn: string;
-  genre: string;
-  publicationYear: number;
+
+  // Backward compatible: still supported and commonly used
+  author?: string;
+
+  statementOfResponsibility?: string;
+
+  // ✅ FIX: these are used by the UI + supported by backend, but were missing from the type
+  subtitle?: string;
+  edition?: string;
+
+  // Identifiers
+  isbn?: string;
+  issn?: string;
+  accessionNumber?: string;
+
+  // Publication
+  publicationYear?: number;
+  placeOfPublication?: string;
+  publisher?: string;
+  copyrightYear?: number | null;
+
+  // Physical description / notes
+  pages?: number | null;
+  otherDetails?: string;
+  dimensions?: string;
+  notes?: string;
+  series?: string;
+  category?: string;
+  addedEntries?: string;
+
+  // Legacy
+  genre?: string;
+
+  // Copy details
+  barcode?: string;
+  callNumber?: string;
+  copyNumber?: number | null;
+  volumeNumber?: string;
+  libraryArea?: LibraryArea | null;
+
   available?: boolean;
+
   /**
    * Default loan duration for this book in days.
    * If omitted, the backend will fall back to its default (e.g. 7).
@@ -128,9 +214,7 @@ export async function fetchBooks(): Promise<BookDTO[]> {
   return res.books;
 }
 
-export async function createBook(
-  payload: CreateBookPayload
-): Promise<BookDTO> {
+export async function createBook(payload: CreateBookPayload): Promise<BookDTO> {
   type Resp = JsonOk<{ book: BookDTO }>;
   const res = await requestJSON<Resp>(BOOK_ROUTES.create, {
     method: "POST",

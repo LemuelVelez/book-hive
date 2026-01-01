@@ -50,6 +50,7 @@ import {
     deleteBook,
     updateBook,
     type BookDTO,
+    type LibraryArea,
 } from "@/lib/books";
 
 // ✅ shadcn AlertDialog for delete confirmation
@@ -65,6 +66,19 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const LIBRARY_AREA_HELP: LibraryArea[] = [
+    "filipiniana",
+    "general_circulation",
+    "maritime",
+    "periodicals",
+    "thesis_dissertations",
+    "rizaliana",
+    "special_collection",
+    "fil_gen_reference",
+    "general_reference",
+    "fiction",
+];
+
 export default function LibrarianBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -76,24 +90,84 @@ export default function LibrarianBooksPage() {
     // Dialog + form state (Add)
     const [addOpen, setAddOpen] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
+
+    // Required-ish
     const [title, setTitle] = React.useState("");
     const [author, setAuthor] = React.useState("");
+    const [statementOfResponsibility, setStatementOfResponsibility] = React.useState("");
+
+    // IDs / legacy
     const [isbn, setIsbn] = React.useState("");
+    const [issn, setIssn] = React.useState("");
+    const [accessionNumber, setAccessionNumber] = React.useState("");
     const [genre, setGenre] = React.useState("");
+
+    // Publication
+    const [subtitle, setSubtitle] = React.useState("");
+    const [edition, setEdition] = React.useState("");
     const [pubYear, setPubYear] = React.useState("");
+    const [copyrightYear, setCopyrightYear] = React.useState("");
+    const [placeOfPublication, setPlaceOfPublication] = React.useState("");
+    const [publisher, setPublisher] = React.useState("");
+
+    // Physical / notes
+    const [pages, setPages] = React.useState("");
+    const [otherDetails, setOtherDetails] = React.useState("");
+    const [dimensions, setDimensions] = React.useState("");
+    const [notes, setNotes] = React.useState("");
+    const [series, setSeries] = React.useState("");
+    const [category, setCategory] = React.useState("");
+    const [addedEntries, setAddedEntries] = React.useState("");
+
+    // Copy details (NOW REQUIRED: barcode, callNumber, libraryArea)
+    const [barcode, setBarcode] = React.useState("");
+    const [callNumber, setCallNumber] = React.useState("");
+    const [copyNumber, setCopyNumber] = React.useState("");
+    const [volumeNumber, setVolumeNumber] = React.useState("");
+    const [libraryArea, setLibraryArea] = React.useState("");
+
+    // Availability / loan rules
     const [borrowDuration, setBorrowDuration] = React.useState("7");
     const [available, setAvailable] = React.useState(true);
+
     const [formError, setFormError] = React.useState<string>("");
 
     // Dialog + form state (Edit)
     const [editOpen, setEditOpen] = React.useState(false);
     const [editing, setEditing] = React.useState(false);
     const [editBookId, setEditBookId] = React.useState<string | null>(null);
+
     const [editTitle, setEditTitle] = React.useState("");
     const [editAuthor, setEditAuthor] = React.useState("");
+    const [editStatementOfResponsibility, setEditStatementOfResponsibility] = React.useState("");
+
     const [editIsbn, setEditIsbn] = React.useState("");
+    const [editIssn, setEditIssn] = React.useState("");
+    const [editAccessionNumber, setEditAccessionNumber] = React.useState("");
     const [editGenre, setEditGenre] = React.useState("");
+
+    const [editSubtitle, setEditSubtitle] = React.useState("");
+    const [editEdition, setEditEdition] = React.useState("");
     const [editPubYear, setEditPubYear] = React.useState("");
+    const [editCopyrightYear, setEditCopyrightYear] = React.useState("");
+    const [editPlaceOfPublication, setEditPlaceOfPublication] = React.useState("");
+    const [editPublisher, setEditPublisher] = React.useState("");
+
+    const [editPages, setEditPages] = React.useState("");
+    const [editOtherDetails, setEditOtherDetails] = React.useState("");
+    const [editDimensions, setEditDimensions] = React.useState("");
+    const [editNotes, setEditNotes] = React.useState("");
+    const [editSeries, setEditSeries] = React.useState("");
+    const [editCategory, setEditCategory] = React.useState("");
+    const [editAddedEntries, setEditAddedEntries] = React.useState("");
+
+    // Copy details (NOW REQUIRED: editBarcode, editCallNumber, editLibraryArea)
+    const [editBarcode, setEditBarcode] = React.useState("");
+    const [editCallNumber, setEditCallNumber] = React.useState("");
+    const [editCopyNumber, setEditCopyNumber] = React.useState("");
+    const [editVolumeNumber, setEditVolumeNumber] = React.useState("");
+    const [editLibraryArea, setEditLibraryArea] = React.useState("");
+
     const [editBorrowDuration, setEditBorrowDuration] = React.useState("");
     const [editAvailable, setEditAvailable] = React.useState(true);
     const [editError, setEditError] = React.useState<string>("");
@@ -101,9 +175,34 @@ export default function LibrarianBooksPage() {
     const resetForm = () => {
         setTitle("");
         setAuthor("");
+        setStatementOfResponsibility("");
+
         setIsbn("");
+        setIssn("");
+        setAccessionNumber("");
         setGenre("");
+
+        setSubtitle("");
+        setEdition("");
         setPubYear("");
+        setCopyrightYear("");
+        setPlaceOfPublication("");
+        setPublisher("");
+
+        setPages("");
+        setOtherDetails("");
+        setDimensions("");
+        setNotes("");
+        setSeries("");
+        setCategory("");
+        setAddedEntries("");
+
+        setBarcode("");
+        setCallNumber("");
+        setCopyNumber("");
+        setVolumeNumber("");
+        setLibraryArea("");
+
         setBorrowDuration("7");
         setAvailable(true);
         setFormError("");
@@ -111,11 +210,37 @@ export default function LibrarianBooksPage() {
 
     const resetEditForm = () => {
         setEditBookId(null);
+
         setEditTitle("");
         setEditAuthor("");
+        setEditStatementOfResponsibility("");
+
         setEditIsbn("");
+        setEditIssn("");
+        setEditAccessionNumber("");
         setEditGenre("");
+
+        setEditSubtitle("");
+        setEditEdition("");
         setEditPubYear("");
+        setEditCopyrightYear("");
+        setEditPlaceOfPublication("");
+        setEditPublisher("");
+
+        setEditPages("");
+        setEditOtherDetails("");
+        setEditDimensions("");
+        setEditNotes("");
+        setEditSeries("");
+        setEditCategory("");
+        setEditAddedEntries("");
+
+        setEditBarcode("");
+        setEditCallNumber("");
+        setEditCopyNumber("");
+        setEditVolumeNumber("");
+        setEditLibraryArea("");
+
         setEditBorrowDuration("");
         setEditAvailable(true);
         setEditError("");
@@ -150,28 +275,96 @@ export default function LibrarianBooksPage() {
         }
     };
 
+    const parseYearOrNull = (raw: string): number | null => {
+        const v = raw.trim();
+        if (!v) return null;
+        const n = Number(v);
+        if (!Number.isFinite(n) || n < 1000 || n > 9999) return null;
+        return n;
+    };
+
+    const parsePositiveIntOrNull = (raw: string): number | null => {
+        const v = raw.trim();
+        if (!v) return null;
+        const n = Math.floor(Number(v));
+        if (!Number.isFinite(n) || n <= 0) return null;
+        return n;
+    };
+
+    const normalizeLibraryAreaInput = (raw: string): LibraryArea | null => {
+        const v = raw.trim().toLowerCase();
+        if (!v) return null;
+        return LIBRARY_AREA_HELP.includes(v as LibraryArea) ? (v as LibraryArea) : null;
+    };
+
+    const libraryAreaValidationMessage = `Library area is required and must be one of: ${LIBRARY_AREA_HELP.join(
+        ", "
+    )}.`;
+
     const handleCreateBook = async () => {
         setFormError("");
 
-        if (!title.trim() || !author.trim()) {
-            const msg = "Title and author are required.";
+        const resolvedTitle = title.trim();
+        const resolvedAuthor = author.trim();
+        const resolvedSOR = statementOfResponsibility.trim();
+
+        if (!resolvedTitle) {
+            const msg = "Title is required.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        if (!pubYear.trim()) {
-            const msg = "Publication year is required.";
+        if (!resolvedAuthor && !resolvedSOR) {
+            const msg = "Author or Statement of Responsibility is required.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        const yearNum = Number(pubYear);
-        if (!Number.isFinite(yearNum) || yearNum < 1000 || yearNum > 9999) {
+        const pubYearNum = parseYearOrNull(pubYear);
+        const copyrightYearNum = parseYearOrNull(copyrightYear);
+
+        if (pubYear.trim() && pubYearNum === null) {
             const msg = "Please enter a valid 4-digit publication year.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (copyrightYear.trim() && copyrightYearNum === null) {
+            const msg = "Please enter a valid 4-digit copyright year.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (pubYearNum === null && copyrightYearNum === null) {
+            const msg = "Publication year or Copyright year is required.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        // ✅ REQUIRED copy fields
+        if (!barcode.trim()) {
+            const msg = "Barcode is required.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (!callNumber.trim()) {
+            const msg = "Call number is required.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const libArea = normalizeLibraryAreaInput(libraryArea);
+        if (!libArea) {
+            setFormError(libraryAreaValidationMessage);
+            toast.error("Validation error", { description: libraryAreaValidationMessage });
             return;
         }
 
@@ -191,14 +384,57 @@ export default function LibrarianBooksPage() {
         }
         const borrowDaysInt = Math.floor(borrowDaysNum);
 
+        const pagesNum = pages.trim() ? parsePositiveIntOrNull(pages) : null;
+        if (pages.trim() && pagesNum === null) {
+            const msg = "Pages must be a positive number.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const copyNum = copyNumber.trim() ? parsePositiveIntOrNull(copyNumber) : null;
+        if (copyNumber.trim() && copyNum === null) {
+            const msg = "Copy number must be a positive number.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
         setSaving(true);
         try {
             const created = await createBook({
-                title: title.trim(),
-                author: author.trim(),
+                title: resolvedTitle,
+                author: resolvedAuthor || undefined,
+                statementOfResponsibility: resolvedSOR || undefined,
+
                 isbn: isbn.trim(),
+                issn: issn.trim(),
+                accessionNumber: accessionNumber.trim(),
                 genre: genre.trim(),
-                publicationYear: yearNum,
+
+                subtitle: subtitle.trim(),
+                edition: edition.trim(),
+
+                publicationYear: pubYearNum ?? undefined,
+                copyrightYear: copyrightYearNum ?? undefined,
+                placeOfPublication: placeOfPublication.trim(),
+                publisher: publisher.trim(),
+
+                pages: pagesNum,
+                otherDetails: otherDetails.trim(),
+                dimensions: dimensions.trim(),
+                notes: notes.trim(),
+                series: series.trim(),
+                category: category.trim(),
+                addedEntries: addedEntries.trim(),
+
+                // ✅ required fields sent
+                barcode: barcode.trim(),
+                callNumber: callNumber.trim(),
+                copyNumber: copyNum,
+                volumeNumber: volumeNumber.trim(),
+                libraryArea: libArea,
+
                 available,
                 borrowDurationDays: borrowDaysInt,
             });
@@ -223,22 +459,52 @@ export default function LibrarianBooksPage() {
     // ✅ Open edit dialog with selected book data
     const openEditDialog = (book: BookDTO) => {
         setEditBookId(book.id);
-        setEditTitle(book.title);
-        setEditAuthor(book.author);
+
+        setEditTitle(book.title || "");
+        setEditAuthor(book.author || "");
+        setEditStatementOfResponsibility(book.statementOfResponsibility || "");
+
         setEditIsbn(book.isbn || "");
+        setEditIssn(book.issn || "");
+        setEditAccessionNumber(book.accessionNumber || "");
         setEditGenre(book.genre || "");
+
+        setEditSubtitle(book.subtitle || "");
+        setEditEdition(book.edition || "");
+
         setEditPubYear(
             typeof book.publicationYear === "number"
                 ? String(book.publicationYear)
                 : ""
         );
+        setEditCopyrightYear(
+            typeof book.copyrightYear === "number" ? String(book.copyrightYear) : ""
+        );
+
+        setEditPlaceOfPublication(book.placeOfPublication || "");
+        setEditPublisher(book.publisher || "");
+
+        setEditPages(typeof book.pages === "number" ? String(book.pages) : "");
+        setEditOtherDetails(book.otherDetails || "");
+        setEditDimensions(book.dimensions || "");
+        setEditNotes(book.notes || "");
+        setEditSeries(book.series || "");
+        setEditCategory(book.category || "");
+        setEditAddedEntries(book.addedEntries || "");
+
+        setEditBarcode(book.barcode || "");
+        setEditCallNumber(book.callNumber || "");
+        setEditCopyNumber(typeof book.copyNumber === "number" ? String(book.copyNumber) : "");
+        setEditVolumeNumber(book.volumeNumber || "");
+        setEditLibraryArea(book.libraryArea || "");
+
         setEditBorrowDuration(
-            typeof book.borrowDurationDays === "number" &&
-                book.borrowDurationDays > 0
+            typeof book.borrowDurationDays === "number" && book.borrowDurationDays > 0
                 ? String(book.borrowDurationDays)
-                : borrowDuration // fall back to current default
+                : "7"
         );
         setEditAvailable(book.available);
+
         setEditError("");
         setEditOpen(true);
     };
@@ -247,25 +513,67 @@ export default function LibrarianBooksPage() {
         if (!editBookId) return;
         setEditError("");
 
-        if (!editTitle.trim() || !editAuthor.trim()) {
-            const msg = "Title and author are required.";
+        const resolvedTitle = editTitle.trim();
+        const resolvedAuthor = editAuthor.trim();
+        const resolvedSOR = editStatementOfResponsibility.trim();
+
+        if (!resolvedTitle) {
+            const msg = "Title is required.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        if (!editPubYear.trim()) {
-            const msg = "Publication year is required.";
+        if (!resolvedAuthor && !resolvedSOR) {
+            const msg = "Author or Statement of Responsibility is required.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        const yearNum = Number(editPubYear);
-        if (!Number.isFinite(yearNum) || yearNum < 1000 || yearNum > 9999) {
+        const pubYearNum = parseYearOrNull(editPubYear);
+        const copyrightYearNum = parseYearOrNull(editCopyrightYear);
+
+        if (editPubYear.trim() && pubYearNum === null) {
             const msg = "Please enter a valid 4-digit publication year.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (editCopyrightYear.trim() && copyrightYearNum === null) {
+            const msg = "Please enter a valid 4-digit copyright year.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (pubYearNum === null && copyrightYearNum === null) {
+            const msg = "Publication year or Copyright year is required.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        // ✅ REQUIRED copy fields
+        if (!editBarcode.trim()) {
+            const msg = "Barcode is required.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (!editCallNumber.trim()) {
+            const msg = "Call number is required.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const libArea = normalizeLibraryAreaInput(editLibraryArea);
+        if (!libArea) {
+            setEditError(libraryAreaValidationMessage);
+            toast.error("Validation error", { description: libraryAreaValidationMessage });
             return;
         }
 
@@ -285,14 +593,57 @@ export default function LibrarianBooksPage() {
         }
         const borrowDaysInt = Math.floor(borrowDaysNum);
 
+        const pagesNum = editPages.trim() ? parsePositiveIntOrNull(editPages) : null;
+        if (editPages.trim() && pagesNum === null) {
+            const msg = "Pages must be a positive number.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const copyNum = editCopyNumber.trim() ? parsePositiveIntOrNull(editCopyNumber) : null;
+        if (editCopyNumber.trim() && copyNum === null) {
+            const msg = "Copy number must be a positive number.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
         setEditing(true);
         try {
             const updated = await updateBook(editBookId, {
-                title: editTitle.trim(),
-                author: editAuthor.trim(),
+                title: resolvedTitle,
+                author: resolvedAuthor || undefined,
+                statementOfResponsibility: resolvedSOR || undefined,
+
                 isbn: editIsbn.trim(),
+                issn: editIssn.trim(),
+                accessionNumber: editAccessionNumber.trim(),
                 genre: editGenre.trim(),
-                publicationYear: yearNum,
+
+                subtitle: editSubtitle.trim(),
+                edition: editEdition.trim(),
+
+                publicationYear: pubYearNum ?? undefined,
+                copyrightYear: copyrightYearNum ?? undefined,
+                placeOfPublication: editPlaceOfPublication.trim(),
+                publisher: editPublisher.trim(),
+
+                pages: pagesNum,
+                otherDetails: editOtherDetails.trim(),
+                dimensions: editDimensions.trim(),
+                notes: editNotes.trim(),
+                series: editSeries.trim(),
+                category: editCategory.trim(),
+                addedEntries: editAddedEntries.trim(),
+
+                // ✅ required fields sent
+                barcode: editBarcode.trim(),
+                callNumber: editCallNumber.trim(),
+                copyNumber: copyNum,
+                volumeNumber: editVolumeNumber.trim(),
+                libraryArea: libArea,
+
                 available: editAvailable,
                 borrowDurationDays: borrowDaysInt,
             });
@@ -340,12 +691,26 @@ export default function LibrarianBooksPage() {
         const q = search.trim().toLowerCase();
         if (!q) return books;
         return books.filter((b) => {
-            return (
-                b.title.toLowerCase().includes(q) ||
-                b.author.toLowerCase().includes(q) ||
-                (b.isbn && b.isbn.toLowerCase().includes(q)) ||
-                (b.genre && b.genre.toLowerCase().includes(q))
-            );
+            const hay = [
+                b.title,
+                b.subtitle || "",
+                b.author,
+                b.statementOfResponsibility || "",
+                b.isbn || "",
+                b.issn || "",
+                b.genre || "",
+                b.category || "",
+                b.accessionNumber || "",
+                b.barcode || "",
+                b.callNumber || "",
+                b.publisher || "",
+                b.placeOfPublication || "",
+                b.libraryArea || "",
+            ]
+                .join(" ")
+                .toLowerCase();
+
+            return hay.includes(q);
         });
     }, [books, search]);
 
@@ -399,7 +764,6 @@ export default function LibrarianBooksPage() {
                             </Button>
                         </DialogTrigger>
 
-                        {/* Scrollable dialog with thin, dark scrollbar */}
                         <DialogContent
                             className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10
                          max-h-[85vh] overflow-y-auto
@@ -417,105 +781,414 @@ export default function LibrarianBooksPage() {
                                 </DialogDescription>
                             </DialogHeader>
 
-                            <div className="space-y-4 py-2">
-                                <Field>
-                                    <FieldLabel className="text-white">Title</FieldLabel>
-                                    <FieldContent>
-                                        <Input
-                                            value={title}
-                                            onChange={(e) => setTitle(e.target.value)}
-                                            placeholder="e.g., Clean Code"
-                                            className="bg-slate-900/70 border-white/20 text-white"
-                                            autoComplete="off"
-                                        />
-                                    </FieldContent>
-                                </Field>
+                            <div className="space-y-5 py-2">
+                                {/* Core */}
+                                <div className="space-y-4">
+                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                        Core details
+                                    </div>
 
-                                <Field>
-                                    <FieldLabel className="text-white">Author</FieldLabel>
-                                    <FieldContent>
-                                        <Input
-                                            value={author}
-                                            onChange={(e) => setAuthor(e.target.value)}
-                                            placeholder="e.g., Robert C. Martin"
-                                            className="bg-slate-900/70 border-white/20 text-white"
-                                            autoComplete="off"
-                                        />
-                                    </FieldContent>
-                                </Field>
+                                    <Field>
+                                        <FieldLabel className="text-white">Title *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={title}
+                                                onChange={(e) => setTitle(e.target.value)}
+                                                placeholder="e.g., Clean Code"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
 
-                                <Field>
-                                    <FieldLabel className="text-white">ISBN</FieldLabel>
-                                    <FieldContent>
-                                        <Input
-                                            value={isbn}
-                                            onChange={(e) => setIsbn(e.target.value)}
-                                            placeholder="e.g., 9780132350884"
-                                            className="bg-slate-900/70 border-white/20 text-white"
-                                            autoComplete="off"
-                                        />
-                                    </FieldContent>
-                                </Field>
+                                    <Field>
+                                        <FieldLabel className="text-white">Subtitle</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={subtitle}
+                                                onChange={(e) => setSubtitle(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
 
-                                <Field>
-                                    <FieldLabel className="text-white">Genre</FieldLabel>
-                                    <FieldContent>
-                                        <Input
-                                            value={genre}
-                                            onChange={(e) => setGenre(e.target.value)}
-                                            placeholder="e.g., Software Engineering"
-                                            className="bg-slate-900/70 border-white/20 text-white"
-                                            autoComplete="off"
-                                        />
-                                    </FieldContent>
-                                </Field>
+                                    <Field>
+                                        <FieldLabel className="text-white">Author</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={author}
+                                                onChange={(e) => setAuthor(e.target.value)}
+                                                placeholder="e.g., Robert C. Martin"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                        <p className="mt-1 text-[11px] text-white/60">
+                                            Provide Author or Statement of Responsibility.
+                                        </p>
+                                    </Field>
 
-                                <Field>
-                                    <FieldLabel className="text-white">Publication year</FieldLabel>
-                                    <FieldContent>
-                                        <Input
-                                            value={pubYear}
-                                            onChange={(e) => setPubYear(e.target.value)}
-                                            placeholder="e.g., 2008"
-                                            className="bg-slate-900/70 border-white/20 text-white"
-                                            inputMode="numeric"
-                                            autoComplete="off"
-                                        />
-                                    </FieldContent>
-                                </Field>
+                                    <Field>
+                                        <FieldLabel className="text-white">
+                                            Statement of Responsibility
+                                        </FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={statementOfResponsibility}
+                                                onChange={(e) => setStatementOfResponsibility(e.target.value)}
+                                                placeholder="Optional (can be used instead of Author)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
 
-                                <Field>
-                                    <FieldLabel className="text-white">
-                                        Default borrow duration (days)
-                                    </FieldLabel>
-                                    <FieldContent>
-                                        <Input
-                                            value={borrowDuration}
-                                            onChange={(e) => setBorrowDuration(e.target.value)}
-                                            placeholder="e.g., 7"
-                                            className="bg-slate-900/70 border-white/20 text-white"
-                                            inputMode="numeric"
-                                            autoComplete="off"
-                                        />
-                                    </FieldContent>
-                                    <p className="mt-1 text-[11px] text-white/60">
-                                        This controls how many days a student can initially borrow this
-                                        book. Librarians can still extend the due date later if needed.
-                                    </p>
-                                </Field>
-
-                                <div className="flex items-center gap-2 pt-2">
-                                    <Checkbox
-                                        id="available"
-                                        checked={available}
-                                        onCheckedChange={(v) => setAvailable(v === true)}
-                                    />
-                                    <Label htmlFor="available" className="text-sm text-white/80">
-                                        Mark as available in the catalog
-                                    </Label>
+                                    <Field>
+                                        <FieldLabel className="text-white">Edition</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={edition}
+                                                onChange={(e) => setEdition(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
                                 </div>
 
-                                {formError && <FieldError>{formError}</FieldError>}
+                                {/* Identifiers */}
+                                <div className="space-y-4 pt-2 border-t border-white/10">
+                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                        Identifiers
+                                    </div>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Accession Number</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={accessionNumber}
+                                                onChange={(e) => setAccessionNumber(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">ISBN</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={isbn}
+                                                onChange={(e) => setIsbn(e.target.value)}
+                                                placeholder="e.g., 9780132350884"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">ISSN</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={issn}
+                                                onChange={(e) => setIssn(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Genre (legacy)</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={genre}
+                                                onChange={(e) => setGenre(e.target.value)}
+                                                placeholder="e.g., Software Engineering"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Category</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={category}
+                                                onChange={(e) => setCategory(e.target.value)}
+                                                placeholder="Optional (if provided, mirrors Genre)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+                                </div>
+
+                                {/* Publication */}
+                                <div className="space-y-4 pt-2 border-t border-white/10">
+                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                        Publication
+                                    </div>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Publication year</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={pubYear}
+                                                onChange={(e) => setPubYear(e.target.value)}
+                                                placeholder="e.g., 2008"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                inputMode="numeric"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                        <p className="mt-1 text-[11px] text-white/60">
+                                            Provide Publication year or Copyright year.
+                                        </p>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Copyright year</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={copyrightYear}
+                                                onChange={(e) => setCopyrightYear(e.target.value)}
+                                                placeholder="Optional (4-digit year)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                inputMode="numeric"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Place of publication</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={placeOfPublication}
+                                                onChange={(e) => setPlaceOfPublication(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Publisher</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={publisher}
+                                                onChange={(e) => setPublisher(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+                                </div>
+
+                                {/* Physical */}
+                                <div className="space-y-4 pt-2 border-t border-white/10">
+                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                        Physical description & notes
+                                    </div>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Pages</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={pages}
+                                                onChange={(e) => setPages(e.target.value)}
+                                                placeholder="Optional (positive number)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                inputMode="numeric"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Other details</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={otherDetails}
+                                                onChange={(e) => setOtherDetails(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Dimensions</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={dimensions}
+                                                onChange={(e) => setDimensions(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Notes</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={notes}
+                                                onChange={(e) => setNotes(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Series</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={series}
+                                                onChange={(e) => setSeries(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Added entries</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={addedEntries}
+                                                onChange={(e) => setAddedEntries(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+                                </div>
+
+                                {/* Copy / circulation */}
+                                <div className="space-y-4 pt-2 border-t border-white/10">
+                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                        Copy & circulation
+                                    </div>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Barcode *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={barcode}
+                                                onChange={(e) => setBarcode(e.target.value)}
+                                                placeholder="Required"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Call number *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={callNumber}
+                                                onChange={(e) => setCallNumber(e.target.value)}
+                                                placeholder="Required"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Copy number</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={copyNumber}
+                                                onChange={(e) => setCopyNumber(e.target.value)}
+                                                placeholder="Optional (positive number)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                inputMode="numeric"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Volume number</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={volumeNumber}
+                                                onChange={(e) => setVolumeNumber(e.target.value)}
+                                                placeholder="Optional"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Library area *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={libraryArea}
+                                                onChange={(e) => setLibraryArea(e.target.value)}
+                                                placeholder="e.g., general_circulation"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                        <p className="mt-1 text-[11px] text-white/60">
+                                            Allowed: {LIBRARY_AREA_HELP.join(", ")}
+                                        </p>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">
+                                            Default borrow duration (days) *
+                                        </FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={borrowDuration}
+                                                onChange={(e) => setBorrowDuration(e.target.value)}
+                                                placeholder="e.g., 7"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                inputMode="numeric"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                        <p className="mt-1 text-[11px] text-white/60">
+                                            This controls how many days a student can initially borrow this
+                                            book.
+                                        </p>
+                                    </Field>
+
+                                    <div className="flex items-center gap-2 pt-2">
+                                        <Checkbox
+                                            id="available"
+                                            checked={available}
+                                            onCheckedChange={(v) => setAvailable(v === true)}
+                                        />
+                                        <Label htmlFor="available" className="text-sm text-white/80">
+                                            Mark as available in the catalog
+                                        </Label>
+                                    </div>
+
+                                    {formError && <FieldError>{formError}</FieldError>}
+                                </div>
                             </div>
 
                             <DialogFooterUI className="flex flex-col sm:flex-row sm:justify-end gap-2">
@@ -577,109 +1250,418 @@ export default function LibrarianBooksPage() {
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-2">
-                        <Field>
-                            <FieldLabel className="text-white">Title</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={editTitle}
-                                    onChange={(e) => setEditTitle(e.target.value)}
-                                    placeholder="e.g., Clean Code"
-                                    className="bg-slate-900/70 border-white/20 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
+                    <div className="space-y-5 py-2">
+                        {/* Core */}
+                        <div className="space-y-4">
+                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                Core details
+                            </div>
 
-                        <Field>
-                            <FieldLabel className="text-white">Author</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={editAuthor}
-                                    onChange={(e) => setEditAuthor(e.target.value)}
-                                    placeholder="e.g., Robert C. Martin"
-                                    className="bg-slate-900/70 border-white/20 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
+                            <Field>
+                                <FieldLabel className="text-white">Title *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editTitle}
+                                        onChange={(e) => setEditTitle(e.target.value)}
+                                        placeholder="e.g., Clean Code"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
 
-                        <Field>
-                            <FieldLabel className="text-white">ISBN</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={editIsbn}
-                                    onChange={(e) => setEditIsbn(e.target.value)}
-                                    placeholder="e.g., 9780132350884"
-                                    className="bg-slate-900/70 border-white/20 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
+                            <Field>
+                                <FieldLabel className="text-white">Subtitle</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editSubtitle}
+                                        onChange={(e) => setEditSubtitle(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
 
-                        <Field>
-                            <FieldLabel className="text-white">Genre</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={editGenre}
-                                    onChange={(e) => setEditGenre(e.target.value)}
-                                    placeholder="e.g., Software Engineering"
-                                    className="bg-slate-900/70 border-white/20 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
+                            <Field>
+                                <FieldLabel className="text-white">Author</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editAuthor}
+                                        onChange={(e) => setEditAuthor(e.target.value)}
+                                        placeholder="e.g., Robert C. Martin"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                                <p className="mt-1 text-[11px] text-white/60">
+                                    Provide Author or Statement of Responsibility.
+                                </p>
+                            </Field>
 
-                        <Field>
-                            <FieldLabel className="text-white">Publication year</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={editPubYear}
-                                    onChange={(e) => setEditPubYear(e.target.value)}
-                                    placeholder="e.g., 2008"
-                                    className="bg-slate-900/70 border-white/20 text-white"
-                                    inputMode="numeric"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
+                            <Field>
+                                <FieldLabel className="text-white">
+                                    Statement of Responsibility
+                                </FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editStatementOfResponsibility}
+                                        onChange={(e) => setEditStatementOfResponsibility(e.target.value)}
+                                        placeholder="Optional (can be used instead of Author)"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
 
-                        <Field>
-                            <FieldLabel className="text-white">
-                                Default borrow duration (days)
-                            </FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={editBorrowDuration}
-                                    onChange={(e) => setEditBorrowDuration(e.target.value)}
-                                    placeholder="e.g., 7"
-                                    className="bg-slate-900/70 border-white/20 text-white"
-                                    inputMode="numeric"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                            <p className="mt-1 text-[11px] text-white/60">
-                                This controls how many days a student can initially borrow this
-                                book. You can still extend specific loans later from the borrow
-                                records page.
-                            </p>
-                        </Field>
-
-                        <div className="flex items-center gap-2 pt-2">
-                            <Checkbox
-                                id="edit-available"
-                                checked={editAvailable}
-                                onCheckedChange={(v) => setEditAvailable(v === true)}
-                            />
-                            <Label
-                                htmlFor="edit-available"
-                                className="text-sm text-white/80"
-                            >
-                                Mark as available in the catalog
-                            </Label>
+                            <Field>
+                                <FieldLabel className="text-white">Edition</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editEdition}
+                                        onChange={(e) => setEditEdition(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
                         </div>
 
-                        {editError && <FieldError>{editError}</FieldError>}
+                        {/* Identifiers */}
+                        <div className="space-y-4 pt-2 border-t border-white/10">
+                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                Identifiers
+                            </div>
+
+                            <Field>
+                                <FieldLabel className="text-white">Accession Number</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editAccessionNumber}
+                                        onChange={(e) => setEditAccessionNumber(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">ISBN</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editIsbn}
+                                        onChange={(e) => setEditIsbn(e.target.value)}
+                                        placeholder="e.g., 9780132350884"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">ISSN</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editIssn}
+                                        onChange={(e) => setEditIssn(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Genre (legacy)</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editGenre}
+                                        onChange={(e) => setEditGenre(e.target.value)}
+                                        placeholder="e.g., Software Engineering"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Category</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editCategory}
+                                        onChange={(e) => setEditCategory(e.target.value)}
+                                        placeholder="Optional (if provided, mirrors Genre)"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+                        </div>
+
+                        {/* Publication */}
+                        <div className="space-y-4 pt-2 border-t border-white/10">
+                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                Publication
+                            </div>
+
+                            <Field>
+                                <FieldLabel className="text-white">Publication year</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editPubYear}
+                                        onChange={(e) => setEditPubYear(e.target.value)}
+                                        placeholder="e.g., 2008"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                                <p className="mt-1 text-[11px] text-white/60">
+                                    Provide Publication year or Copyright year.
+                                </p>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Copyright year</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editCopyrightYear}
+                                        onChange={(e) => setEditCopyrightYear(e.target.value)}
+                                        placeholder="Optional (4-digit year)"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Place of publication</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editPlaceOfPublication}
+                                        onChange={(e) => setEditPlaceOfPublication(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Publisher</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editPublisher}
+                                        onChange={(e) => setEditPublisher(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+                        </div>
+
+                        {/* Physical */}
+                        <div className="space-y-4 pt-2 border-t border-white/10">
+                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                Physical description & notes
+                            </div>
+
+                            <Field>
+                                <FieldLabel className="text-white">Pages</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editPages}
+                                        onChange={(e) => setEditPages(e.target.value)}
+                                        placeholder="Optional (positive number)"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Other details</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editOtherDetails}
+                                        onChange={(e) => setEditOtherDetails(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Dimensions</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editDimensions}
+                                        onChange={(e) => setEditDimensions(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Notes</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editNotes}
+                                        onChange={(e) => setEditNotes(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Series</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editSeries}
+                                        onChange={(e) => setEditSeries(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Added entries</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editAddedEntries}
+                                        onChange={(e) => setEditAddedEntries(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+                        </div>
+
+                        {/* Copy / circulation */}
+                        <div className="space-y-4 pt-2 border-t border-white/10">
+                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                Copy & circulation
+                            </div>
+
+                            <Field>
+                                <FieldLabel className="text-white">Barcode *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editBarcode}
+                                        onChange={(e) => setEditBarcode(e.target.value)}
+                                        placeholder="Required"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Call number *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editCallNumber}
+                                        onChange={(e) => setEditCallNumber(e.target.value)}
+                                        placeholder="Required"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Copy number</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editCopyNumber}
+                                        onChange={(e) => setEditCopyNumber(e.target.value)}
+                                        placeholder="Optional (positive number)"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Volume number</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editVolumeNumber}
+                                        onChange={(e) => setEditVolumeNumber(e.target.value)}
+                                        placeholder="Optional"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Library area *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editLibraryArea}
+                                        onChange={(e) => setEditLibraryArea(e.target.value)}
+                                        placeholder="e.g., general_circulation"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                                <p className="mt-1 text-[11px] text-white/60">
+                                    Allowed: {LIBRARY_AREA_HELP.join(", ")}
+                                </p>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">
+                                    Default borrow duration (days) *
+                                </FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editBorrowDuration}
+                                        onChange={(e) => setEditBorrowDuration(e.target.value)}
+                                        placeholder="e.g., 7"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                                <p className="mt-1 text-[11px] text-white/60">
+                                    This controls how many days a student can initially borrow this
+                                    book. You can still extend specific loans later from the borrow
+                                    records page.
+                                </p>
+                            </Field>
+
+                            <div className="flex items-center gap-2 pt-2">
+                                <Checkbox
+                                    id="edit-available"
+                                    checked={editAvailable}
+                                    onCheckedChange={(v) => setEditAvailable(v === true)}
+                                />
+                                <Label
+                                    htmlFor="edit-available"
+                                    className="text-sm text-white/80"
+                                >
+                                    Mark as available in the catalog
+                                </Label>
+                            </div>
+
+                            {editError && <FieldError>{editError}</FieldError>}
+                        </div>
                     </div>
 
                     <DialogFooterUI className="flex flex-col sm:flex-row sm:justify-end gap-2">
@@ -720,12 +1702,12 @@ export default function LibrarianBooksPage() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <CardTitle>Books catalog</CardTitle>
 
-                        <div className="relative w-full md:w-64">
+                        <div className="relative w-full md:w-72">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                             <Input
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search by title, author, ISBN, genre…"
+                                placeholder="Search title, author, accession, barcode, call no., library area…"
                                 className="pl-9 bg-slate-900/70 border-white/20 text-white"
                             />
                         </div>
@@ -769,6 +1751,18 @@ export default function LibrarianBooksPage() {
                                         Author
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">
+                                        Accession #
+                                    </TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">
+                                        Barcode
+                                    </TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">
+                                        Call no.
+                                    </TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">
+                                        Library area
+                                    </TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">
                                         ISBN
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">
@@ -803,17 +1797,37 @@ export default function LibrarianBooksPage() {
                                         <TableCell className="text-sm opacity-90">
                                             {book.author}
                                         </TableCell>
+
+                                        <TableCell className="text-sm opacity-80">
+                                            {book.accessionNumber ? book.accessionNumber : <span className="opacity-50">—</span>}
+                                        </TableCell>
+
+                                        <TableCell className="text-sm opacity-80">
+                                            {book.barcode ? book.barcode : <span className="opacity-50">—</span>}
+                                        </TableCell>
+
+                                        <TableCell className="text-sm opacity-80">
+                                            {book.callNumber ? book.callNumber : <span className="opacity-50">—</span>}
+                                        </TableCell>
+
+                                        <TableCell className="text-sm opacity-80">
+                                            {book.libraryArea ? book.libraryArea : <span className="opacity-50">—</span>}
+                                        </TableCell>
+
                                         <TableCell className="text-sm opacity-80">
                                             {book.isbn || <span className="opacity-50">—</span>}
                                         </TableCell>
+
                                         <TableCell className="text-sm opacity-80">
                                             {book.genre || <span className="opacity-50">—</span>}
                                         </TableCell>
+
                                         <TableCell className="text-sm opacity-80">
                                             {book.publicationYear || (
                                                 <span className="opacity-50">—</span>
                                             )}
                                         </TableCell>
+
                                         <TableCell className="text-sm opacity-80">
                                             {typeof book.borrowDurationDays === "number" &&
                                                 book.borrowDurationDays > 0 ? (
@@ -825,8 +1839,8 @@ export default function LibrarianBooksPage() {
                                                 <span className="opacity-50">—</span>
                                             )}
                                         </TableCell>
+
                                         <TableCell>
-                                            {/* 🔒 Display-only availability (no onClick) */}
                                             <Badge
                                                 variant={book.available ? "default" : "outline"}
                                                 className={
@@ -848,9 +1862,9 @@ export default function LibrarianBooksPage() {
                                                 )}
                                             </Badge>
                                         </TableCell>
+
                                         <TableCell className="text-right">
                                             <div className="flex items-center justify-end gap-1">
-                                                {/* ✏️ Edit button with Lucide Edit icon */}
                                                 <Button
                                                     type="button"
                                                     size="icon"
@@ -862,7 +1876,6 @@ export default function LibrarianBooksPage() {
                                                     <span className="sr-only">Edit</span>
                                                 </Button>
 
-                                                {/* ✅ AlertDialog for delete confirmation */}
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <Button
