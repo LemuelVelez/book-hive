@@ -13,12 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-    Field,
-    FieldContent,
-    FieldError,
-    FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     Table,
@@ -168,7 +163,8 @@ export default function LibrarianBooksPage() {
     const [editEdition, setEditEdition] = React.useState("");
     const [editPubYear, setEditPubYear] = React.useState("");
     const [editCopyrightYear, setEditCopyrightYear] = React.useState("");
-    const [editPlaceOfPublication, setEditPlaceOfPublication] = React.useState("");
+    const [editPlaceOfPublication, setEditPlaceOfPublication] =
+        React.useState("");
     const [editPublisher, setEditPublisher] = React.useState("");
 
     const [editPages, setEditPages] = React.useState("");
@@ -277,7 +273,9 @@ export default function LibrarianBooksPage() {
             const data = await fetchBooks();
             setBooks(data);
         } catch (err: unknown) {
-            const msg = getErrorMessage(err) || "Failed to load books. Please try again later.";
+            const msg =
+                getErrorMessage(err) ||
+                "Failed to load books. Please try again later.";
             setError(msg);
             toast.error("Failed to load books", { description: msg });
         } finally {
@@ -479,7 +477,8 @@ export default function LibrarianBooksPage() {
             resetForm();
             setAddOpen(false);
         } catch (err: unknown) {
-            const msg = getErrorMessage(err) || "Failed to create book. Please try again later.";
+            const msg =
+                getErrorMessage(err) || "Failed to create book. Please try again later.";
             setFormError(msg);
             toast.error("Failed to create book", { description: msg });
         } finally {
@@ -503,10 +502,14 @@ export default function LibrarianBooksPage() {
         setEditEdition(book.edition || "");
 
         setEditPubYear(
-            typeof book.publicationYear === "number" ? String(book.publicationYear) : ""
+            typeof book.publicationYear === "number"
+                ? String(book.publicationYear)
+                : ""
         );
         setEditCopyrightYear(
-            typeof book.copyrightYear === "number" ? String(book.copyrightYear) : ""
+            typeof book.copyrightYear === "number"
+                ? String(book.copyrightYear)
+                : ""
         );
 
         setEditPlaceOfPublication(book.placeOfPublication || "");
@@ -717,7 +720,8 @@ export default function LibrarianBooksPage() {
             setEditOpen(false);
             resetEditForm();
         } catch (err: unknown) {
-            const msg = getErrorMessage(err) || "Failed to update book. Please try again later.";
+            const msg =
+                getErrorMessage(err) || "Failed to update book. Please try again later.";
             setEditError(msg);
             toast.error("Failed to update book", { description: msg });
         } finally {
@@ -736,7 +740,8 @@ export default function LibrarianBooksPage() {
             });
         } catch (err: unknown) {
             setBooks(previous);
-            const msg = getErrorMessage(err) || "Failed to delete book. Please try again later.";
+            const msg =
+                getErrorMessage(err) || "Failed to delete book. Please try again later.";
             toast.error("Delete failed", { description: msg });
         }
     };
@@ -767,6 +772,16 @@ export default function LibrarianBooksPage() {
             return hay.includes(q);
         });
     }, [books, search]);
+
+    // Reusable scrollbar styling for dark, thin horizontal scrollbars (same as student/circulation.tsx)
+    const cellScrollbarClasses =
+        "overflow-x-auto whitespace-nowrap " +
+        "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
+        "[&::-webkit-scrollbar]:h-1.5 " +
+        "[&::-webkit-scrollbar-track]:bg-transparent " +
+        "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
+        "[&::-webkit-scrollbar-thumb]:rounded-full " +
+        "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
 
     return (
         <DashboardLayout title="Books Management">
@@ -1201,7 +1216,8 @@ export default function LibrarianBooksPage() {
                                                 value={libraryAreaOption}
                                                 onValueChange={(v) => {
                                                     setLibraryAreaOption(v);
-                                                    if (v !== LIBRARY_AREA_OTHER_VALUE) setLibraryAreaOther("");
+                                                    if (v !== LIBRARY_AREA_OTHER_VALUE)
+                                                        setLibraryAreaOther("");
                                                 }}
                                                 className="space-y-2"
                                             >
@@ -1401,9 +1417,7 @@ export default function LibrarianBooksPage() {
                                 <FieldContent>
                                     <Input
                                         value={editStatementOfResponsibility}
-                                        onChange={(e) =>
-                                            setEditStatementOfResponsibility(e.target.value)
-                                        }
+                                        onChange={(e) => setEditStatementOfResponsibility(e.target.value)}
                                         placeholder="Optional (can be used instead of Author)"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
@@ -1869,35 +1883,39 @@ export default function LibrarianBooksPage() {
                                 Showing {filteredBooks.length}{" "}
                                 {filteredBooks.length === 1 ? "book" : "books"}.
                             </TableCaption>
+
                             <TableHeader>
                                 <TableRow className="border-white/10">
                                     <TableHead className="w-[70px] text-xs font-semibold text-white/70">
                                         ID
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+
+                                    {/* Reduced widths (scrollable columns) */}
+                                    <TableHead className="w-[200px] text-xs font-semibold text-white/70">
                                         Title
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+                                    <TableHead className="w-[150px] text-xs font-semibold text-white/70">
                                         Author
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+                                    <TableHead className="w-[120px] text-xs font-semibold text-white/70">
                                         Accession #
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+                                    <TableHead className="w-[120px] text-xs font-semibold text-white/70">
                                         Barcode
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+                                    <TableHead className="w-[130px] text-xs font-semibold text-white/70">
                                         Call no.
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+                                    <TableHead className="w-[140px] text-xs font-semibold text-white/70">
                                         Library area
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+                                    <TableHead className="w-[130px] text-xs font-semibold text-white/70">
                                         ISBN
                                     </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
+                                    <TableHead className="w-[130px] text-xs font-semibold text-white/70">
                                         Genre
                                     </TableHead>
+
                                     <TableHead className="text-xs font-semibold text-white/70">
                                         Pub. year
                                     </TableHead>
@@ -1912,6 +1930,7 @@ export default function LibrarianBooksPage() {
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
+
                             <TableBody>
                                 {filteredBooks.map((book) => (
                                     <TableRow
@@ -1919,42 +1938,77 @@ export default function LibrarianBooksPage() {
                                         className="border-white/5 hover:bg-white/5 transition-colors"
                                     >
                                         <TableCell className="text-xs opacity-80">{book.id}</TableCell>
-                                        <TableCell className="text-sm font-medium">{book.title}</TableCell>
-                                        <TableCell className="text-sm opacity-90">{book.author}</TableCell>
 
-                                        <TableCell className="text-sm opacity-80">
-                                            {book.accessionNumber ? (
-                                                book.accessionNumber
-                                            ) : (
-                                                <span className="opacity-50">—</span>
-                                            )}
+                                        {/* Scrollable cells (smaller widths) */}
+                                        <TableCell
+                                            className={
+                                                "text-sm font-medium align-top w-[100px] max-w-[100px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
+                                            {book.title}
                                         </TableCell>
 
-                                        <TableCell className="text-sm opacity-80">
+                                        <TableCell
+                                            className={
+                                                "text-sm opacity-90 align-top w-[100px] max-w-[100px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
+                                            {book.author}
+                                        </TableCell>
+
+                                        <TableCell
+                                            className={
+                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
+                                            {book.accessionNumber ? book.accessionNumber : <span className="opacity-50">—</span>}
+                                        </TableCell>
+
+                                        <TableCell
+                                            className={
+                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
                                             {book.barcode ? book.barcode : <span className="opacity-50">—</span>}
                                         </TableCell>
 
-                                        <TableCell className="text-sm opacity-80">
-                                            {book.callNumber ? (
-                                                book.callNumber
-                                            ) : (
-                                                <span className="opacity-50">—</span>
-                                            )}
+                                        <TableCell
+                                            className={
+                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
+                                            {book.callNumber ? book.callNumber : <span className="opacity-50">—</span>}
                                         </TableCell>
 
-                                        <TableCell className="text-sm opacity-80">
-                                            {book.libraryArea ? (
-                                                book.libraryArea
-                                            ) : (
-                                                <span className="opacity-50">—</span>
-                                            )}
+                                        <TableCell
+                                            className={
+                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
+                                            {book.libraryArea ? book.libraryArea : <span className="opacity-50">—</span>}
                                         </TableCell>
 
-                                        <TableCell className="text-sm opacity-80">
+                                        <TableCell
+                                            className={
+                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
                                             {book.isbn || <span className="opacity-50">—</span>}
                                         </TableCell>
 
-                                        <TableCell className="text-sm opacity-80">
+                                        <TableCell
+                                            className={
+                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                cellScrollbarClasses
+                                            }
+                                        >
                                             {book.genre || <span className="opacity-50">—</span>}
                                         </TableCell>
 
