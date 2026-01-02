@@ -1,3 +1,4 @@
+// src/pages/dashboard/librarian/borrowRecords.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -96,6 +97,15 @@ function fmtDate(d?: string | null) {
 }
 
 /**
+ * Prefer the student's full name (and do NOT show email/student ID).
+ */
+function studentFullName(rec: BorrowRecordDTO): string {
+  const name = (rec.studentName || "").trim();
+  if (name) return name;
+  return `User #${rec.userId}`;
+}
+
+/**
  * Compute overdue days and automatic fine based on due date and today (local).
  */
 function computeAutoFine(dueDate?: string | null) {
@@ -111,11 +121,7 @@ function computeAutoFine(dueDate?: string | null) {
   const now = new Date();
 
   const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-  const todayLocal = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
+  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const diffMs = todayLocal.getTime() - dueLocal.getTime();
   const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -255,9 +261,7 @@ export default function LibrarianBorrowRecordsPage() {
     try {
       const updated = await markBorrowAsBorrowed(rec.id);
 
-      setRecords((prev) =>
-        prev.map((r) => (r.id === updated.id ? updated : r))
-      );
+      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
       toast.success("Marked as borrowed", {
         description: `Record #${updated.id} is now marked as Borrowed.`,
@@ -289,9 +293,7 @@ export default function LibrarianBorrowRecordsPage() {
         fine: parsed,
       });
 
-      setRecords((prev) =>
-        prev.map((r) => (r.id === updated.id ? updated : r))
-      );
+      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
       toast.success("Marked as returned", {
         description: `Record #${updated.id} marked as returned with fine ${peso(
@@ -323,9 +325,7 @@ export default function LibrarianBorrowRecordsPage() {
     try {
       const updated = await updateBorrowDueDate(dueRecord.id, ymd);
 
-      setRecords((prev) =>
-        prev.map((r) => (r.id === updated.id ? updated : r))
-      );
+      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
       toast.success("Due date updated", {
         description: `New due date: ${fmtDate(updated.dueDate)}.`,
@@ -353,12 +353,13 @@ export default function LibrarianBorrowRecordsPage() {
     if (!q) return rows;
 
     return rows.filter((r) => {
+      // ✅ show name in UI, but search can still match email/id if needed
       const student =
+        (r.studentName || "") +
+        " " +
         (r.studentEmail || "") +
         " " +
-        (r.studentId || "") +
-        " " +
-        (r.studentName || "");
+        (r.studentId || "");
       const book = (r.bookTitle || "") + " " + r.bookId;
       return (
         String(r.id).includes(q) ||
@@ -392,12 +393,10 @@ export default function LibrarianBorrowRecordsPage() {
               Track who borrowed which book, due dates, returns, and fines.
             </p>
             <p className="mt-1 text-[11px] text-amber-200/90">
-              For{" "}
-              <span className="font-semibold">pending pickup</span> records,
+              For <span className="font-semibold">pending pickup</span> records,
               use this page to confirm that the student has received the{" "}
-              <span className="font-semibold">physical book</span> and mark
-              the status as{" "}
-              <span className="font-semibold">Borrowed</span>. For{" "}
+              <span className="font-semibold">physical book</span> and mark the
+              status as <span className="font-semibold">Borrowed</span>. For{" "}
               <span className="font-semibold">pending return</span> records
               (created by the student&apos;s online return request), use this
               page to mark the book as{" "}
@@ -408,8 +407,7 @@ export default function LibrarianBorrowRecordsPage() {
               The amount you finalize here becomes the{" "}
               <span className="font-semibold">official fine</span> for this
               borrow. Payment status (active, pending verification, paid) is
-              managed in the <span className="font-semibold">Fines</span>{" "}
-              page.
+              managed in the <span className="font-semibold">Fines</span> page.
             </p>
           </div>
         </div>
@@ -483,9 +481,7 @@ export default function LibrarianBorrowRecordsPage() {
               <Skeleton className="h-9 w-full" />
             </div>
           ) : error ? (
-            <div className="py-6 text-center text-sm text-red-300">
-              {error}
-            </div>
+            <div className="py-6 text-center text-sm text-red-300">{error}</div>
           ) : filtered.length === 0 ? (
             <div className="py-10 text-center text-sm text-white/70">
               No borrow records found.
@@ -507,7 +503,7 @@ export default function LibrarianBorrowRecordsPage() {
                       Borrow ID
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-white/70">
-                      Student Email (or ID)
+                      User Name
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-white/70">
                       Book Title (or ID)
@@ -534,11 +530,7 @@ export default function LibrarianBorrowRecordsPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((rec) => {
-                    const studentLabel =
-                      rec.studentEmail ||
-                      rec.studentId ||
-                      rec.studentName ||
-                      `User #${rec.userId}`;
+                    const studentLabel = studentFullName(rec);
                     const bookLabel = rec.bookTitle || `Book #${rec.bookId}`;
 
                     const isReturned = rec.status === "returned";
@@ -549,9 +541,7 @@ export default function LibrarianBorrowRecordsPage() {
                       isPendingPickup || isPendingReturn || isLegacyPending;
                     const isBorrowed = rec.status === "borrowed";
 
-                    const { overdueDays, autoFine } = computeAutoFine(
-                      rec.dueDate
-                    );
+                    const { overdueDays, autoFine } = computeAutoFine(rec.dueDate);
 
                     // Overdue applies to active loans / pending returns,
                     // but not to pending pickup.
@@ -569,10 +559,11 @@ export default function LibrarianBorrowRecordsPage() {
                         <TableCell className="text-xs opacity-80">
                           {rec.id}
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {studentLabel}
-                        </TableCell>
+
+                        <TableCell className="text-sm">{studentLabel}</TableCell>
+
                         <TableCell className="text-sm">{bookLabel}</TableCell>
+
                         <TableCell className="text-sm opacity-90">
                           {fmtDate(rec.borrowDate)}
                         </TableCell>
@@ -582,6 +573,7 @@ export default function LibrarianBorrowRecordsPage() {
                         <TableCell className="text-sm opacity-90">
                           {fmtDate(rec.returnDate)}
                         </TableCell>
+
                         <TableCell
                           className={
                             "text-right w-[100px] max-w-[100px] " +
@@ -625,6 +617,7 @@ export default function LibrarianBorrowRecordsPage() {
                             </Badge>
                           )}
                         </TableCell>
+
                         {/* ₱Fine cell with scrollbar */}
                         <TableCell
                           className={
@@ -649,6 +642,7 @@ export default function LibrarianBorrowRecordsPage() {
                             ) : null}
                           </div>
                         </TableCell>
+
                         {/* Actions cell with horizontal scrollbar */}
                         <TableCell
                           className={
@@ -706,8 +700,7 @@ export default function LibrarianBorrowRecordsPage() {
                                         <span className="font-semibold text-white">
                                           “{bookLabel}”
                                         </span>{" "}
-                                        and change this record&apos;s status
-                                        from{" "}
+                                        and change this record&apos;s status from{" "}
                                         <span className="font-semibold text-amber-200">
                                           Pending pickup
                                         </span>{" "}
@@ -761,9 +754,7 @@ export default function LibrarianBorrowRecordsPage() {
                                       <AlertDialogAction
                                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
                                         disabled={markBorrowBusyId === rec.id}
-                                        onClick={() =>
-                                          void handleMarkBorrowed(rec)
-                                        }
+                                        onClick={() => void handleMarkBorrowed(rec)}
                                       >
                                         {markBorrowBusyId === rec.id ? (
                                           <span className="inline-flex items-center gap-2">
@@ -827,13 +818,12 @@ export default function LibrarianBorrowRecordsPage() {
                 <span className="font-semibold text-white">
                   “
                   {selectedRecord.bookTitle ??
-                    `Book #${selectedRecord.bookId}`}”
+                    `Book #${selectedRecord.bookId}`}
+                  ”
                 </span>{" "}
                 as <span className="font-semibold">Returned</span> for{" "}
                 <span className="font-semibold">
-                  {selectedRecord.studentEmail ??
-                    selectedRecord.studentId ??
-                    `User #${selectedRecord.userId}`}
+                  {studentFullName(selectedRecord)}
                 </span>
                 .
               </AlertDialogDescription>
@@ -971,9 +961,7 @@ export default function LibrarianBorrowRecordsPage() {
                 </span>{" "}
                 borrowed by{" "}
                 <span className="font-semibold">
-                  {dueRecord.studentEmail ??
-                    dueRecord.studentId ??
-                    `User #${dueRecord.userId}`}
+                  {studentFullName(dueRecord)}
                 </span>
                 .
               </AlertDialogDescription>
