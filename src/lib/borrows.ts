@@ -4,9 +4,9 @@ import { API_BASE } from "@/api/auth/route";
 
 export type BorrowStatus =
     | "borrowed"
-    | "pending"          // legacy
-    | "pending_pickup"   // student reserved online, not yet picked up
-    | "pending_return"   // student requested return; waiting for librarian
+    | "pending" // legacy
+    | "pending_pickup" // student reserved online, not yet picked up
+    | "pending_return" // student requested return; waiting for librarian
     | "returned";
 
 export type BorrowRecordDTO = {
@@ -22,6 +22,13 @@ export type BorrowRecordDTO = {
     returnDate: string | null; // ISO date or null
     status: BorrowStatus;
     fine: number; // pesos
+
+    // ✅ NEW: extension info (from backend)
+    extensionCount: number;
+    extensionTotalDays: number;
+    lastExtensionDays: number | null;
+    lastExtendedAt: string | null;
+    lastExtensionReason: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -183,6 +190,32 @@ export async function requestBorrowReturn(
 }
 
 /**
+ * ✅ NEW: Student/Guest/Faculty action: request an extension of due date.
+ * - POST /api/borrow-records/:id/extend
+ * - Body: { days: number, reason?: string }
+ * - Server will extend due_date immediately and return the updated record.
+ */
+export async function requestBorrowExtension(
+    id: string | number,
+    days: number,
+    reason?: string
+): Promise<BorrowRecordDTO> {
+    if (!Number.isFinite(days) || days <= 0) {
+        throw new Error("days must be a positive number.");
+    }
+
+    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.extend(id), {
+        method: "POST",
+        body: {
+            days: Math.floor(days),
+            reason: reason && reason.trim() ? reason.trim() : undefined,
+        },
+    });
+    return res.record;
+}
+
+/**
  * Librarian/Admin action: confirm that the student has physically
  * received the book.
  * - Sets status to "borrowed"
@@ -220,8 +253,7 @@ export async function markBorrowReturned(
 ): Promise<BorrowRecordDTO> {
     const body: UpdateBorrowPayload = {
         status: "returned",
-        returnDate:
-            options.returnDate ?? new Date().toISOString().slice(0, 10),
+        returnDate: options.returnDate ?? new Date().toISOString().slice(0, 10),
     };
 
     if (typeof options.fine === "number") {
