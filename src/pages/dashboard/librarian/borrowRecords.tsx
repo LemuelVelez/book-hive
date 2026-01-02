@@ -109,17 +109,12 @@ function studentFullName(rec: BorrowRecordDTO): string {
  * Compute overdue days and automatic fine based on due date and today (local).
  */
 function computeAutoFine(dueDate?: string | null) {
-  if (!dueDate) {
-    return { overdueDays: 0, autoFine: 0 };
-  }
+  if (!dueDate) return { overdueDays: 0, autoFine: 0 };
 
   const due = new Date(dueDate);
-  if (Number.isNaN(due.getTime())) {
-    return { overdueDays: 0, autoFine: 0 };
-  }
+  if (Number.isNaN(due.getTime())) return { overdueDays: 0, autoFine: 0 };
 
   const now = new Date();
-
   const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
   const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -183,9 +178,7 @@ export default function LibrarianBorrowRecordsPage() {
 
   // --- Edit due date dialog state ---
   const [dueDialogOpen, setDueDialogOpen] = React.useState(false);
-  const [dueRecord, setDueRecord] = React.useState<BorrowRecordDTO | null>(
-    null
-  );
+  const [dueRecord, setDueRecord] = React.useState<BorrowRecordDTO | null>(null);
   const [dueDateInput, setDueDateInput] = React.useState<Date | undefined>(
     undefined
   );
@@ -261,7 +254,9 @@ export default function LibrarianBorrowRecordsPage() {
     try {
       const updated = await markBorrowAsBorrowed(rec.id);
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setRecords((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
 
       toast.success("Marked as borrowed", {
         description: `Record #${updated.id} is now marked as Borrowed.`,
@@ -293,7 +288,9 @@ export default function LibrarianBorrowRecordsPage() {
         fine: parsed,
       });
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setRecords((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
 
       toast.success("Marked as returned", {
         description: `Record #${updated.id} marked as returned with fine ${peso(
@@ -325,7 +322,9 @@ export default function LibrarianBorrowRecordsPage() {
     try {
       const updated = await updateBorrowDueDate(dueRecord.id, ymd);
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setRecords((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
 
       toast.success("Due date updated", {
         description: `New due date: ${fmtDate(updated.dueDate)}.`,
@@ -409,6 +408,11 @@ export default function LibrarianBorrowRecordsPage() {
               borrow. Payment status (active, pending verification, paid) is
               managed in the <span className="font-semibold">Fines</span> page.
             </p>
+            <p className="mt-1 text-[11px] text-sky-200/90">
+              Due date edits for{" "}
+              <span className="font-semibold">extensions</span> are only enabled{" "}
+              after the borrower has requested an extension online.
+            </p>
           </div>
         </div>
 
@@ -417,7 +421,7 @@ export default function LibrarianBorrowRecordsPage() {
             type="button"
             variant="outline"
             size="icon"
-            className="border-white/20 text-white/90 hover:bg:white/10"
+            className="border-white/20 text-white/90 hover:bg-white/10"
             onClick={handleRefresh}
             disabled={refreshing || loading}
           >
@@ -511,23 +515,24 @@ export default function LibrarianBorrowRecordsPage() {
                     <TableHead className="text-xs font-semibold text-white/70">
                       Borrow Date
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text:white/70">
+                    <TableHead className="text-xs font-semibold text-white/70">
                       Due Date
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text:white/70">
+                    <TableHead className="text-xs font-semibold text-white/70">
                       Return Date
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text:white/70">
+                    <TableHead className="text-xs font-semibold text-white/70">
                       Status
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text:white/70 text-right">
+                    <TableHead className="text-xs font-semibold text-white/70 text-right">
                       ₱Fine
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text:white/70 text-right">
+                    <TableHead className="text-xs font-semibold text-white/70 text-right">
                       Actions
                     </TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
                   {filtered.map((rec) => {
                     const studentLabel = studentFullName(rec);
@@ -550,6 +555,10 @@ export default function LibrarianBorrowRecordsPage() {
                       overdueDays > 0;
 
                     const fineAmount = normalizeFine(rec.fine as any);
+
+                    // ✅ Disable due date editing unless an extension was requested at least once
+                    const extensionCount = Number(rec.extensionCount ?? 0);
+                    const canEditDueDate = extensionCount > 0;
 
                     return (
                       <TableRow
@@ -646,7 +655,7 @@ export default function LibrarianBorrowRecordsPage() {
                         {/* Actions cell with horizontal scrollbar */}
                         <TableCell
                           className={
-                            "text-right w-[100px] max-w-[100px] " +
+                            "text-right w-[120px] max-w-[120px] " +
                             cellScrollbarClasses
                           }
                         >
@@ -656,17 +665,31 @@ export default function LibrarianBorrowRecordsPage() {
                             </span>
                           ) : (
                             <div className="inline-flex flex-col items-end gap-1">
-                              {/* ✏️ Edit due date */}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="border-white/25 text-xs text-white/80 inline-flex items-center gap-1"
-                                onClick={() => openDueDialog(rec)}
-                              >
-                                <Edit className="h-3.5 w-3.5" />
-                                <span>Edit due date</span>
-                              </Button>
+                              {/* ✏️ Edit due date (disabled until borrower requests extension) */}
+                              <div className="flex flex-col items-end gap-0.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-white/25 text-xs text-white/80 inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={!canEditDueDate}
+                                  title={
+                                    canEditDueDate
+                                      ? "Edit due date"
+                                      : "Disabled until the borrower requests an extension."
+                                  }
+                                  onClick={() => openDueDialog(rec)}
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                  <span>Edit due date</span>
+                                </Button>
+
+                                {!canEditDueDate && (
+                                  <span className="text-[10px] text-white/50">
+                                    Needs extension request
+                                  </span>
+                                )}
+                              </div>
 
                               {/* ✅ Confirm pickup → mark borrowed (only for pending_pickup) */}
                               {isPendingPickup && (
@@ -754,7 +777,9 @@ export default function LibrarianBorrowRecordsPage() {
                                       <AlertDialogAction
                                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
                                         disabled={markBorrowBusyId === rec.id}
-                                        onClick={() => void handleMarkBorrowed(rec)}
+                                        onClick={() =>
+                                          void handleMarkBorrowed(rec)
+                                        }
                                       >
                                         {markBorrowBusyId === rec.id ? (
                                           <span className="inline-flex items-center gap-2">
@@ -816,10 +841,7 @@ export default function LibrarianBorrowRecordsPage() {
               <AlertDialogDescription className="text-white/70">
                 You&apos;re about to mark{" "}
                 <span className="font-semibold text-white">
-                  “
-                  {selectedRecord.bookTitle ??
-                    `Book #${selectedRecord.bookId}`}
-                  ”
+                  “{selectedRecord.bookTitle ?? `Book #${selectedRecord.bookId}`}”
                 </span>{" "}
                 as <span className="font-semibold">Returned</span> for{" "}
                 <span className="font-semibold">
@@ -854,9 +876,7 @@ export default function LibrarianBorrowRecordsPage() {
                   <>
                     {" "}
                     · Auto fine @ {peso(FINE_PER_DAY)} per day:{" "}
-                    <span className="font-semibold">
-                      {peso(autoFinePreview)}
-                    </span>
+                    <span className="font-semibold">{peso(autoFinePreview)}</span>
                   </>
                 ) : (
                   " (No overdue days → auto fine is ₱0.00)"
@@ -879,7 +899,7 @@ export default function LibrarianBorrowRecordsPage() {
                     step="0.01"
                     value={fineInput}
                     onChange={(e) => setFineInput(e.target.value)}
-                    className="pl-6 bg-slate-900/70 border-white/20 text:white"
+                    className="pl-6 bg-slate-900/70 border-white/20 text-white"
                   />
                 </div>
                 <Button
@@ -949,25 +969,21 @@ export default function LibrarianBorrowRecordsPage() {
         }}
       >
         {dueRecord && (
-          <AlertDialogContent
-            className="bg-slate-900 border-white/10 text:white max-h-[80vh] overflow-y-auto md:max-h-none md:overflow-visible"
-          >
+          <AlertDialogContent className="bg-slate-900 border-white/10 text-white max-h-[80vh] overflow-y-auto md:max-h-none md:overflow-visible">
             <AlertDialogHeader>
               <AlertDialogTitle>Edit due date</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
                 You&apos;re updating the due date for{" "}
-                <span className="font-semibold text:white">
+                <span className="font-semibold text-white">
                   “{dueRecord.bookTitle ?? `Book #${dueRecord.bookId}`}”
                 </span>{" "}
                 borrowed by{" "}
-                <span className="font-semibold">
-                  {studentFullName(dueRecord)}
-                </span>
+                <span className="font-semibold">{studentFullName(dueRecord)}</span>
                 .
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            <div className="mt-3 text-sm text:white/80 space-y-1">
+            <div className="mt-3 text-sm text-white/80 space-y-1">
               <p>
                 <span className="text-white/60">Borrowed on:</span>{" "}
                 {fmtDate(dueRecord.borrowDate)}
@@ -979,7 +995,7 @@ export default function LibrarianBorrowRecordsPage() {
             </div>
 
             <div className="mt-4 space-y-2">
-              <label className="text-xs font-medium text:white/80">
+              <label className="text-xs font-medium text-white/80">
                 New due date
               </label>
               <div className="flex flex-col gap-2">
