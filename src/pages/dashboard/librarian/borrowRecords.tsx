@@ -1,4 +1,3 @@
-// src/pages/dashboard/librarian/borrowRecords.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -45,6 +44,8 @@ import {
   Clock3,
   AlertTriangle,
   Edit,
+  Check,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,6 +54,8 @@ import {
   markBorrowReturned,
   updateBorrowDueDate,
   markBorrowAsBorrowed,
+  approveBorrowExtensionRequest,
+  disapproveBorrowExtensionRequest,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -91,6 +94,23 @@ function fmtDate(d?: string | null) {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return d;
     return date.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  } catch {
+    return d;
+  }
+}
+
+function fmtDateTime(d?: string | null) {
+  if (!d) return "—";
+  try {
+    const date = new Date(d);
+    if (Number.isNaN(date.getTime())) return d;
+    return date.toLocaleString("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return d;
   }
@@ -184,6 +204,12 @@ export default function LibrarianBorrowRecordsPage() {
   );
   const [submittingDue, setSubmittingDue] = React.useState(false);
 
+  // ✅ Approve/Disapprove extension request (inside edit due date)
+  const [decisionNoteInput, setDecisionNoteInput] = React.useState<string>("");
+  const [submittingDecision, setSubmittingDecision] = React.useState<
+    "approve" | "disapprove" | null
+  >(null);
+
   const loadRecords = React.useCallback(async () => {
     setError(null);
     setLoading(true);
@@ -216,13 +242,18 @@ export default function LibrarianBorrowRecordsPage() {
   function openDueDialog(rec: BorrowRecordDTO) {
     setDueRecord(rec);
     setDueDateInput(parseYmdToDate(rec.dueDate));
+    setDecisionNoteInput("");
+    setSubmittingDecision(null);
     setDueDialogOpen(true);
   }
 
   function closeDueDialog() {
     setDueDialogOpen(false);
     setDueRecord(null);
+    setDueDateInput(undefined);
+    setDecisionNoteInput("");
     setSubmittingDue(false);
+    setSubmittingDecision(null);
   }
 
   /**
@@ -338,6 +369,58 @@ export default function LibrarianBorrowRecordsPage() {
     }
   }
 
+  async function handleApproveExtension() {
+    if (!dueRecord) return;
+
+    setSubmittingDecision("approve");
+    try {
+      const updated = await approveBorrowExtensionRequest(
+        dueRecord.id,
+        decisionNoteInput.trim() ? decisionNoteInput.trim() : undefined
+      );
+
+      setRecords((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
+
+      toast.success("Extension approved", {
+        description: `New due date: ${fmtDate(updated.dueDate)}.`,
+      });
+
+      closeDueDialog();
+    } catch (err: any) {
+      const msg = err?.message || "Failed to approve extension request.";
+      toast.error("Approval failed", { description: msg });
+      setSubmittingDecision(null);
+    }
+  }
+
+  async function handleDisapproveExtension() {
+    if (!dueRecord) return;
+
+    setSubmittingDecision("disapprove");
+    try {
+      const updated = await disapproveBorrowExtensionRequest(
+        dueRecord.id,
+        decisionNoteInput.trim() ? decisionNoteInput.trim() : undefined
+      );
+
+      setRecords((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
+
+      toast.success("Extension disapproved", {
+        description: "The extension request has been disapproved.",
+      });
+
+      closeDueDialog();
+    } catch (err: any) {
+      const msg = err?.message || "Failed to disapprove extension request.";
+      toast.error("Disapproval failed", { description: msg });
+      setSubmittingDecision(null);
+    }
+  }
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = records;
@@ -374,6 +457,15 @@ export default function LibrarianBorrowRecordsPage() {
     "overflow-x-auto whitespace-nowrap " +
     "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
     "[&::-webkit-scrollbar]:h-1.5 " +
+    "[&::-webkit-scrollbar-track]:bg-transparent " +
+    "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
+    "[&::-webkit-scrollbar-thumb]:rounded-full " +
+    "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
+
+  // ✅ Reusable scrollbar styling for dark, thin VERTICAL scrollbars (dialogs)
+  const dialogScrollbarClasses =
+    "[scrollbar-width:thin] [scrollbar-color:#334155_transparent] " +
+    "[&::-webkit-scrollbar]:w-2 " +
     "[&::-webkit-scrollbar-track]:bg-transparent " +
     "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
     "[&::-webkit-scrollbar-thumb]:rounded-full " +
@@ -556,9 +648,17 @@ export default function LibrarianBorrowRecordsPage() {
 
                     const fineAmount = normalizeFine(rec.fine as any);
 
-                    // ✅ Disable due date editing unless an extension was requested at least once
+                    const reqStatus = (rec.extensionRequestStatus ?? "none")
+                      .toLowerCase()
+                      .trim();
+                    const extensionPending = reqStatus === "pending";
+
+                    // ✅ Enable due date editing once there is at least one extension request
+                    // (pending/approved/disapproved) OR previously approved extensions exist.
                     const extensionCount = Number(rec.extensionCount ?? 0);
-                    const canEditDueDate = extensionCount > 0;
+                    const everRequestedExtension =
+                      reqStatus !== "none" && reqStatus !== "";
+                    const canEditDueDate = extensionCount > 0 || everRequestedExtension;
 
                     return (
                       <TableRow
@@ -665,7 +765,7 @@ export default function LibrarianBorrowRecordsPage() {
                             </span>
                           ) : (
                             <div className="inline-flex flex-col items-end gap-1">
-                              {/* ✏️ Edit due date (disabled until borrower requests extension) */}
+                              {/* ✏️ Edit due date (enabled once there is an extension request OR any approved extensions) */}
                               <div className="flex flex-col items-end gap-0.5">
                                 <Button
                                   type="button"
@@ -675,7 +775,9 @@ export default function LibrarianBorrowRecordsPage() {
                                   disabled={!canEditDueDate}
                                   title={
                                     canEditDueDate
-                                      ? "Edit due date"
+                                      ? extensionPending
+                                        ? "Review extension request / Edit due date"
+                                        : "Edit due date"
                                       : "Disabled until the borrower requests an extension."
                                   }
                                   onClick={() => openDueDialog(rec)}
@@ -684,11 +786,15 @@ export default function LibrarianBorrowRecordsPage() {
                                   <span>Edit due date</span>
                                 </Button>
 
-                                {!canEditDueDate && (
+                                {!canEditDueDate ? (
                                   <span className="text-[10px] text-white/50">
                                     Needs extension request
                                   </span>
-                                )}
+                                ) : extensionPending ? (
+                                  <span className="text-[10px] text-amber-200/80">
+                                    Extension pending
+                                  </span>
+                                ) : null}
                               </div>
 
                               {/* ✅ Confirm pickup → mark borrowed (only for pending_pickup) */}
@@ -876,7 +982,9 @@ export default function LibrarianBorrowRecordsPage() {
                   <>
                     {" "}
                     · Auto fine @ {peso(FINE_PER_DAY)} per day:{" "}
-                    <span className="font-semibold">{peso(autoFinePreview)}</span>
+                    <span className="font-semibold">
+                      {peso(autoFinePreview)}
+                    </span>
                   </>
                 ) : (
                   " (No overdue days → auto fine is ₱0.00)"
@@ -969,7 +1077,14 @@ export default function LibrarianBorrowRecordsPage() {
         }}
       >
         {dueRecord && (
-          <AlertDialogContent className="bg-slate-900 border-white/10 text-white max-h-[80vh] overflow-y-auto md:max-h-none md:overflow-visible">
+          <AlertDialogContent
+            className={
+              "bg-slate-900 border-white/10 text-white " +
+              // ✅ Reduced height + ALWAYS vertical scrollbar when content is long
+              "max-h-[70vh] overflow-y-auto " +
+              dialogScrollbarClasses
+            }
+          >
             <AlertDialogHeader>
               <AlertDialogTitle>Edit due date</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
@@ -992,6 +1107,171 @@ export default function LibrarianBorrowRecordsPage() {
                 <span className="text-white/60">Current due date:</span>{" "}
                 {fmtDate(dueRecord.dueDate)}
               </p>
+            </div>
+
+            {/* ✅ Extension request review box (Approve/Disapprove) */}
+            <div className="mt-4 rounded-md border border-white/10 bg-slate-950/40 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-white/80">
+                  Extension request
+                </p>
+
+                {(() => {
+                  const s = (dueRecord.extensionRequestStatus ?? "none")
+                    .toLowerCase()
+                    .trim();
+
+                  if (s === "pending") {
+                    return (
+                      <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock3 className="h-3 w-3" />
+                          Pending
+                        </span>
+                      </Badge>
+                    );
+                  }
+                  if (s === "approved") {
+                    return (
+                      <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
+                        <span className="inline-flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Approved
+                        </span>
+                      </Badge>
+                    );
+                  }
+                  if (s === "disapproved") {
+                    return (
+                      <Badge className="bg-rose-500/80 hover:bg-rose-500 text-white border-rose-400/80">
+                        <span className="inline-flex items-center gap-1">
+                          <XCircle className="h-3 w-3" />
+                          Disapproved
+                        </span>
+                      </Badge>
+                    );
+                  }
+                  return (
+                    <Badge className="bg-slate-500/30 hover:bg-slate-500/30 text-white/80 border-white/10">
+                      None
+                    </Badge>
+                  );
+                })()}
+              </div>
+
+              {(() => {
+                const s = (dueRecord.extensionRequestStatus ?? "none")
+                  .toLowerCase()
+                  .trim();
+
+                if (s === "none" || !s) {
+                  return (
+                    <p className="text-[11px] text-white/60">
+                      No extension request found for this record.
+                    </p>
+                  );
+                }
+
+                const reqDays =
+                  typeof dueRecord.extensionRequestedDays === "number"
+                    ? dueRecord.extensionRequestedDays
+                    : null;
+
+                return (
+                  <div className="space-y-1 text-[11px] text-white/70">
+                    <p>
+                      <span className="text-white/60">Requested:</span>{" "}
+                      {reqDays !== null ? (
+                        <span className="font-semibold text-amber-200">
+                          +{reqDays} day{reqDays === 1 ? "" : "s"}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </p>
+                    <p>
+                      <span className="text-white/60">Requested at:</span>{" "}
+                      {fmtDateTime(dueRecord.extensionRequestedAt ?? null)}
+                    </p>
+                    {dueRecord.extensionRequestedReason ? (
+                      <p>
+                        <span className="text-white/60">Reason:</span>{" "}
+                        {dueRecord.extensionRequestedReason}
+                      </p>
+                    ) : null}
+                    {dueRecord.extensionDecidedAt ? (
+                      <p>
+                        <span className="text-white/60">Decided at:</span>{" "}
+                        {fmtDateTime(dueRecord.extensionDecidedAt)}
+                      </p>
+                    ) : null}
+                    {dueRecord.extensionDecisionNote ? (
+                      <p>
+                        <span className="text-white/60">Decision note:</span>{" "}
+                        {dueRecord.extensionDecisionNote}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              {((dueRecord.extensionRequestStatus ?? "none").toLowerCase().trim() ===
+                "pending") && (
+                  <div className="pt-2 space-y-2">
+                    <label className="text-xs font-medium text-white/80">
+                      Decision note (optional)
+                    </label>
+                    <Input
+                      value={decisionNoteInput}
+                      onChange={(e) => setDecisionNoteInput(e.target.value)}
+                      placeholder="Optional note for approval/disapproval…"
+                      className="bg-slate-900/70 border-white/20 text-white"
+                      disabled={submittingDecision !== null || submittingDue}
+                    />
+
+                    {/* ✅ Approve / Disapprove (Check & Cross lucide icons) */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-rose-400/50 text-rose-200 hover:bg-rose-500/10"
+                        disabled={submittingDecision !== null || submittingDue}
+                        onClick={() => void handleDisapproveExtension()}
+                      >
+                        {submittingDecision === "disapprove" ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Disapproving…
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2">
+                            <X className="h-4 w-4" />
+                            Disapprove
+                          </span>
+                        )}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={submittingDecision !== null || submittingDue}
+                        onClick={() => void handleApproveExtension()}
+                      >
+                        {submittingDecision === "approve" ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Approving…
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2">
+                            <Check className="h-4 w-4" />
+                            Approve
+                          </span>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
             </div>
 
             <div className="mt-4 space-y-2">
@@ -1025,13 +1305,13 @@ export default function LibrarianBorrowRecordsPage() {
             <AlertDialogFooter>
               <AlertDialogCancel
                 className="border-white/20 text-white hover:bg-black/20"
-                disabled={submittingDue}
+                disabled={submittingDue || submittingDecision !== null}
               >
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction
                 className="bg-purple-600 hover:bg-purple-700 text-white"
-                disabled={submittingDue}
+                disabled={submittingDue || submittingDecision !== null}
                 onClick={handleSaveDueDate}
               >
                 {submittingDue ? (
