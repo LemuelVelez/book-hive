@@ -9,6 +9,8 @@ export type BorrowStatus =
     | "pending_return" // student requested return; waiting for librarian
     | "returned";
 
+export type ExtensionRequestStatus = "none" | "pending" | "approved" | "disapproved";
+
 export type BorrowRecordDTO = {
     id: string;
     userId: string;
@@ -23,12 +25,21 @@ export type BorrowRecordDTO = {
     status: BorrowStatus;
     fine: number; // pesos
 
-    // ✅ NEW: extension info (from backend)
+    // ✅ Approved extension info
     extensionCount: number;
     extensionTotalDays: number;
     lastExtensionDays: number | null;
     lastExtendedAt: string | null;
     lastExtensionReason: string | null;
+
+    // ✅ Extension request workflow info
+    extensionRequestStatus?: ExtensionRequestStatus;
+    extensionRequestedDays?: number | null;
+    extensionRequestedAt?: string | null;
+    extensionRequestedReason?: string | null;
+    extensionDecidedAt?: string | null;
+    extensionDecidedBy?: number | null;
+    extensionDecisionNote?: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -189,28 +200,70 @@ export async function requestBorrowReturn(
     return res.record;
 }
 
+export type BorrowExtensionResponse = {
+    record: BorrowRecordDTO;
+    message?: string;
+};
+
 /**
- * ✅ NEW: Student/Guest/Faculty action: request an extension of due date.
- * - POST /api/borrow-records/:id/extend
- * - Body: { days: number, reason?: string }
- * - Server will extend due_date immediately and return the updated record.
+ * ✅ Extension behavior (matches backend):
+ * - student/guest/faculty: creates an extension REQUEST (pending approval)
+ * - librarian/admin: extends immediately (approved)
+ *
+ * POST /api/borrow-records/:id/extend
+ * Body: { days: number, reason?: string }
  */
 export async function requestBorrowExtension(
     id: string | number,
     days: number,
     reason?: string
-): Promise<BorrowRecordDTO> {
+): Promise<BorrowExtensionResponse> {
     if (!Number.isFinite(days) || days <= 0) {
         throw new Error("days must be a positive number.");
     }
 
-    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    type Resp = JsonOk<{ record: BorrowRecordDTO; message?: string }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.extend(id), {
         method: "POST",
         body: {
             days: Math.floor(days),
             reason: reason && reason.trim() ? reason.trim() : undefined,
         },
+    });
+
+    return { record: res.record, message: res.message };
+}
+
+/**
+ * Librarian/Admin: approve a pending extension request.
+ * POST /api/borrow-records/:id/extend/approve
+ * Body: { note?: string }
+ */
+export async function approveBorrowExtensionRequest(
+    id: string | number,
+    note?: string
+): Promise<BorrowRecordDTO> {
+    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.extendApprove(id), {
+        method: "POST",
+        body: { note: note && note.trim() ? note.trim() : undefined },
+    });
+    return res.record;
+}
+
+/**
+ * Librarian/Admin: disapprove a pending extension request.
+ * POST /api/borrow-records/:id/extend/disapprove
+ * Body: { note?: string }
+ */
+export async function disapproveBorrowExtensionRequest(
+    id: string | number,
+    note?: string
+): Promise<BorrowRecordDTO> {
+    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.extendDisapprove(id), {
+        method: "POST",
+        body: { note: note && note.trim() ? note.trim() : undefined },
     });
     return res.record;
 }

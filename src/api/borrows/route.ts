@@ -16,7 +16,15 @@ export const BORROW_ROUTES = {
     my: api("/borrow-records/my"), // GET (current user's borrow records)
     createSelf: api("/borrow-records/self"), // POST (student self-service borrow)
 
-    // ✅ NEW: extend due date (student/guest/faculty self-service; adminlike also works)
+    // ✅ extend due date
+    // - student/guest/faculty: creates an extension REQUEST (pending)
+    // - librarian/admin: can directly extend immediately (approved)
     extend: (id: string | number) =>
         api(`/borrow-records/${encodeURIComponent(String(id))}/extend`), // POST
+
+    // ✅ NEW: librarian/admin decision routes
+    extendApprove: (id: string | number) =>
+        api(`/borrow-records/${encodeURIComponent(String(id))}/extend/approve`), // POST
+    extendDisapprove: (id: string | number) =>
+        api(`/borrow-records/${encodeURIComponent(String(id))}/extend/disapprove`), // POST
 } as const;
