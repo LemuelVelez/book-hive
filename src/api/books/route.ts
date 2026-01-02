@@ -12,4 +12,8 @@ export const BOOK_ROUTES = {
     api(`/books/${encodeURIComponent(String(id))}`), // PATCH/PUT
   delete: (id: string | number) =>
     api(`/books/${encodeURIComponent(String(id))}`), // DELETE
+
+  // ✅ NEW: add copies endpoint
+  addCopies: (id: string | number) =>
+    api(`/books/${encodeURIComponent(String(id))}/copies`), // POST
 } as const;

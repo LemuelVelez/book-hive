@@ -57,6 +57,9 @@ export type BookDTO = {
   volumeNumber?: string;
   libraryArea?: LibraryArea | null;
 
+  // ✅ NEW: total number of copies for this title
+  numberOfCopies?: number;
+
   available: boolean;
 
   /**
@@ -163,7 +166,7 @@ export type CreateBookPayload = {
 
   statementOfResponsibility?: string;
 
-  // ✅ FIX: these are used by the UI + supported by backend, but were missing from the type
+  // ✅ used by the UI + supported by backend
   subtitle?: string;
   edition?: string;
 
@@ -197,6 +200,9 @@ export type CreateBookPayload = {
   volumeNumber?: string;
   libraryArea?: LibraryArea | null;
 
+  // ✅ NEW
+  numberOfCopies?: number;
+
   available?: boolean;
 
   /**
@@ -206,7 +212,10 @@ export type CreateBookPayload = {
   borrowDurationDays?: number;
 };
 
-export type UpdateBookPayload = Partial<CreateBookPayload>;
+// ✅ allow special PATCH-only field (increment copies)
+export type UpdateBookPayload = Partial<CreateBookPayload> & {
+  copiesToAdd?: number;
+};
 
 export async function fetchBooks(): Promise<BookDTO[]> {
   type Resp = JsonOk<{ books: BookDTO[] }>;
@@ -231,6 +240,19 @@ export async function updateBook(
   const res = await requestJSON<Resp>(BOOK_ROUTES.update(id), {
     method: "PATCH",
     body: payload,
+  });
+  return res.book;
+}
+
+// ✅ optional helper if you want to use POST /books/:id/copies
+export async function addBookCopies(
+  id: string | number,
+  count: number
+): Promise<BookDTO> {
+  type Resp = JsonOk<{ book: BookDTO }>;
+  const res = await requestJSON<Resp>(BOOK_ROUTES.addCopies(id), {
+    method: "POST",
+    body: { count },
   });
   return res.book;
 }

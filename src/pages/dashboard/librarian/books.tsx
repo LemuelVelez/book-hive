@@ -137,6 +137,9 @@ export default function LibrarianBooksPage() {
     const [copyNumber, setCopyNumber] = React.useState("");
     const [volumeNumber, setVolumeNumber] = React.useState("");
 
+    // ✅ NEW
+    const [numberOfCopies, setNumberOfCopies] = React.useState("1");
+
     const [libraryAreaOption, setLibraryAreaOption] = React.useState<string>("");
     const [libraryAreaOther, setLibraryAreaOther] = React.useState("");
 
@@ -180,6 +183,11 @@ export default function LibrarianBooksPage() {
     const [editCopyNumber, setEditCopyNumber] = React.useState("");
     const [editVolumeNumber, setEditVolumeNumber] = React.useState("");
 
+    // ✅ NEW: copy adjustment UX
+    const [editCopiesMode, setEditCopiesMode] = React.useState<"set" | "add">("set");
+    const [editNumberOfCopies, setEditNumberOfCopies] = React.useState("1");
+    const [editCopiesToAdd, setEditCopiesToAdd] = React.useState("");
+
     const [editLibraryAreaOption, setEditLibraryAreaOption] =
         React.useState<string>("");
     const [editLibraryAreaOther, setEditLibraryAreaOther] = React.useState("");
@@ -217,6 +225,9 @@ export default function LibrarianBooksPage() {
         setCallNumber("");
         setCopyNumber("");
         setVolumeNumber("");
+
+        // ✅ NEW
+        setNumberOfCopies("1");
 
         setLibraryAreaOption("");
         setLibraryAreaOther("");
@@ -257,6 +268,11 @@ export default function LibrarianBooksPage() {
         setEditCallNumber("");
         setEditCopyNumber("");
         setEditVolumeNumber("");
+
+        // ✅ NEW
+        setEditCopiesMode("set");
+        setEditNumberOfCopies("1");
+        setEditCopiesToAdd("");
 
         setEditLibraryAreaOption("");
         setEditLibraryAreaOther("");
@@ -431,6 +447,15 @@ export default function LibrarianBooksPage() {
             return;
         }
 
+        // ✅ NEW: number of copies (total)
+        const copiesTotal = parsePositiveIntOrNull(numberOfCopies);
+        if (copiesTotal === null) {
+            const msg = "Number of copies must be a positive number.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
         setSaving(true);
         try {
             const created = await createBook({
@@ -464,6 +489,9 @@ export default function LibrarianBooksPage() {
                 copyNumber: copyNum,
                 volumeNumber: volumeNumber.trim(),
                 libraryArea: resolvedLibraryArea as unknown as LibraryArea,
+
+                // ✅ NEW
+                numberOfCopies: copiesTotal,
 
                 available,
                 borrowDurationDays: borrowDaysInt,
@@ -529,6 +557,15 @@ export default function LibrarianBooksPage() {
             typeof book.copyNumber === "number" ? String(book.copyNumber) : ""
         );
         setEditVolumeNumber(book.volumeNumber || "");
+
+        // ✅ NEW
+        const currentTotalCopies =
+            typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)
+                ? book.numberOfCopies
+                : 1;
+        setEditCopiesMode("set");
+        setEditNumberOfCopies(String(currentTotalCopies));
+        setEditCopiesToAdd("");
 
         const currentArea = (book.libraryArea || "").trim();
         if (currentArea && isKnownLibraryArea(currentArea)) {
@@ -673,6 +710,29 @@ export default function LibrarianBooksPage() {
             return;
         }
 
+        // ✅ NEW: copies payload (either set total or add)
+        let copiesPayload: { numberOfCopies?: number; copiesToAdd?: number } = {};
+
+        if (editCopiesMode === "set") {
+            const total = parsePositiveIntOrNull(editNumberOfCopies);
+            if (total === null) {
+                const msg = "Total number of copies must be a positive number.";
+                setEditError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
+            }
+            copiesPayload = { numberOfCopies: total };
+        } else {
+            const inc = parsePositiveIntOrNull(editCopiesToAdd);
+            if (inc === null) {
+                const msg = "Copies to add must be a positive number.";
+                setEditError(msg);
+                toast.error("Validation error", { description: msg });
+                return;
+            }
+            copiesPayload = { copiesToAdd: inc };
+        }
+
         setEditing(true);
         try {
             const updated = await updateBook(editBookId, {
@@ -706,6 +766,8 @@ export default function LibrarianBooksPage() {
                 copyNumber: copyNum,
                 volumeNumber: editVolumeNumber.trim(),
                 libraryArea: resolvedLibraryArea as unknown as LibraryArea,
+
+                ...copiesPayload,
 
                 available: editAvailable,
                 borrowDurationDays: borrowDaysInt,
@@ -765,6 +827,7 @@ export default function LibrarianBooksPage() {
                 b.publisher || "",
                 b.placeOfPublication || "",
                 b.libraryArea || "",
+                String(typeof b.numberOfCopies === "number" ? b.numberOfCopies : ""),
             ]
                 .join(" ")
                 .toLowerCase();
@@ -1155,6 +1218,24 @@ export default function LibrarianBooksPage() {
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
                                         Copy & circulation
                                     </div>
+
+                                    {/* ✅ NEW */}
+                                    <Field>
+                                        <FieldLabel className="text-white">Number of copies *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={numberOfCopies}
+                                                onChange={(e) => setNumberOfCopies(e.target.value)}
+                                                placeholder="e.g., 3"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                inputMode="numeric"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                        <p className="mt-1 text-[11px] text-white/60">
+                                            Total physical copies for this title.
+                                        </p>
+                                    </Field>
 
                                     <Field>
                                         <FieldLabel className="text-white">Barcode *</FieldLabel>
@@ -1663,6 +1744,71 @@ export default function LibrarianBooksPage() {
                                 Copy & circulation
                             </div>
 
+                            {/* ✅ NEW: adjust copies */}
+                            <Field>
+                                <FieldLabel className="text-white">Copies</FieldLabel>
+                                <FieldContent>
+                                    <RadioGroup
+                                        value={editCopiesMode}
+                                        onValueChange={(v) => {
+                                            if (v === "set" || v === "add") setEditCopiesMode(v);
+                                        }}
+                                        className="space-y-2"
+                                    >
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
+                                                <RadioGroupItem value="set" id="copies-mode-set" />
+                                                <Label
+                                                    htmlFor="copies-mode-set"
+                                                    className="text-sm text-white/80 cursor-pointer"
+                                                >
+                                                    Set total copies
+                                                </Label>
+                                            </div>
+                                            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
+                                                <RadioGroupItem value="add" id="copies-mode-add" />
+                                                <Label
+                                                    htmlFor="copies-mode-add"
+                                                    className="text-sm text-white/80 cursor-pointer"
+                                                >
+                                                    Add copies
+                                                </Label>
+                                            </div>
+                                        </div>
+
+                                        {editCopiesMode === "set" ? (
+                                            <div className="pt-2">
+                                                <Input
+                                                    value={editNumberOfCopies}
+                                                    onChange={(e) => setEditNumberOfCopies(e.target.value)}
+                                                    placeholder="e.g., 5"
+                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    inputMode="numeric"
+                                                    autoComplete="off"
+                                                />
+                                                <p className="mt-1 text-[11px] text-white/60">
+                                                    Sets the total copies for this title.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="pt-2">
+                                                <Input
+                                                    value={editCopiesToAdd}
+                                                    onChange={(e) => setEditCopiesToAdd(e.target.value)}
+                                                    placeholder="e.g., 2"
+                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    inputMode="numeric"
+                                                    autoComplete="off"
+                                                />
+                                                <p className="mt-1 text-[11px] text-white/60">
+                                                    Adds copies to the current total ({editNumberOfCopies || "1"}).
+                                                </p>
+                                            </div>
+                                        )}
+                                    </RadioGroup>
+                                </FieldContent>
+                            </Field>
+
                             <Field>
                                 <FieldLabel className="text-white">Barcode *</FieldLabel>
                                 <FieldContent>
@@ -1890,7 +2036,6 @@ export default function LibrarianBooksPage() {
                                         ID
                                     </TableHead>
 
-                                    {/* Reduced widths (scrollable columns) */}
                                     <TableHead className="w-[200px] text-xs font-semibold text-white/70">
                                         Title
                                     </TableHead>
@@ -1909,6 +2054,12 @@ export default function LibrarianBooksPage() {
                                     <TableHead className="w-[140px] text-xs font-semibold text-white/70">
                                         Library area
                                     </TableHead>
+
+                                    {/* ✅ NEW */}
+                                    <TableHead className="w-20 text-xs font-semibold text-white/70">
+                                        Copies
+                                    </TableHead>
+
                                     <TableHead className="w-[130px] text-xs font-semibold text-white/70">
                                         ISBN
                                     </TableHead>
@@ -1939,10 +2090,9 @@ export default function LibrarianBooksPage() {
                                     >
                                         <TableCell className="text-xs opacity-80">{book.id}</TableCell>
 
-                                        {/* Scrollable cells (smaller widths) */}
                                         <TableCell
                                             className={
-                                                "text-sm font-medium align-top w-[100px] max-w-[100px] " +
+                                                "text-sm font-medium align-top w-[90px] max-w-[90px] " +
                                                 cellScrollbarClasses
                                             }
                                         >
@@ -1951,7 +2101,7 @@ export default function LibrarianBooksPage() {
 
                                         <TableCell
                                             className={
-                                                "text-sm opacity-90 align-top w-[100px] max-w-[100px] " +
+                                                "text-sm opacity-90 align-top w-[90px] max-w-[90px] " +
                                                 cellScrollbarClasses
                                             }
                                         >
@@ -1960,16 +2110,20 @@ export default function LibrarianBooksPage() {
 
                                         <TableCell
                                             className={
-                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
                                                 cellScrollbarClasses
                                             }
                                         >
-                                            {book.accessionNumber ? book.accessionNumber : <span className="opacity-50">—</span>}
+                                            {book.accessionNumber ? (
+                                                book.accessionNumber
+                                            ) : (
+                                                <span className="opacity-50">—</span>
+                                            )}
                                         </TableCell>
 
                                         <TableCell
                                             className={
-                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
                                                 cellScrollbarClasses
                                             }
                                         >
@@ -1978,7 +2132,7 @@ export default function LibrarianBooksPage() {
 
                                         <TableCell
                                             className={
-                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                "text-sm opacity-80 align-top w-[70px] max-w-[70px] " +
                                                 cellScrollbarClasses
                                             }
                                         >
@@ -1987,16 +2141,27 @@ export default function LibrarianBooksPage() {
 
                                         <TableCell
                                             className={
-                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
+                                                "text-sm opacity-80 align-top w-[85px] max-w-[85px] " +
                                                 cellScrollbarClasses
                                             }
                                         >
                                             {book.libraryArea ? book.libraryArea : <span className="opacity-50">—</span>}
                                         </TableCell>
 
+                                        <TableCell className={
+                                            "text-sm opacity-80 align-top w-20 max-w-20 " +
+                                            cellScrollbarClasses
+                                        }>
+                                            {typeof book.numberOfCopies === "number" && book.numberOfCopies > 0 ? (
+                                                book.numberOfCopies
+                                            ) : (
+                                                <span className="opacity-50">—</span>
+                                            )}
+                                        </TableCell>
+
                                         <TableCell
                                             className={
-                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
+                                                "text-sm opacity-80 align-top w-20 max-w-20 " +
                                                 cellScrollbarClasses
                                             }
                                         >
@@ -2005,7 +2170,7 @@ export default function LibrarianBooksPage() {
 
                                         <TableCell
                                             className={
-                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] " +
+                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
                                                 cellScrollbarClasses
                                             }
                                         >
