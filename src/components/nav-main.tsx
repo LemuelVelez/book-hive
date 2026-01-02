@@ -124,6 +124,11 @@ export function NavMain() {
                 icon: Users2,
                 to: "/dashboard/librarian/users",
             },
+            {
+                label: "Settings",
+                icon: Settings,
+                to: "/dashboard/librarian/settings",
+            },
         ]
     } else if (isFaculty) {
         groupLabel = "Faculty"

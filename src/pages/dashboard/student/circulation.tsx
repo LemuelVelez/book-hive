@@ -570,7 +570,7 @@ export default function StudentCirculationPage() {
                       </TableCell>
                       <TableCell
                         className={
-                          "text-right align-top w-[120px] max-w-[120px] " +
+                          "text-right align-top w-[145px] max-w-[145px] " +
                           cellScrollbarClasses
                         }
                       >
