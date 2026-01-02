@@ -141,7 +141,7 @@ export default function StudentCirculationPage() {
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [returnBusyId, setReturnBusyId] = React.useState<string | null>(null);
 
-  // ✅ NEW: extend UI state
+  // ✅ extension UI state
   const [extendBusyId, setExtendBusyId] = React.useState<string | null>(null);
   const [extendDaysById, setExtendDaysById] = React.useState<Record<string, string>>(
     {}
@@ -197,8 +197,7 @@ export default function StudentCirculationPage() {
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) => {
-        const haystack = `${r.bookTitle ?? ""} ${r.bookId} ${r.studentName ?? ""
-          }`.toLowerCase();
+        const haystack = `${r.bookTitle ?? ""} ${r.bookId} ${r.studentName ?? ""}`.toLowerCase();
         return haystack.includes(q);
       });
     }
@@ -267,7 +266,7 @@ export default function StudentCirculationPage() {
     }
   }
 
-  // ✅ NEW: request extension
+  // ✅ request extension (now: creates a pending request for approval)
   async function handleRequestExtension(record: BorrowRecordDTO) {
     if (record.status !== "borrowed") {
       toast.info("Extension not available", {
@@ -275,6 +274,14 @@ export default function StudentCirculationPage() {
           record.status === "returned"
             ? "This record is already returned."
             : "Only records with status 'Borrowed' can be extended.",
+      });
+      return;
+    }
+
+    const currentReqStatus = (record.extensionRequestStatus ?? "none").toLowerCase();
+    if (currentReqStatus === "pending") {
+      toast.info("Extension already requested", {
+        description: "You already have a pending extension request for this record.",
       });
       return;
     }
@@ -293,16 +300,32 @@ export default function StudentCirculationPage() {
 
     setExtendBusyId(record.id);
     try {
-      const updated = await requestBorrowExtension(record.id, days, reason);
+      const res = await requestBorrowExtension(record.id, days, reason);
+      const updated = res.record;
 
       setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
-      toast.success("Due date extended", {
-        description: `New due date: ${fmtDate(updated.dueDate)}`,
-      });
+      const newReqStatus = (updated.extensionRequestStatus ?? "none").toLowerCase();
+
+      if (newReqStatus === "pending") {
+        toast.success("Extension request submitted", {
+          description:
+            res.message ||
+            `Requested +${updated.extensionRequestedDays ?? days} day(s). Waiting for librarian approval.`,
+        });
+      } else if (newReqStatus === "approved") {
+        toast.success("Extension approved", {
+          description: `New due date: ${fmtDate(updated.dueDate)}`,
+        });
+      } else {
+        // direct-extend (adminlike) might come back without a message; fallback
+        toast.success("Extension processed", {
+          description: res.message || `Current due date: ${fmtDate(updated.dueDate)}`,
+        });
+      }
     } catch (err: any) {
       const msg =
-        err?.message || "Could not extend the due date. Please try again.";
+        err?.message || "Could not request an extension. Please try again.";
       toast.error("Extension failed", { description: msg });
     } finally {
       setExtendBusyId(null);
@@ -333,6 +356,7 @@ export default function StudentCirculationPage() {
               View all books you&apos;ve borrowed, track due dates and fines,
               request extensions, and send online return requests.
             </p>
+
             <p className="mt-1 text-[11px] text-amber-200/90">
               Books{" "}
               <span className="font-semibold">cannot be auto-returned</span>.
@@ -347,11 +371,16 @@ export default function StudentCirculationPage() {
               <span className="font-semibold">Borrowed</span> or{" "}
               <span className="font-semibold">Returned</span>.
             </p>
+
             <p className="mt-1 text-[11px] text-sky-200/90">
-              You may also <span className="font-semibold">request a due date extension</span>{" "}
+              You may also{" "}
+              <span className="font-semibold">request a due date extension</span>{" "}
               for records that are currently{" "}
-              <span className="font-semibold">Borrowed</span>. The due date will update immediately.
+              <span className="font-semibold">Borrowed</span>. Your request will be{" "}
+              <span className="font-semibold">reviewed by a librarian</span>, and the due date updates{" "}
+              <span className="font-semibold">only when approved</span>.
             </p>
+
             <p className="mt-1 text-[11px] text-emerald-200/90">
               To <span className="font-semibold">pay any fines</span>, use your{" "}
               <span className="font-semibold">Fines</span> page, where you can
@@ -446,7 +475,8 @@ export default function StudentCirculationPage() {
             You can also{" "}
             <span className="font-semibold text-sky-200">request an extension</span>{" "}
             for books that are currently{" "}
-            <span className="font-semibold text-amber-200">Borrowed</span>.
+            <span className="font-semibold text-amber-200">Borrowed</span>. Extension requests are{" "}
+            <span className="font-semibold">subject to librarian approval</span>.
           </p>
 
           <p className="mt-1 text-[11px] text-white/60">
@@ -541,6 +571,16 @@ export default function StudentCirculationPage() {
                   const lastExtensionDays = record.lastExtensionDays ?? null;
                   const lastExtendedAt = record.lastExtendedAt ?? null;
 
+                  const reqStatus = (record.extensionRequestStatus ?? "none").toLowerCase();
+                  const reqDays =
+                    typeof record.extensionRequestedDays === "number"
+                      ? record.extensionRequestedDays
+                      : null;
+                  const reqAt = record.extensionRequestedAt ?? null;
+                  const decidedAt = record.extensionDecidedAt ?? null;
+
+                  const extensionPending = isBorrowed && reqStatus === "pending";
+
                   return (
                     <TableRow
                       key={record.id}
@@ -575,6 +615,26 @@ export default function StudentCirculationPage() {
                             <span className="text-[10px] text-white/60">
                               Last: {fmtDateTime(lastExtendedAt)}
                               {typeof lastExtensionDays === "number" ? ` (+${lastExtensionDays}d)` : ""}
+                            </span>
+                          )}
+
+                          {/* ✅ Extension request workflow badge */}
+                          {reqStatus === "pending" && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40 w-fit">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                              Extension pending {typeof reqDays === "number" ? `(+${reqDays}d)` : ""}
+                            </span>
+                          )}
+
+                          {reqStatus === "approved" && reqAt && (
+                            <span className="text-[10px] text-white/60">
+                              Extension approved: {fmtDateTime(reqAt)}
+                            </span>
+                          )}
+
+                          {reqStatus === "disapproved" && decidedAt && (
+                            <span className="text-[10px] text-white/60">
+                              Extension disapproved: {fmtDateTime(decidedAt)}
                             </span>
                           )}
                         </div>
@@ -767,7 +827,7 @@ export default function StudentCirculationPage() {
                               </AlertDialogContent>
                             </AlertDialog>
 
-                            {/* ✅ Request extension */}
+                            {/* Request extension (approval workflow) */}
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -775,7 +835,7 @@ export default function StudentCirculationPage() {
                                   size="sm"
                                   variant="outline"
                                   className="border-sky-300/40 text-sky-200 hover:bg-sky-500/10 w-full"
-                                  disabled={extendBusyId === record.id}
+                                  disabled={extendBusyId === record.id || extensionPending}
                                   onClick={() => {
                                     // seed defaults
                                     setExtendDaysById((prev) => ({
@@ -788,7 +848,7 @@ export default function StudentCirculationPage() {
                                     }));
                                   }}
                                 >
-                                  {extendBusyId === record.id ? (
+                                  {extensionPending ? "Extension pending" : extendBusyId === record.id ? (
                                     <span className="inline-flex items-center gap-2">
                                       <Loader2 className="h-4 w-4 animate-spin" />
                                       Sending…
@@ -805,11 +865,14 @@ export default function StudentCirculationPage() {
                                     Request due date extension
                                   </AlertDialogTitle>
                                   <AlertDialogDescription className="text-white/70">
-                                    Choose how many days to extend for{" "}
+                                    Choose how many days to request for{" "}
                                     <span className="font-semibold text-white">
                                       “{record.bookTitle ?? `Book #${record.bookId}`}”
                                     </span>
-                                    . The due date will update immediately.
+                                    . Your request will be reviewed by a librarian.{" "}
+                                    <span className="font-semibold">
+                                      The due date will only change when approved.
+                                    </span>
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
 
@@ -819,20 +882,29 @@ export default function StudentCirculationPage() {
                                       <span className="text-white/60">Current due date:</span>{" "}
                                       {fmtDate(record.dueDate)}
                                     </p>
+
                                     {extensionCount > 0 && (
                                       <p className="text-xs text-white/60">
-                                        Extensions so far:{" "}
+                                        Approved extensions so far:{" "}
                                         <span className="font-semibold text-sky-200">
                                           {extensionCount}×
                                         </span>{" "}
                                         (total +{extensionTotalDays} days)
                                       </p>
                                     )}
+
+                                    {reqStatus === "pending" && (
+                                      <p className="text-xs text-amber-200/90">
+                                        You already have a pending request{" "}
+                                        {typeof reqDays === "number" ? `(+${reqDays} days)` : ""}{" "}
+                                        {reqAt ? `submitted at ${fmtDateTime(reqAt)}.` : "."}
+                                      </p>
+                                    )}
                                   </div>
 
                                   <div className="grid grid-cols-1 gap-2">
                                     <label className="text-xs text-white/70">
-                                      Extend by (days)
+                                      Request extension (days)
                                     </label>
                                     <Input
                                       inputMode="numeric"
@@ -845,7 +917,7 @@ export default function StudentCirculationPage() {
                                       }
                                       placeholder="e.g. 7"
                                       className="bg-slate-950/60 border-white/20 text-white"
-                                      disabled={extendBusyId === record.id}
+                                      disabled={extendBusyId === record.id || extensionPending}
                                     />
                                   </div>
 
@@ -863,12 +935,12 @@ export default function StudentCirculationPage() {
                                       }
                                       placeholder="e.g. Research requirement"
                                       className="bg-slate-950/60 border-white/20 text-white"
-                                      disabled={extendBusyId === record.id}
+                                      disabled={extendBusyId === record.id || extensionPending}
                                     />
                                   </div>
 
                                   <p className="text-[11px] text-white/60">
-                                    Tip: extensions are only allowed while status is{" "}
+                                    Tip: extension requests are only allowed while status is{" "}
                                     <span className="font-semibold text-amber-200">Borrowed</span>.
                                   </p>
                                 </div>
@@ -882,16 +954,18 @@ export default function StudentCirculationPage() {
                                   </AlertDialogCancel>
                                   <AlertDialogAction
                                     className="bg-sky-600 hover:bg-sky-700 text-white"
-                                    disabled={extendBusyId === record.id}
+                                    disabled={extendBusyId === record.id || extensionPending}
                                     onClick={() => void handleRequestExtension(record)}
                                   >
                                     {extendBusyId === record.id ? (
                                       <span className="inline-flex items-center gap-2">
                                         <Loader2 className="h-4 w-4 animate-spin" />
-                                        Extending…
+                                        Submitting…
                                       </span>
+                                    ) : extensionPending ? (
+                                      "Already pending"
                                     ) : (
-                                      "Extend due date"
+                                      "Submit request"
                                     )}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
