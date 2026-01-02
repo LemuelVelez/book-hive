@@ -4,7 +4,8 @@ import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Plus, Loader2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Plus, Minus, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { me as apiMe, logout as apiLogout } from "@/lib/authentication"
 import { clearSessionCache } from "@/hooks/use-session"
@@ -62,6 +63,12 @@ function fmtDate(d?: string | null) {
     }
 }
 
+function clampInt(n: number, min: number, max: number) {
+    const v = Math.floor(Number(n))
+    if (!Number.isFinite(v)) return min
+    return Math.min(max, Math.max(min, v))
+}
+
 function initialsFrom(fullName?: string | null, email?: string | null) {
     const src = (fullName && fullName.trim()) || (email && email.trim()) || ""
     if (!src) return "U"
@@ -116,6 +123,9 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const [reserveSubmitting, setReserveSubmitting] = React.useState(false)
     const [books, setBooks] = React.useState<BookDTO[]>([])
     const [selectedBookId, setSelectedBookId] = React.useState<string>("")
+
+    // ✅ NEW: copies-to-borrow in header reserve dialog
+    const [reserveCopies, setReserveCopies] = React.useState<number>(1)
 
     React.useEffect(() => {
         let cancelled = false
@@ -179,6 +189,18 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
     const availableBooks = React.useMemo(() => books.filter((b) => b.available), [books])
 
+    const selectedBook = React.useMemo(() => {
+        if (!selectedBookId) return null
+        return books.find((b) => b.id === selectedBookId) ?? null
+    }, [books, selectedBookId])
+
+    const maxReserveCopies = React.useMemo(() => {
+        const n = (selectedBook as any)?.numberOfCopies
+        return typeof n === "number" && n > 0 ? n : 1
+    }, [selectedBook])
+
+    const reserveQty = clampInt(reserveCopies, 1, maxReserveCopies)
+
     React.useEffect(() => {
         if (!reserveOpen) return
         if (books.length > 0) return
@@ -224,18 +246,58 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             return
         }
 
+        const maxCopies =
+            typeof (chosen as any)?.numberOfCopies === "number" && (chosen as any).numberOfCopies > 0
+                ? (chosen as any).numberOfCopies
+                : 1
+
+        const requestedCopies = clampInt(reserveCopies, 1, maxCopies)
+
         setReserveSubmitting(true)
         try {
-            const record = await createSelfBorrow(selectedBookId)
+            const created: any[] = []
 
-            toast.success("Book reserved", {
-                description: `"${chosen.title}" has been reserved/borrowed. Due on ${fmtDate(record.dueDate)}.`,
-            })
+            // Borrow/reserve copies one-by-one (works even if API only supports 1 per call)
+            for (let i = 0; i < requestedCopies; i++) {
+                try {
+                    const record = await createSelfBorrow(selectedBookId)
+                    created.push(record)
+                } catch (err: any) {
+                    if (created.length === 0) throw err
 
-            setBooks((prev) => prev.map((b) => (b.id === selectedBookId ? { ...b, available: false } : b)))
+                    const msg = err?.message || "Some copies could not be borrowed."
+                    toast.warning("Partial reserve completed", {
+                        description: `Reserved ${created.length} of ${requestedCopies} copies. ${msg}`,
+                    })
+                    break
+                }
+            }
+
+            if (created.length === 0) return
+
+            const due = fmtDate(created[0]?.dueDate)
+
+            if (created.length === requestedCopies) {
+                toast.success("Reserve submitted", {
+                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${chosen.title}" has been reserved/borrowed. Due on ${due}.`,
+                })
+            } else {
+                toast.warning("Reserve partially submitted", {
+                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${chosen.title}" has been reserved/borrowed. Due on ${due}.`,
+                })
+            }
+
+            // Best-effort refresh to keep availability/copies accurate
+            try {
+                const latest = await fetchBooks()
+                setBooks(latest)
+            } catch {
+                // ignore; keep current list
+            }
 
             setReserveOpen(false)
             setSelectedBookId("")
+            setReserveCopies(1)
         } catch (err: any) {
             const msg = err?.message || "Could not reserve this book right now. Please try again later."
             toast.error("Reservation failed", { description: msg })
@@ -246,7 +308,10 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
     function handleReserveOpenChange(open: boolean) {
         setReserveOpen(open)
-        if (!open) setSelectedBookId("")
+        if (!open) {
+            setSelectedBookId("")
+            setReserveCopies(1)
+        }
     }
 
     const userEmail: string = user?.email || ""
@@ -358,27 +423,96 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                             the catalog.
                                         </p>
                                     ) : (
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-medium text-white/80">
-                                                Select book to reserve
-                                            </label>
-                                            <Select value={selectedBookId} onValueChange={(v) => setSelectedBookId(v)}>
-                                                <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
-                                                    <SelectValue placeholder="Choose a book" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-slate-900 text-white border-white/10 max-h-64">
-                                                    {availableBooks.map((b) => (
-                                                        <SelectItem key={b.id} value={b.id}>
-                                                            {b.title} — {b.author}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-[11px] text-white/50">
-                                                Only books currently marked as{" "}
-                                                <span className="font-semibold text-emerald-300">Available</span> are shown
-                                                here.
-                                            </p>
+                                        <div className="space-y-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-white/80">
+                                                    Select book to reserve
+                                                </label>
+                                                <Select
+                                                    value={selectedBookId}
+                                                    onValueChange={(v) => {
+                                                        setSelectedBookId(v)
+                                                        setReserveCopies(1)
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                                                        <SelectValue placeholder="Choose a book" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-slate-900 text-white border-white/10 max-h-64">
+                                                        {availableBooks.map((b) => (
+                                                            <SelectItem key={b.id} value={b.id}>
+                                                                {b.title} — {b.author}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-[11px] text-white/50">
+                                                    Only books currently marked as{" "}
+                                                    <span className="font-semibold text-emerald-300">Available</span> are shown
+                                                    here.
+                                                </p>
+                                            </div>
+
+                                            {/* ✅ NEW: copies selector */}
+                                            <div className="pt-1">
+                                                <div className="text-xs font-medium text-white/80 mb-1">
+                                                    Copies to borrow
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        size="icon"
+                                                        variant="outline"
+                                                        className="border-white/20 text-white hover:bg-white/10"
+                                                        onClick={() => setReserveCopies((v) => clampInt(v - 1, 1, maxReserveCopies))}
+                                                        disabled={
+                                                            reserveSubmitting ||
+                                                            reserveLoading ||
+                                                            !selectedBookId ||
+                                                            reserveQty <= 1
+                                                        }
+                                                        aria-label="Decrease copies"
+                                                    >
+                                                        <Minus className="h-4 w-4" aria-hidden="true" />
+                                                    </Button>
+
+                                                    <Input
+                                                        value={String(reserveQty)}
+                                                        onChange={(e) =>
+                                                            setReserveCopies(
+                                                                clampInt(Number(e.target.value), 1, maxReserveCopies)
+                                                            )
+                                                        }
+                                                        inputMode="numeric"
+                                                        className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
+                                                        aria-label="Copies to borrow"
+                                                        disabled={reserveSubmitting || reserveLoading || !selectedBookId}
+                                                    />
+
+                                                    <Button
+                                                        type="button"
+                                                        size="icon"
+                                                        variant="outline"
+                                                        className="border-white/20 text-white hover:bg-white/10"
+                                                        onClick={() => setReserveCopies((v) => clampInt(v + 1, 1, maxReserveCopies))}
+                                                        disabled={
+                                                            reserveSubmitting ||
+                                                            reserveLoading ||
+                                                            !selectedBookId ||
+                                                            reserveQty >= maxReserveCopies
+                                                        }
+                                                        aria-label="Increase copies"
+                                                    >
+                                                        <Plus className="h-4 w-4" aria-hidden="true" />
+                                                    </Button>
+
+                                                    <span className="text-xs text-white/60">Max {maxReserveCopies}</span>
+                                                </div>
+
+                                                <p className="text-[11px] text-white/60 mt-1">
+                                                    Total physical copies in the library: {maxReserveCopies}.
+                                                </p>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -397,7 +531,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                         type="button"
                                         className="bg-purple-600 hover:bg-purple-700 text-white"
                                         onClick={() => void handleReserveConfirm()}
-                                        disabled={reserveSubmitting || reserveLoading || availableBooks.length === 0}
+                                        disabled={
+                                            reserveSubmitting ||
+                                            reserveLoading ||
+                                            availableBooks.length === 0 ||
+                                            !selectedBookId
+                                        }
                                     >
                                         {reserveSubmitting ? (
                                             <span className="inline-flex items-center gap-2">

@@ -31,6 +31,8 @@ import {
     CircleOff,
     Clock3,
     AlertTriangle,
+    Plus,
+    Minus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -140,6 +142,12 @@ function fmtDurationDays(days?: number | null) {
     return `${days} day${days === 1 ? "" : "s"}`;
 }
 
+function clampInt(n: number, min: number, max: number) {
+    const v = Math.floor(Number(n));
+    if (!Number.isFinite(v)) return min;
+    return Math.min(max, Math.max(min, v));
+}
+
 export default function StudentBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [myRecords, setMyRecords] = React.useState<BorrowRecordDTO[]>([]);
@@ -150,6 +158,10 @@ export default function StudentBooksPage() {
     const [search, setSearch] = React.useState("");
     const [filterMode, setFilterMode] = React.useState<FilterMode>("all");
     const [borrowBusyId, setBorrowBusyId] = React.useState<string | null>(null);
+
+    // ✅ NEW: copies-to-borrow state (shared; only one dialog open at a time)
+    const [borrowDialogBookId, setBorrowDialogBookId] = React.useState<string | null>(null);
+    const [borrowCopies, setBorrowCopies] = React.useState<number>(1);
 
     const loadAll = React.useCallback(async () => {
         setError(null);
@@ -250,6 +262,7 @@ export default function StudentBooksPage() {
                     b.barcode,
                     b.libraryArea ? fmtLibraryArea(b.libraryArea) : "",
                     b.volumeNumber,
+                    String(typeof b.numberOfCopies === "number" ? b.numberOfCopies : ""),
                 ]
                     .filter(Boolean)
                     .join(" ")
@@ -265,7 +278,7 @@ export default function StudentBooksPage() {
         );
     }, [books, myRecords, filterMode, search]);
 
-    async function handleBorrow(book: BookWithStatus) {
+    async function handleBorrow(book: BookWithStatus, copiesRequested = 1) {
         if (!book.available) {
             toast.info("Book is not available right now.", {
                 description: "You can only borrow books marked as Available.",
@@ -280,22 +293,63 @@ export default function StudentBooksPage() {
             return;
         }
 
-        setBorrowBusyId(book.id);
-        try {
-            const record = await createSelfBorrow(book.id);
-            toast.success("Borrow request submitted", {
-                description: `"${book.title}" is now pending pickup. Due date: ${fmtDate(
-                    record.dueDate
-                )}.`,
-            });
+        const maxCopies =
+            typeof book.numberOfCopies === "number" && book.numberOfCopies > 0
+                ? book.numberOfCopies
+                : 1;
 
-            // Optimistic: mark as unavailable on the client
-            setBooks((prev) =>
-                prev.map((b) =>
-                    b.id === book.id ? { ...b, available: false } : b
-                )
-            );
-            setMyRecords((prev) => [record, ...prev]);
+        const requestedCopies = clampInt(copiesRequested, 1, maxCopies);
+
+        setBorrowBusyId(book.id);
+
+        try {
+            const created: BorrowRecordDTO[] = [];
+
+            // Borrow copies one-by-one (works even if API only supports 1 per call)
+            for (let i = 0; i < requestedCopies; i++) {
+                try {
+                    const record = await createSelfBorrow(book.id);
+                    created.push(record);
+                } catch (err: any) {
+                    // If nothing succeeded, throw and show full error.
+                    if (created.length === 0) throw err;
+
+                    // Partial success: stop and inform user.
+                    const msg = err?.message || "Some copies could not be borrowed.";
+                    toast.warning("Partial borrow completed", {
+                        description: `Borrowed ${created.length} of ${requestedCopies} copies. ${msg}`,
+                    });
+                    break;
+                }
+            }
+
+            if (created.length === 0) return;
+
+            const due = fmtDate(created[0]?.dueDate);
+
+            if (created.length === requestedCopies) {
+                toast.success("Borrow request submitted", {
+                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" is now pending pickup. Due date: ${due}.`,
+                });
+            } else {
+                toast.warning("Borrow request partially submitted", {
+                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" is now pending pickup. Due date: ${due}.`,
+                });
+            }
+
+            // Optimistic add, then best-effort refresh to sync availability/copies.
+            setMyRecords((prev) => [...created.slice().reverse(), ...prev]);
+
+            try {
+                const [booksLatest, myLatest] = await Promise.all([
+                    fetchBooks(),
+                    fetchMyBorrowRecords(),
+                ]);
+                setBooks(booksLatest);
+                setMyRecords(myLatest);
+            } catch {
+                // ignore refresh failure; optimistic state is already applied
+            }
         } catch (err: any) {
             const msg =
                 err?.message ||
@@ -520,6 +574,15 @@ export default function StudentBooksPage() {
                                                     ? fmtDate(activeRecord.dueDate)
                                                     : "—";
 
+                                                const maxCopies =
+                                                    typeof book.numberOfCopies === "number" &&
+                                                        book.numberOfCopies > 0
+                                                        ? book.numberOfCopies
+                                                        : 1;
+
+                                                const isThisDialog = borrowDialogBookId === book.id;
+                                                const qty = isThisDialog ? clampInt(borrowCopies, 1, maxCopies) : 1;
+
                                                 return (
                                                     <TableRow
                                                         key={book.id}
@@ -583,7 +646,7 @@ export default function StudentBooksPage() {
                                                         {/* Call no. (scrollable) */}
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                "text-sm opacity-80 align-top w-[70px] max-w-[70px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -595,7 +658,7 @@ export default function StudentBooksPage() {
                                                         {/* Area (scrollable) */}
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -609,7 +672,7 @@ export default function StudentBooksPage() {
                                                         {/* Genre (scrollable) */}
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                "text-sm opacity-80 align-top w-[70px] max-w-[70px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -668,7 +731,7 @@ export default function StudentBooksPage() {
                                                         {/* My status (scrollable) */}
                                                         <TableCell
                                                             className={
-                                                                "align-top w-[100px] max-w-[100px] pr-1 text-xs " +
+                                                                "align-top w-[90px] max-w-[90px] pr-1 text-xs " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -800,7 +863,17 @@ export default function StudentBooksPage() {
                                                             }
                                                         >
                                                             {book.available ? (
-                                                                <AlertDialog>
+                                                                <AlertDialog
+                                                                    onOpenChange={(open) => {
+                                                                        if (open) {
+                                                                            setBorrowDialogBookId(book.id);
+                                                                            setBorrowCopies(1);
+                                                                        } else {
+                                                                            setBorrowDialogBookId(null);
+                                                                            setBorrowCopies(1);
+                                                                        }
+                                                                    }}
+                                                                >
                                                                     <AlertDialogTrigger asChild>
                                                                         <Button
                                                                             type="button"
@@ -886,6 +959,70 @@ export default function StudentBooksPage() {
                                                                                 {fmtDurationDays(book.borrowDurationDays)}
                                                                             </p>
 
+                                                                            {/* ✅ NEW: copies selector */}
+                                                                            <div className="pt-3">
+                                                                                <div className="text-xs font-medium text-white/80 mb-1">
+                                                                                    Copies to borrow
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <Button
+                                                                                        type="button"
+                                                                                        size="icon"
+                                                                                        variant="outline"
+                                                                                        className="border-white/20 text-white hover:bg-white/10"
+                                                                                        onClick={() =>
+                                                                                            setBorrowCopies((v) => clampInt(v - 1, 1, maxCopies))
+                                                                                        }
+                                                                                        disabled={
+                                                                                            borrowBusyId === book.id ||
+                                                                                            !isThisDialog ||
+                                                                                            qty <= 1
+                                                                                        }
+                                                                                        aria-label="Decrease copies"
+                                                                                    >
+                                                                                        <Minus className="h-4 w-4" aria-hidden="true" />
+                                                                                    </Button>
+
+                                                                                    <Input
+                                                                                        value={String(qty)}
+                                                                                        onChange={(e) =>
+                                                                                            setBorrowCopies(
+                                                                                                clampInt(Number(e.target.value), 1, maxCopies)
+                                                                                            )
+                                                                                        }
+                                                                                        inputMode="numeric"
+                                                                                        className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
+                                                                                        aria-label="Copies to borrow"
+                                                                                        disabled={borrowBusyId === book.id || !isThisDialog}
+                                                                                    />
+
+                                                                                    <Button
+                                                                                        type="button"
+                                                                                        size="icon"
+                                                                                        variant="outline"
+                                                                                        className="border-white/20 text-white hover:bg-white/10"
+                                                                                        onClick={() =>
+                                                                                            setBorrowCopies((v) => clampInt(v + 1, 1, maxCopies))
+                                                                                        }
+                                                                                        disabled={
+                                                                                            borrowBusyId === book.id ||
+                                                                                            !isThisDialog ||
+                                                                                            qty >= maxCopies
+                                                                                        }
+                                                                                        aria-label="Increase copies"
+                                                                                    >
+                                                                                        <Plus className="h-4 w-4" aria-hidden="true" />
+                                                                                    </Button>
+
+                                                                                    <span className="text-xs text-white/60">
+                                                                                        Max {maxCopies}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <p className="text-[11px] text-white/60 mt-1">
+                                                                                    Total physical copies in the library: {maxCopies}.
+                                                                                </p>
+                                                                            </div>
+
                                                                             <p className="text-xs text-white/60 mt-2">
                                                                                 The due date will be set automatically
                                                                                 based on the library policy. Any overdue
@@ -903,7 +1040,9 @@ export default function StudentBooksPage() {
                                                                             <AlertDialogAction
                                                                                 className="bg-purple-600 hover:bg-purple-700 text-white"
                                                                                 disabled={borrowBusyId === book.id}
-                                                                                onClick={() => void handleBorrow(book)}
+                                                                                onClick={() =>
+                                                                                    void handleBorrow(book, qty)
+                                                                                }
                                                                             >
                                                                                 {borrowBusyId === book.id ? (
                                                                                     <span className="inline-flex items-center gap-2">
@@ -1023,6 +1162,15 @@ export default function StudentBooksPage() {
                                         const myDueDate = activeRecord
                                             ? fmtDate(activeRecord.dueDate)
                                             : "—";
+
+                                        const maxCopies =
+                                            typeof book.numberOfCopies === "number" &&
+                                                book.numberOfCopies > 0
+                                                ? book.numberOfCopies
+                                                : 1;
+
+                                        const isThisDialog = borrowDialogBookId === book.id;
+                                        const qty = isThisDialog ? clampInt(borrowCopies, 1, maxCopies) : 1;
 
                                         return (
                                             <div
@@ -1293,7 +1441,17 @@ export default function StudentBooksPage() {
                                                 {/* Actions */}
                                                 <div className="flex justify-end pt-1">
                                                     {book.available ? (
-                                                        <AlertDialog>
+                                                        <AlertDialog
+                                                            onOpenChange={(open) => {
+                                                                if (open) {
+                                                                    setBorrowDialogBookId(book.id);
+                                                                    setBorrowCopies(1);
+                                                                } else {
+                                                                    setBorrowDialogBookId(null);
+                                                                    setBorrowCopies(1);
+                                                                }
+                                                            }}
+                                                        >
                                                             <AlertDialogTrigger asChild>
                                                                 <Button
                                                                     type="button"
@@ -1361,6 +1519,71 @@ export default function StudentBooksPage() {
                                                                         </span>{" "}
                                                                         {fmtDurationDays(book.borrowDurationDays)}
                                                                     </p>
+
+                                                                    {/* ✅ NEW: copies selector */}
+                                                                    <div className="pt-3">
+                                                                        <div className="text-xs font-medium text-white/80 mb-1">
+                                                                            Copies to borrow
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Button
+                                                                                type="button"
+                                                                                size="icon"
+                                                                                variant="outline"
+                                                                                className="border-white/20 text-white hover:bg-white/10"
+                                                                                onClick={() =>
+                                                                                    setBorrowCopies((v) => clampInt(v - 1, 1, maxCopies))
+                                                                                }
+                                                                                disabled={
+                                                                                    borrowBusyId === book.id ||
+                                                                                    !isThisDialog ||
+                                                                                    qty <= 1
+                                                                                }
+                                                                                aria-label="Decrease copies"
+                                                                            >
+                                                                                <Minus className="h-4 w-4" aria-hidden="true" />
+                                                                            </Button>
+
+                                                                            <Input
+                                                                                value={String(qty)}
+                                                                                onChange={(e) =>
+                                                                                    setBorrowCopies(
+                                                                                        clampInt(Number(e.target.value), 1, maxCopies)
+                                                                                    )
+                                                                                }
+                                                                                inputMode="numeric"
+                                                                                className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
+                                                                                aria-label="Copies to borrow"
+                                                                                disabled={borrowBusyId === book.id || !isThisDialog}
+                                                                            />
+
+                                                                            <Button
+                                                                                type="button"
+                                                                                size="icon"
+                                                                                variant="outline"
+                                                                                className="border-white/20 text-white hover:bg-white/10"
+                                                                                onClick={() =>
+                                                                                    setBorrowCopies((v) => clampInt(v + 1, 1, maxCopies))
+                                                                                }
+                                                                                disabled={
+                                                                                    borrowBusyId === book.id ||
+                                                                                    !isThisDialog ||
+                                                                                    qty >= maxCopies
+                                                                                }
+                                                                                aria-label="Increase copies"
+                                                                            >
+                                                                                <Plus className="h-4 w-4" aria-hidden="true" />
+                                                                            </Button>
+
+                                                                            <span className="text-xs text-white/60">
+                                                                                Max {maxCopies}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="text-[11px] text-white/60 mt-1">
+                                                                            Total physical copies in the library: {maxCopies}.
+                                                                        </p>
+                                                                    </div>
+
                                                                     <p className="text-xs text-white/60 mt-2">
                                                                         The due date will be set automatically based
                                                                         on the library policy. Any overdue days may
@@ -1378,7 +1601,7 @@ export default function StudentBooksPage() {
                                                                     <AlertDialogAction
                                                                         className="bg-purple-600 hover:bg-purple-700 text-white"
                                                                         disabled={borrowBusyId === book.id}
-                                                                        onClick={() => void handleBorrow(book)}
+                                                                        onClick={() => void handleBorrow(book, qty)}
                                                                     >
                                                                         {borrowBusyId === book.id ? (
                                                                             <span className="inline-flex items-center gap-2">
