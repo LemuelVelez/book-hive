@@ -63,6 +63,9 @@ const LibrarianDamageReportsPage = lazy(
 const LibrarianFinesPage = lazy(
   () => import('./pages/dashboard/librarian/fines')
 )
+const LibrarianIncomePage = lazy(
+  () => import('./pages/dashboard/librarian/income')
+)
 const LibrarianSettingsPage = lazy(
   () => import('./pages/dashboard/librarian/settings')
 )
@@ -232,6 +235,16 @@ function App() {
             element={
               <RequireRole allow={['librarian']}>
                 <LibrarianFinesPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Librarian Income */}
+          <Route
+            path="/dashboard/librarian/income"
+            element={
+              <RequireRole allow={['librarian']}>
+                <LibrarianIncomePage />
               </RequireRole>
             }
           />

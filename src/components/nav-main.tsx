@@ -17,6 +17,7 @@ import {
     ShieldAlert,
     ReceiptText,
     Settings,
+    Coins,
 } from "lucide-react"
 
 type Item = {
@@ -108,6 +109,11 @@ export function NavMain() {
                 label: "Fines",
                 icon: ReceiptText,
                 to: "/dashboard/librarian/fines",
+            },
+            {
+                label: "Income",
+                icon: Coins,
+                to: "/dashboard/librarian/income",
             },
             {
                 label: "Damage Reports",
