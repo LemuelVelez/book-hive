@@ -89,6 +89,34 @@ function fmtDate(d?: string | null) {
     }
 }
 
+/**
+ * Compute overdue days in LOCAL date (no timezone off-by-one):
+ * - dueDate -> endDate (return date / resolved / created / today)
+ * - returns 0 if not overdue
+ * - returns null if dates are missing/invalid
+ */
+function computeOverdueDays(dueDate?: string | null, endDate?: string | null): number | null {
+    if (!dueDate) return null;
+
+    const due = new Date(dueDate);
+    if (Number.isNaN(due.getTime())) return null;
+
+    const end = endDate ? new Date(endDate) : new Date();
+    if (Number.isNaN(end.getTime())) return null;
+
+    const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const endLocal = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+    const diffMs = endLocal.getTime() - dueLocal.getTime();
+    const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return rawDays > 0 ? rawDays : 0;
+}
+
+function overdueDaysLabel(days: number | null): string {
+    if (days == null) return "—";
+    return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 function peso(n: number) {
     if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00";
     try {
@@ -656,8 +684,12 @@ export default function LibrarianFinesPage() {
                             <TableCaption className="text-xs text-white/60">
                                 Showing {filtered.length} {filtered.length === 1 ? "fine" : "fines"}. Mark fines as{" "}
                                 <span className="font-semibold text-emerald-200">Paid</span> after OTC payment is
-                                received.
+                                received.{" "}
+                                <span className="opacity-80">
+                                    Days = overdue days for borrow-based fines; damage fines show “Damage”.
+                                </span>
                             </TableCaption>
+
                             <TableHeader>
                                 <TableRow className="border-white/10">
                                     <TableHead className="w-[70px] text-xs font-semibold text-white/70">
@@ -669,6 +701,7 @@ export default function LibrarianFinesPage() {
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Status</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">₱Amount</TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">Days</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Created</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Resolved</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70 text-right">
@@ -693,6 +726,14 @@ export default function LibrarianFinesPage() {
 
                                     const damage = isDamageFine(fine);
                                     const isDamageRow = fine._source === "damage";
+
+                                    const endForDays =
+                                        fine.borrowReturnDate ??
+                                        (fine.status !== "active"
+                                            ? fine.resolvedAt ?? fine.createdAt ?? null
+                                            : new Date().toISOString());
+
+                                    const overdueDays = computeOverdueDays(fine.borrowDueDate ?? null, endForDays);
 
                                     return (
                                         <TableRow
@@ -850,6 +891,16 @@ export default function LibrarianFinesPage() {
                                                         </AlertDialog>
                                                     )}
                                                 </div>
+                                            </TableCell>
+
+                                            <TableCell className="text-xs opacity-80">
+                                                {damage || isDamageRow ? (
+                                                    <span className="inline-flex items-center rounded-full border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
+                                                        Damage
+                                                    </span>
+                                                ) : (
+                                                    overdueDaysLabel(overdueDays)
+                                                )}
                                             </TableCell>
 
                                             <TableCell className="text-xs opacity-80">{fmtDate(fine.createdAt)}</TableCell>

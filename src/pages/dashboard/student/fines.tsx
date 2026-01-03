@@ -66,21 +66,12 @@ type DamageReportRow = DamageReportDTO & {
     photoUrl?: string | null;
 };
 
-/**
- * For students, use their own damage reports API to enrich fines with
- * book titles and damage info, instead of calling the librarian-only
- * /api/damage-reports endpoint.
- */
 async function fetchDamageReportsForFines(): Promise<DamageReportRow[]> {
     const reports = await fetchMyDamageReports();
     if (!Array.isArray(reports)) return [];
     return reports as DamageReportRow[];
 }
 
-/**
- * Enrich fines with book & damage info from linked damage reports so that
- * students see the actual book titles instead of only a generic "General fine".
- */
 function enrichFinesWithDamageReports(
     fines: FineDTO[],
     reports: DamageReportRow[]
@@ -146,10 +137,6 @@ function enrichFinesWithDamageReports(
     });
 }
 
-/**
- * Format date as YYYY-MM-DD in *local* timezone
- * to avoid off-by-one issues from UTC conversions.
- */
 function fmtDate(d?: string | null) {
     if (!d) return "—";
     try {
@@ -159,6 +146,34 @@ function fmtDate(d?: string | null) {
     } catch {
         return d;
     }
+}
+
+/**
+ * Compute overdue days in LOCAL date (no timezone off-by-one):
+ * - dueDate -> endDate (return date / resolved / created / today)
+ * - returns 0 if not overdue
+ * - returns null if dates are missing/invalid
+ */
+function computeOverdueDays(dueDate?: string | null, endDate?: string | null): number | null {
+    if (!dueDate) return null;
+
+    const due = new Date(dueDate);
+    if (Number.isNaN(due.getTime())) return null;
+
+    const end = endDate ? new Date(endDate) : new Date();
+    if (Number.isNaN(end.getTime())) return null;
+
+    const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const endLocal = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+    const diffMs = endLocal.getTime() - dueLocal.getTime();
+    const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return rawDays > 0 ? rawDays : 0;
+}
+
+function overdueDaysLabel(days: number | null): string {
+    if (days == null) return "—";
+    return `${days} day${days === 1 ? "" : "s"}`;
 }
 
 function peso(n: number) {
@@ -174,16 +189,12 @@ function peso(n: number) {
     }
 }
 
-// Normalize any "fine-like" value into a safe number
 function normalizeFine(value: any): number {
     if (value === null || value === undefined) return 0;
     const num = typeof value === "number" ? value : Number(value);
     return Number.isNaN(num) ? 0 : num;
 }
 
-/**
- * Best-effort helper to detect if a fine is related to a damage report.
- */
 function isDamageFine(fine: FineDTO): boolean {
     const anyFine = fine as any;
     const reason = (fine.reason || "").toLowerCase();
@@ -199,10 +210,6 @@ function isDamageFine(fine: FineDTO): boolean {
     );
 }
 
-/**
- * Decide what to show as the primary label in the
- * "Book / Damage info" column for a fine.
- */
 function getFinePrimaryLabel(fine: FineDTO): string {
     const rawTitle = fine.bookTitle;
     const title = typeof rawTitle === "string" ? rawTitle.trim() : "";
@@ -229,16 +236,10 @@ function getFinePrimaryLabel(fine: FineDTO): string {
     return "General fine";
 }
 
-/**
- * Defensive status normalization:
- * If old data still returns "pending_verification", treat it as "active" on UI.
- * (Over-the-counter only now; no online verification state.)
- */
 function normalizeStatus(raw: any): FineStatus {
     const v = String(raw ?? "").toLowerCase();
     if (v === "paid") return "paid";
     if (v === "cancelled") return "cancelled";
-    // Map legacy/unknown statuses to active
     return "active";
 }
 
@@ -256,7 +257,6 @@ export default function StudentFinesPage() {
         setLoading(true);
         try {
             const [fineDataRaw, damageReports] = await Promise.all([
-                // Cast to any to allow defensive normalization without TS friction
                 (async () => (await fetchMyFines()) as any[])(),
                 (async () => {
                     try {
@@ -273,7 +273,6 @@ export default function StudentFinesPage() {
                 })(),
             ]);
 
-            // Normalize status (remove legacy "pending_verification" in UI)
             const fineData: FineDTO[] = fineDataRaw.map((f) => ({
                 ...(f as any),
                 status: normalizeStatus((f as any).status),
@@ -421,7 +420,6 @@ export default function StudentFinesPage() {
                         <CardTitle>Fine history</CardTitle>
 
                         <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
-                            {/* Search */}
                             <div className="relative w-full md:w-64">
                                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                                 <Input
@@ -432,7 +430,6 @@ export default function StudentFinesPage() {
                                 />
                             </div>
 
-                            {/* Status filter */}
                             <div className="w-full md:w-[220px]">
                                 <Select
                                     value={statusFilter}
@@ -475,7 +472,10 @@ export default function StudentFinesPage() {
                         <Table>
                             <TableCaption className="text-xs text-white/60">
                                 Showing {filtered.length} {filtered.length === 1 ? "fine" : "fines"}. Active fines
-                                must be paid <span className="font-semibold">over the counter</span> at the library.
+                                must be paid <span className="font-semibold">over the counter</span> at the library.{" "}
+                                <span className="opacity-80">
+                                    Days = overdue days for borrow-based fines; damage fines show “Damage”.
+                                </span>
                             </TableCaption>
 
                             <TableHeader>
@@ -494,6 +494,9 @@ export default function StudentFinesPage() {
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">
                                         ₱Amount
+                                    </TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">
+                                        Days
                                     </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70 text-right">
                                         Action
@@ -517,6 +520,14 @@ export default function StudentFinesPage() {
                                         typeof fine.reason === "string" ? fine.reason.trim() : "";
 
                                     const status = normalizeStatus((fine as any).status);
+
+                                    const endForDays =
+                                        fine.borrowReturnDate ??
+                                        (status !== "active"
+                                            ? (fine as any).resolvedAt ?? fine.createdAt ?? null
+                                            : new Date().toISOString());
+
+                                    const overdueDays = computeOverdueDays(fine.borrowDueDate ?? null, endForDays);
 
                                     return (
                                         <TableRow
@@ -566,6 +577,16 @@ export default function StudentFinesPage() {
 
                                             <TableCell className="text-sm">{peso(amount)}</TableCell>
 
+                                            <TableCell className="text-xs opacity-80">
+                                                {damage ? (
+                                                    <span className="inline-flex items-center rounded-full border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
+                                                        Damage
+                                                    </span>
+                                                ) : (
+                                                    overdueDaysLabel(overdueDays)
+                                                )}
+                                            </TableCell>
+
                                             <TableCell className="text-right space-y-1">
                                                 {status === "active" ? (
                                                     <AlertDialog>
@@ -596,6 +617,14 @@ export default function StudentFinesPage() {
                                                                     <span className="text-white/60">Amount:</span>{" "}
                                                                     <span className="font-semibold text-amber-200">{peso(amount)}</span>
                                                                 </p>
+
+                                                                {!damage && overdueDays != null && (
+                                                                    <p>
+                                                                        <span className="text-white/60">Days:</span>{" "}
+                                                                        <span className="font-semibold">{overdueDaysLabel(overdueDays)}</span>
+                                                                    </p>
+                                                                )}
+
                                                                 {fine.bookTitle && (
                                                                     <p>
                                                                         <span className="text-white/60">Book:</span> {fine.bookTitle}
