@@ -73,6 +73,8 @@ type Severity = DamageSeverity;
 // Local row type: we extend the shared DTO with optional legacy `photoUrl`
 type DamageReportRow = DamageReportDTO & {
     photoUrl?: string | null;
+    fullName?: string | null;
+    full_name?: string | null;
 };
 
 /* ------------------------ Helpers (local) ------------------------ */
@@ -128,6 +130,27 @@ function SeverityBadge({ severity }: { severity: Severity }) {
         <Badge variant="outline" className={map[severity]}>
             {label}
         </Badge>
+    );
+}
+
+function getUserName(r: DamageReportRow): string {
+    const anyR = r as any;
+    const name =
+        (r.studentName ?? null) ||
+        (r.fullName ?? null) ||
+        (anyR.studentName ?? null) ||
+        (anyR.fullName ?? null) ||
+        (anyR.full_name ?? null);
+
+    if (name && String(name).trim()) return String(name).trim();
+
+    // fallback
+    return (
+        r.studentEmail ||
+        r.studentId ||
+        (anyR.student_email as string | undefined) ||
+        (anyR.student_id as string | undefined) ||
+        `User #${r.userId}`
     );
 }
 
@@ -443,12 +466,13 @@ export default function LibrarianDamageReportsPage() {
         if (!q) return list;
 
         return list.filter((r) => {
-            const student =
+            const userName = getUserName(r);
+            const user =
+                (userName || "") +
+                " " +
                 (r.studentEmail || "") +
                 " " +
                 (r.studentId || "") +
-                " " +
-                (r.studentName || "") +
                 " " +
                 String(r.userId || "");
             const book = (r.bookTitle || "") + " " + String(r.bookId || "");
@@ -461,7 +485,7 @@ export default function LibrarianDamageReportsPage() {
             const notes = r.notes || "";
             return (
                 String(r.id).includes(q) ||
-                student.toLowerCase().includes(q) ||
+                user.toLowerCase().includes(q) ||
                 book.toLowerCase().includes(q) ||
                 damage.toLowerCase().includes(q) ||
                 notes.toLowerCase().includes(q)
@@ -492,7 +516,7 @@ export default function LibrarianDamageReportsPage() {
                         <Input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search by ID, user, book, info…"
+                            placeholder="Search by ID, user name, book, info…"
                             className="pl-9 bg-slate-900/70 border-white/20 text-white"
                         />
                     </div>
@@ -569,7 +593,7 @@ export default function LibrarianDamageReportsPage() {
                                                 Damage Report ID
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                Student Email (or ID)
+                                                User Name
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
                                                 Book Title (or ID)
@@ -587,11 +611,7 @@ export default function LibrarianDamageReportsPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {filtered.map((r) => {
-                                            const student =
-                                                r.studentEmail ||
-                                                r.studentId ||
-                                                r.studentName ||
-                                                `User #${r.userId}`;
+                                            const userName = getUserName(r);
                                             const book = r.bookTitle || `Book #${r.bookId}`;
 
                                             const rawPhotos: string[] = (
@@ -627,7 +647,7 @@ export default function LibrarianDamageReportsPage() {
                                                         {r.id}
                                                     </TableCell>
                                                     <TableCell className="text-sm">
-                                                        {student}
+                                                        {userName}
                                                     </TableCell>
                                                     <TableCell className="text-sm">
                                                         {book}
@@ -752,11 +772,7 @@ export default function LibrarianDamageReportsPage() {
                             {/* Mobile: Stacked cards (vertical layout) */}
                             <div className="md:hidden space-y-3">
                                 {filtered.map((r) => {
-                                    const student =
-                                        r.studentEmail ||
-                                        r.studentId ||
-                                        r.studentName ||
-                                        `User #${r.userId}`;
+                                    const userName = getUserName(r);
                                     const book = r.bookTitle || `Book #${r.bookId}`;
 
                                     const rawPhotos: string[] = (
@@ -799,9 +815,9 @@ export default function LibrarianDamageReportsPage() {
 
                                             <div className="mt-2">
                                                 <div className="text-[11px] text-white/60">
-                                                    Student Email (or ID)
+                                                    User Name
                                                 </div>
-                                                <div className="text-sm">{student}</div>
+                                                <div className="text-sm">{userName}</div>
                                             </div>
 
                                             <div className="mt-2">
@@ -1000,7 +1016,6 @@ export default function LibrarianDamageReportsPage() {
                     if (!open) {
                         closeAssessDialog();
                     } else if (assessReport) {
-                        // keep as-is if reopened while state still there
                         setAssessOpen(true);
                     }
                 }}
@@ -1019,12 +1034,9 @@ export default function LibrarianDamageReportsPage() {
                             <div className="rounded-md border border-white/10 bg-slate-900/70 px-3 py-2">
                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1">
                                     <div>
-                                        <div className="text-xs text-white/60">Student</div>
+                                        <div className="text-xs text-white/60">User</div>
                                         <div className="text-sm font-medium">
-                                            {assessReport.studentName ||
-                                                assessReport.studentEmail ||
-                                                assessReport.studentId ||
-                                                `User #${assessReport.userId}`}
+                                            {getUserName(assessReport)}
                                         </div>
                                     </div>
                                     <div className="mt-2 md:mt-0">
@@ -1099,7 +1111,7 @@ export default function LibrarianDamageReportsPage() {
                                                     Assessed (awaiting payment)
                                                 </SelectItem>
                                                 <SelectItem value="paid">
-                                                    Paid (settled by student)
+                                                    Paid (settled by user)
                                                 </SelectItem>
                                             </SelectContent>
                                         </Select>
@@ -1115,7 +1127,7 @@ export default function LibrarianDamageReportsPage() {
                                             onChange={(e) => setAssessNotes(e.target.value)}
                                             rows={4}
                                             className="w-full rounded-md border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-amber-500/70"
-                                            placeholder="Example: Damage existed before this borrower; no fee charged. Or: Student admitted spilling water on pages."
+                                            placeholder="Example: Damage existed before this borrower; no fee charged. Or: User admitted spilling water on pages."
                                         />
                                     </div>
                                 </div>

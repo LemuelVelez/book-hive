@@ -7,6 +7,10 @@ export type FeedbackDTO = {
     userId: string | number;
     studentEmail: string | null;
     studentId: string | null;
+
+    // ✅ NEW: included by backend (users.full_name)
+    studentName?: string | null;
+
     bookId: string | number;
     bookTitle: string | null;
     rating: number; // 1..5

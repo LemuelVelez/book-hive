@@ -28,6 +28,16 @@ import { toast } from "sonner";
 import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
 
 /**
+ * Local row extension:
+ * backend may include a name field even if the shared DTO doesn't yet.
+ */
+type FeedbackRow = FeedbackDTO & {
+    studentName?: string | null;
+    fullName?: string | null;
+    full_name?: string | null;
+};
+
+/**
  * Format date as YYYY-MM-DD in *local* timezone
  * to avoid off-by-one issues from UTC conversions.
  */
@@ -62,12 +72,34 @@ function Stars({ rating = 0 }: { rating?: number }) {
     );
 }
 
+function getUserName(f: FeedbackRow): string {
+    const anyF = f as any;
+
+    const name =
+        (f.studentName ?? null) ||
+        (f.fullName ?? null) ||
+        (anyF.studentName ?? null) ||
+        (anyF.fullName ?? null) ||
+        (anyF.full_name ?? null);
+
+    if (name && String(name).trim()) return String(name).trim();
+
+    // fallback if name isn't available
+    return (
+        f.studentEmail ||
+        f.studentId ||
+        (anyF.student_email as string | undefined) ||
+        (anyF.student_id as string | undefined) ||
+        `User #${f.userId}`
+    );
+}
+
 export default function LibrarianFeedbacksPage() {
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
 
-    const [rows, setRows] = React.useState<FeedbackDTO[]>([]);
+    const [rows, setRows] = React.useState<FeedbackRow[]>([]);
     const [search, setSearch] = React.useState("");
     const [ratingFilter, setRatingFilter] = React.useState<
         "all" | "5" | "4" | "3" | "2" | "1"
@@ -78,7 +110,7 @@ export default function LibrarianFeedbacksPage() {
         setLoading(true);
         try {
             const data = await fetchFeedbacks();
-            setRows(data);
+            setRows(data as FeedbackRow[]);
         } catch (err: any) {
             const msg = err?.message || "Failed to load feedbacks.";
             setError(msg);
@@ -113,7 +145,10 @@ export default function LibrarianFeedbacksPage() {
         if (!q) return list;
 
         return list.filter((f) => {
+            const userName = getUserName(f);
             const student =
+                (userName || "") +
+                " " +
                 (f.studentEmail || "") +
                 " " +
                 (f.studentId || "") +
@@ -122,7 +157,7 @@ export default function LibrarianFeedbacksPage() {
             const book = (f.bookTitle || "") + " " + String(f.bookId || "");
             const comment = f.comment || "";
             return (
-                String(f.id).includes(q) ||
+                String(f.id).toLowerCase().includes(q) ||
                 student.toLowerCase().includes(q) ||
                 book.toLowerCase().includes(q) ||
                 comment.toLowerCase().includes(q)
@@ -137,7 +172,7 @@ export default function LibrarianFeedbacksPage() {
                 <div>
                     <h2 className="text-lg font-semibold leading-tight">Book Feedbacks</h2>
                     <p className="text-xs text-white/70">
-                        Reviews submitted by students for borrowed books.
+                        Reviews submitted by users for borrowed books.
                     </p>
                 </div>
 
@@ -173,7 +208,7 @@ export default function LibrarianFeedbacksPage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search by ID, user, book, comment…"
+                                    placeholder="Search by ID, user name, book, comment…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>
@@ -235,7 +270,7 @@ export default function LibrarianFeedbacksPage() {
                                                 Feedback ID
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                Student Email (or ID)
+                                                User Name
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
                                                 Book Title (or ID)
@@ -250,10 +285,7 @@ export default function LibrarianFeedbacksPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {filtered.map((f) => {
-                                            const student =
-                                                f.studentEmail ||
-                                                f.studentId ||
-                                                `User #${f.userId}`;
+                                            const userName = getUserName(f);
                                             const book =
                                                 f.bookTitle || `Book #${f.bookId}`;
                                             const comment = f.comment || "—";
@@ -266,7 +298,7 @@ export default function LibrarianFeedbacksPage() {
                                                         {f.id}
                                                     </TableCell>
                                                     <TableCell className="text-sm">
-                                                        {student}
+                                                        {userName}
                                                     </TableCell>
                                                     <TableCell className="text-sm">
                                                         {book}
@@ -299,10 +331,7 @@ export default function LibrarianFeedbacksPage() {
                             {/* Mobile: Stacked cards (vertical layout) */}
                             <div className="md:hidden space-y-3">
                                 {filtered.map((f) => {
-                                    const student =
-                                        f.studentEmail ||
-                                        f.studentId ||
-                                        `User #${f.userId}`;
+                                    const userName = getUserName(f);
                                     const book =
                                         f.bookTitle || `Book #${f.bookId}`;
                                     const comment = f.comment || "—";
@@ -322,9 +351,9 @@ export default function LibrarianFeedbacksPage() {
 
                                             <div className="mt-2">
                                                 <div className="text-[11px] text-white/60">
-                                                    Student
+                                                    User Name
                                                 </div>
-                                                <div className="text-sm">{student}</div>
+                                                <div className="text-sm">{userName}</div>
                                             </div>
 
                                             <div className="mt-2">
