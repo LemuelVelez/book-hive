@@ -57,8 +57,17 @@ export type BookDTO = {
   volumeNumber?: string;
   libraryArea?: LibraryArea | null;
 
-  // ✅ NEW: total number of copies for this title
+  /**
+   * ✅ IMPORTANT (updated behavior):
+   * numberOfCopies = REMAINING/AVAILABLE copies (this deducts as users borrow).
+   *
+   * The backend also sends:
+   * - totalCopies = total inventory copies
+   * - borrowedCopies = active borrows (status <> returned)
+   */
   numberOfCopies?: number;
+  totalCopies?: number;
+  borrowedCopies?: number;
 
   available: boolean;
 
@@ -200,9 +209,16 @@ export type CreateBookPayload = {
   volumeNumber?: string;
   libraryArea?: LibraryArea | null;
 
-  // ✅ NEW
+  /**
+   * ✅ TOTAL inventory copies (admin input).
+   * Remaining copies shown to users are computed by the backend.
+   */
   numberOfCopies?: number;
 
+  /**
+   * Availability is computed by backend based on remaining copies.
+   * (No need to set this manually.)
+   */
   available?: boolean;
 
   /**

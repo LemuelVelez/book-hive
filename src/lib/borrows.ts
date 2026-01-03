@@ -129,6 +129,12 @@ export type CreateBorrowPayload = {
     bookId: string | number;
     borrowDate?: string; // YYYY-MM-DD (defaults server-side to today)
     dueDate: string; // YYYY-MM-DD
+
+    /**
+     * ✅ NEW: how many copies to borrow in one action
+     * (Backend will create 1 borrow record per copy.)
+     */
+    quantity?: number;
 };
 
 export type UpdateBorrowPayload = Partial<{
@@ -156,7 +162,7 @@ export async function fetchMyBorrowRecords(): Promise<BorrowRecordDTO[]> {
 export async function createBorrowRecord(
     payload: CreateBorrowPayload
 ): Promise<BorrowRecordDTO> {
-    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    type Resp = JsonOk<{ record: BorrowRecordDTO; records?: BorrowRecordDTO[]; createdCount?: number }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.create, {
         method: "POST",
         body: payload,
@@ -165,18 +171,21 @@ export async function createBorrowRecord(
 }
 
 /**
- * Student self-service borrow: userId is taken from the session on the server.
- * Server will compute dueDate based on per-book borrow_duration_days.
- * We now always start self-borrows in "pending_pickup" on the server so that a
- * librarian must confirm physical pickup before it becomes "borrowed".
+ * Student self-service borrow:
+ * - userId is taken from the session on the server.
+ * - server computes dueDate based on per-book borrow_duration_days.
+ * - starts in "pending_pickup".
+ *
+ * ✅ NEW: quantity lets the student reserve multiple copies (if available).
  */
 export async function createSelfBorrow(
-    bookId: string | number
+    bookId: string | number,
+    quantity: number = 1
 ): Promise<BorrowRecordDTO> {
-    type Resp = JsonOk<{ record: BorrowRecordDTO }>;
+    type Resp = JsonOk<{ record: BorrowRecordDTO; records?: BorrowRecordDTO[]; createdCount?: number }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.createSelf, {
         method: "POST",
-        body: { bookId },
+        body: { bookId, quantity },
     });
     return res.record;
 }
@@ -271,8 +280,6 @@ export async function disapproveBorrowExtensionRequest(
 /**
  * Librarian/Admin action: confirm that the student has physically
  * received the book.
- * - Sets status to "borrowed"
- * - Keeps existing borrowDate / dueDate / fine values.
  */
 export async function markBorrowAsBorrowed(
     id: string | number
@@ -294,11 +301,6 @@ export type MarkBorrowReturnedOptions = {
 
 /**
  * Librarian/Admin action: finalize the return.
- * - Sets status to "returned"
- * - Sets return_date (defaults to today)
- * - Optionally sets fine (overdue + damage) in pesos.
- * - Marks the book as available again (on the server).
- * - The fine you send here (e.g. 100) is persisted and shown to students.
  */
 export async function markBorrowReturned(
     id: string | number,
@@ -322,9 +324,7 @@ export async function markBorrowReturned(
 }
 
 /**
- * Librarian/Admin action: modify the due date (e.g. extend loan).
- * This lets you lengthen the due date for valid reasons; the server
- * will automatically recalculate dynamic fines for active borrows.
+ * Librarian/Admin action: modify the due date.
  */
 export async function updateBorrowDueDate(
     id: string | number,
