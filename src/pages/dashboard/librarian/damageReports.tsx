@@ -22,17 +22,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import {
-    Loader2,
-    RefreshCcw,
-    Search,
-    ShieldAlert,
-    Trash2,
-} from "lucide-react";
+import { Loader2, RefreshCcw, Search, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { API_BASE } from "@/api/auth/route";
 
-// ✅ shadcn AlertDialog for destructive actions (delete)
 import {
     AlertDialog,
     AlertDialogAction,
@@ -45,50 +38,32 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-// ✅ shadcn Dialog for image preview & assessment
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-// ✅ Reuse shared damage report types + API helpers from lib
-import type {
-    DamageReportDTO,
-    DamageStatus,
-    DamageSeverity,
-} from "@/lib/damageReports";
-import {
-    fetchDamageReports,
-    updateDamageReport,
-    deleteDamageReport,
-} from "@/lib/damageReports";
+import type { DamageReportDTO, DamageStatus, DamageSeverity } from "@/lib/damageReports";
+import { fetchDamageReports, updateDamageReport, deleteDamageReport } from "@/lib/damageReports";
 
 /* ----------------------------- Types ----------------------------- */
 
-// Local alias for clarity inside this page
 type Severity = DamageSeverity;
 
-// Local row type: we extend the shared DTO with optional legacy `photoUrl`
 type DamageReportRow = DamageReportDTO & {
     photoUrl?: string | null;
     fullName?: string | null;
     full_name?: string | null;
+
+    // legacy/alt keys
+    liableFullName?: string | null;
+    liable_full_name?: string | null;
 };
 
 /* ------------------------ Helpers (local) ------------------------ */
 
-/**
- * Format date as YYYY-MM-DD in *local* timezone
- * to avoid off-by-one issues from UTC conversions.
- */
 function fmtDate(d?: string | null) {
     if (!d) return "—";
     try {
         const date = new Date(d);
         if (Number.isNaN(date.getTime())) return d;
-        // en-CA -> 2025-11-13 (YYYY-MM-DD)
         return date.toLocaleDateString("en-CA");
     } catch {
         return d;
@@ -105,7 +80,7 @@ function peso(n: number | string | undefined) {
     }).format(num);
 }
 
-function StatusBadge({ status }: { status: DamageStatus }) {
+function StatusBadge({ status, archived }: { status: DamageStatus; archived?: boolean }) {
     const map: Record<DamageStatus, string> = {
         pending: "bg-yellow-500/15 text-yellow-300 border-yellow-500/20",
         assessed: "bg-blue-500/15 text-blue-300 border-blue-500/20",
@@ -113,9 +88,20 @@ function StatusBadge({ status }: { status: DamageStatus }) {
     };
     const label = status[0].toUpperCase() + status.slice(1);
     return (
-        <Badge variant="outline" className={map[status]}>
-            {label}
-        </Badge>
+        <div className="inline-flex items-center gap-2">
+            <Badge variant="outline" className={map[status]}>
+                {label}
+            </Badge>
+            {archived ? (
+                <Badge
+                    variant="outline"
+                    className="bg-white/5 text-white/70 border-white/10"
+                    title="Moved to paid/archive record"
+                >
+                    Archived
+                </Badge>
+            ) : null}
+        </div>
     );
 }
 
@@ -133,7 +119,7 @@ function SeverityBadge({ severity }: { severity: Severity }) {
     );
 }
 
-function getUserName(r: DamageReportRow): string {
+function getReportedByName(r: DamageReportRow): string {
     const anyR = r as any;
     const name =
         (r.studentName ?? null) ||
@@ -144,7 +130,6 @@ function getUserName(r: DamageReportRow): string {
 
     if (name && String(name).trim()) return String(name).trim();
 
-    // fallback
     return (
         r.studentEmail ||
         r.studentId ||
@@ -154,22 +139,49 @@ function getUserName(r: DamageReportRow): string {
     );
 }
 
+function getLiableName(r: DamageReportRow): string {
+    const anyR = r as any;
+
+    const liableId =
+        (r.liableUserId ?? null) ||
+        (anyR.liableUserId ?? null) ||
+        (anyR.liable_user_id ?? null);
+
+    if (!liableId) return "—";
+
+    const name =
+        (r.liableStudentName ?? null) ||
+        (anyR.liableStudentName ?? null) ||
+        (r.liableFullName ?? null) ||
+        (anyR.liableFullName ?? null) ||
+        (anyR.liable_full_name ?? null);
+
+    if (name && String(name).trim()) return String(name).trim();
+
+    return (
+        r.liableStudentEmail ||
+        r.liableStudentId ||
+        (anyR.liable_email as string | undefined) ||
+        (anyR.liable_student_id as string | undefined) ||
+        `User #${liableId}`
+    );
+}
+
 function formatDamageInfo(r: DamageReportRow) {
+    const paidLabel = r.paidAt ? fmtDate(r.paidAt) : "—";
     return (
         <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{r.damageType}</span>
                 <SeverityBadge severity={r.severity} />
-                <StatusBadge status={r.status} />
+                <StatusBadge status={r.status} archived={r.archived} />
             </div>
+
             <div className="text-xs text-white/70">
-                {r.fee !== undefined && (
-                    <span className="mr-3">Fee: {peso(r.fee)}</span>
-                )}
-                {r.reportedAt && (
-                    <span className="mr-3">
-                        Reported: {fmtDate(r.reportedAt)}
-                    </span>
+                {r.fee !== undefined && <span className="mr-3">Fine: {peso(r.fee)}</span>}
+                {r.reportedAt && <span className="mr-3">Reported: {fmtDate(r.reportedAt)}</span>}
+                {(r.status === "paid" || r.archived) && (
+                    <span className="mr-3">Paid: {paidLabel}</span>
                 )}
                 {r.notes && <span className="block truncate">Notes: {r.notes}</span>}
             </div>
@@ -177,22 +189,12 @@ function formatDamageInfo(r: DamageReportRow) {
     );
 }
 
-/** Resolves image URL.
- * - If backend stores absolute S3 URL -> return as-is
- * - If legacy relative path (/uploads/..) -> prefix API_BASE
- */
 function toAbsoluteUrl(url?: string | null) {
     if (!url) return "";
-    if (/^https?:\/\//i.test(url)) return url; // S3/CloudFront/etc.
+    if (/^https?:\/\//i.test(url)) return url;
     return `${API_BASE}${url}`;
 }
 
-/**
- * Simple suggested fine policy (you can later move this to backend/config):
- * - minor: ₱50
- * - moderate: ₱150
- * - major: ₱300
- */
 function suggestedFineFromSeverity(severity: Severity): number {
     switch (severity) {
         case "minor":
@@ -215,29 +217,22 @@ export default function LibrarianDamageReportsPage() {
 
     const [rows, setRows] = React.useState<DamageReportRow[]>([]);
     const [search, setSearch] = React.useState("");
-    const [statusFilter, setStatusFilter] = React.useState<"all" | DamageStatus>(
-        "all"
-    );
+    const [statusFilter, setStatusFilter] = React.useState<"all" | DamageStatus>("all");
 
-    // Per-row action states
     const [updatingId, setUpdatingId] = React.useState<string | null>(null);
     const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
-    // Image preview dialog state
     const [photoDialogOpen, setPhotoDialogOpen] = React.useState(false);
     const [photoDialogImages, setPhotoDialogImages] = React.useState<string[]>([]);
     const [photoDialogIndex, setPhotoDialogIndex] = React.useState(0);
 
-    // Assessment dialog state
     const [assessOpen, setAssessOpen] = React.useState(false);
-    const [assessReport, setAssessReport] = React.useState<DamageReportRow | null>(
-        null
-    );
+    const [assessReport, setAssessReport] = React.useState<DamageReportRow | null>(null);
     const [assessSeverity, setAssessSeverity] = React.useState<Severity>("minor");
-    const [assessStatus, setAssessStatus] =
-        React.useState<DamageStatus>("pending");
+    const [assessStatus, setAssessStatus] = React.useState<DamageStatus>("pending");
     const [assessFee, setAssessFee] = React.useState<string>("");
     const [assessNotes, setAssessNotes] = React.useState<string>("");
+    const [assessLiableUserId, setAssessLiableUserId] = React.useState<string>("");
     const [assessSaving, setAssessSaving] = React.useState(false);
     const [feeEdited, setFeeEdited] = React.useState(false);
 
@@ -271,34 +266,27 @@ export default function LibrarianDamageReportsPage() {
 
     /**
      * Quick status helper:
-     * - ONLY supports pending -> assessed now.
-     * - No more quick "Mark paid" step.
+     * - ONLY supports pending -> assessed
+     * - Archived/paid records cannot be updated
      */
     async function handleStatusStep(report: DamageReportRow) {
-        // pending -> assessed only
+        if (report.archived || report.status === "paid") return;
+
         let next: DamageStatus | null = null;
         if (report.status === "pending") next = "assessed";
-
         if (!next || next === report.status) return;
 
         const idStr = String(report.id);
         setUpdatingId(idStr);
 
-        // Optimistic UI update
         const prevRows = rows;
         setRows((current) =>
-            current.map((r) =>
-                r.id === report.id ? { ...r, status: next as DamageStatus } : r
-            )
+            current.map((r) => (r.id === report.id ? { ...r, status: next as DamageStatus } : r))
         );
 
         try {
-            const updated = (await updateDamageReport(report.id, {
-                status: next,
-            })) as DamageReportRow;
-            setRows((current) =>
-                current.map((r) => (r.id === updated.id ? updated : r))
-            );
+            const updated = (await updateDamageReport(report.id, { status: next })) as DamageReportRow;
+            setRows((current) => current.map((r) => (r.id === updated.id ? updated : r)));
             toast.success("Status updated", {
                 description: `Report #${updated.id} is now ${updated.status}.`,
             });
@@ -337,20 +325,13 @@ export default function LibrarianDamageReportsPage() {
     function openPhotoDialog(images: string[], startIndex = 0) {
         if (!images || !images.length) return;
         setPhotoDialogImages(images);
-        setPhotoDialogIndex(
-            Math.min(Math.max(startIndex, 0), images.length - 1)
-        );
+        setPhotoDialogIndex(Math.min(Math.max(startIndex, 0), images.length - 1));
         setPhotoDialogOpen(true);
     }
 
     const currentPhotoUrl =
         photoDialogImages.length > 0
-            ? photoDialogImages[
-            Math.min(
-                Math.max(photoDialogIndex, 0),
-                photoDialogImages.length - 1
-            )
-            ]
+            ? photoDialogImages[Math.min(Math.max(photoDialogIndex, 0), photoDialogImages.length - 1)]
             : "";
 
     function showPrevPhoto() {
@@ -375,17 +356,22 @@ export default function LibrarianDamageReportsPage() {
         const initialSeverity = report.severity ?? "minor";
         setAssessSeverity(initialSeverity);
 
-        const defaultStatus: DamageStatus =
-            report.status === "pending" ? "assessed" : report.status;
+        const defaultStatus: DamageStatus = report.status === "pending" ? "assessed" : report.status;
         setAssessStatus(defaultStatus);
 
         const baseFine =
-            typeof report.fee === "number"
-                ? report.fee
-                : suggestedFineFromSeverity(initialSeverity);
+            typeof report.fee === "number" ? report.fee : suggestedFineFromSeverity(initialSeverity);
         setAssessFee(String(baseFine));
+
         setAssessNotes(report.notes ?? "");
         setFeeEdited(false);
+
+        // Default liable user:
+        // - if already set, keep it
+        // - otherwise default to reporter/current borrower to avoid empty liability
+        const defaultLiable = report.liableUserId ?? report.userId ?? "";
+        setAssessLiableUserId(defaultLiable ? String(defaultLiable) : "");
+
         setAssessOpen(true);
     }
 
@@ -395,18 +381,39 @@ export default function LibrarianDamageReportsPage() {
         setAssessReport(null);
         setAssessNotes("");
         setAssessFee("");
+        setAssessLiableUserId("");
         setFeeEdited(false);
     }
 
     async function handleAssessSave() {
         if (!assessReport) return;
 
-        const trimmed = assessFee.trim();
-        const parsed = trimmed === "" ? 0 : Number(trimmed);
+        // Archived/paid cannot be edited
+        if (assessReport.archived || assessReport.status === "paid") {
+            toast.message("Archived record", {
+                description: "This report is already paid/archived and can no longer be edited.",
+            });
+            return;
+        }
 
-        if (!Number.isFinite(parsed) || parsed < 0) {
+        const trimmedFee = assessFee.trim();
+        const parsedFee = trimmedFee === "" ? 0 : Number(trimmedFee);
+
+        if (!Number.isFinite(parsedFee) || parsedFee < 0) {
             toast.warning("Invalid fine amount", {
                 description: "Fine must be a number greater than or equal to 0.",
+            });
+            return;
+        }
+
+        // Liable user parsing
+        const liableStr = assessLiableUserId.trim();
+        const liableParsed =
+            liableStr === "" ? null : Number.isFinite(Number(liableStr)) ? Number(liableStr) : NaN;
+
+        if (liableStr !== "" && (!Number.isFinite(liableParsed as number) || (liableParsed as number) <= 0)) {
+            toast.warning("Invalid liable user", {
+                description: "Liable User ID must be a valid numeric user id, or leave it blank to clear.",
             });
             return;
         }
@@ -414,7 +421,6 @@ export default function LibrarianDamageReportsPage() {
         setAssessSaving(true);
         const prevRows = rows;
 
-        // Optimistic update
         setRows((current) =>
             current.map((r) =>
                 r.id === assessReport.id
@@ -422,8 +428,9 @@ export default function LibrarianDamageReportsPage() {
                         ...r,
                         severity: assessSeverity,
                         status: assessStatus,
-                        fee: parsed,
+                        fee: parsedFee,
                         notes: assessNotes.trim() || null,
+                        liableUserId: liableStr === "" ? null : String(liableParsed),
                     }
                     : r
             )
@@ -433,19 +440,24 @@ export default function LibrarianDamageReportsPage() {
             const updated = (await updateDamageReport(assessReport.id, {
                 severity: assessSeverity,
                 status: assessStatus,
-                fee: parsed,
+                fee: parsedFee,
                 notes: assessNotes.trim() || null,
+                liableUserId: liableStr === "" ? null : (liableParsed as number),
             })) as DamageReportRow;
 
-            setRows((current) =>
-                current.map((r) => (r.id === updated.id ? updated : r))
-            );
+            setRows((current) => current.map((r) => (r.id === updated.id ? updated : r)));
+
+            const paidNote =
+                updated.status === "paid" || updated.archived
+                    ? ` (archived, paid: ${fmtDate(updated.paidAt)})`
+                    : "";
 
             toast.success("Assessment saved", {
                 description: `Report #${updated.id} updated (status: ${updated.status}, fine: ${peso(
                     updated.fee
-                )}).`,
+                )})${paidNote}.`,
             });
+
             closeAssessDialog();
         } catch (err: any) {
             setRows(prevRows);
@@ -466,46 +478,39 @@ export default function LibrarianDamageReportsPage() {
         if (!q) return list;
 
         return list.filter((r) => {
-            const userName = getUserName(r);
+            const reportedBy = getReportedByName(r);
+            const liableBy = getLiableName(r);
+
             const user =
-                (userName || "") +
-                " " +
-                (r.studentEmail || "") +
-                " " +
-                (r.studentId || "") +
-                " " +
-                String(r.userId || "");
-            const book = (r.bookTitle || "") + " " + String(r.bookId || "");
-            const damage =
-                (r.damageType || "") +
-                " " +
-                (r.severity || "") +
-                " " +
-                (r.status || "");
+                `${reportedBy} ${r.studentEmail || ""} ${r.studentId || ""} ${String(r.userId || "")}`;
+            const liable =
+                `${liableBy} ${r.liableStudentEmail || ""} ${r.liableStudentId || ""} ${String(r.liableUserId || "")}`;
+            const book = `${r.bookTitle || ""} ${String(r.bookId || "")}`;
+            const damage = `${r.damageType || ""} ${r.severity || ""} ${r.status || ""}`;
             const notes = r.notes || "";
+            const paid = r.paidAt ? fmtDate(r.paidAt) : "";
+
             return (
                 String(r.id).includes(q) ||
                 user.toLowerCase().includes(q) ||
+                liable.toLowerCase().includes(q) ||
                 book.toLowerCase().includes(q) ||
                 damage.toLowerCase().includes(q) ||
-                notes.toLowerCase().includes(q)
+                notes.toLowerCase().includes(q) ||
+                paid.toLowerCase().includes(q)
             );
         });
     }, [rows, statusFilter, search]);
 
     return (
         <DashboardLayout title="Damage Reports">
-            {/* Header: vertical on mobile, horizontal on desktop */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <div className="flex items-start gap-2">
                     <ShieldAlert className="h-5 w-5 mt-0.5 text-white/70" />
                     <div>
-                        <h2 className="text-lg font-semibold leading-tight">
-                            Book Damage Reports
-                        </h2>
+                        <h2 className="text-lg font-semibold leading-tight">Book Damage Reports</h2>
                         <p className="text-xs text-white/70">
-                            Track reported damages with photos, assess fines, and resolve
-                            statuses.
+                            Assign liability, assess fines, and archive reports when paid.
                         </p>
                     </div>
                 </div>
@@ -516,16 +521,13 @@ export default function LibrarianDamageReportsPage() {
                         <Input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search by ID, user name, book, info…"
+                            placeholder="Search by ID, reported by, liable user, book…"
                             className="pl-9 bg-slate-900/70 border-white/20 text-white"
                         />
                     </div>
 
                     <div className="w-full sm:w-44">
-                        <Select
-                            value={statusFilter}
-                            onValueChange={(v) => setStatusFilter(v as "all" | DamageStatus)}
-                        >
+                        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | DamageStatus)}>
                             <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
@@ -533,7 +535,7 @@ export default function LibrarianDamageReportsPage() {
                                 <SelectItem value="all">All statuses</SelectItem>
                                 <SelectItem value="pending">Pending</SelectItem>
                                 <SelectItem value="assessed">Assessed</SelectItem>
-                                <SelectItem value="paid">Paid</SelectItem>
+                                <SelectItem value="paid">Paid (archived)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -546,11 +548,7 @@ export default function LibrarianDamageReportsPage() {
                         onClick={handleRefresh}
                         disabled={refreshing || loading}
                     >
-                        {refreshing || loading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                            <RefreshCcw className="h-4 w-4" />
-                        )}
+                        {refreshing || loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                         <span className="sr-only">Refresh</span>
                     </Button>
                 </div>
@@ -571,60 +569,54 @@ export default function LibrarianDamageReportsPage() {
                             <Skeleton className="h-9 w-full" />
                         </div>
                     ) : error ? (
-                        <div className="py-6 text-center text-sm text-red-300">
-                            {error}
-                        </div>
+                        <div className="py-6 text-center text-sm text-red-300">{error}</div>
                     ) : filtered.length === 0 ? (
-                        <div className="py-10 text-center text-sm text-white/70">
-                            No damage reports found.
-                        </div>
+                        <div className="py-10 text-center text-sm text-white/70">No damage reports found.</div>
                     ) : (
                         <>
-                            {/* Desktop: Table (horizontal layout) */}
+                            {/* Desktop table */}
                             <div className="hidden md:block">
                                 <Table>
                                     <TableCaption className="text-xs text-white/60">
-                                        Showing {filtered.length}{" "}
-                                        {filtered.length === 1 ? "entry" : "entries"}.
+                                        Showing {filtered.length} {filtered.length === 1 ? "entry" : "entries"}.
                                     </TableCaption>
                                     <TableHeader>
                                         <TableRow className="border-white/10">
                                             <TableHead className="w-[90px] text-xs font-semibold text-white/70">
-                                                Damage Report ID
+                                                Report ID
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                User Name
+                                                Reported by
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                Book Title (or ID)
+                                                Liable user
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                Damage Information
+                                                Book
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70">
-                                                Uploaded Picture
+                                                Damage info
+                                            </TableHead>
+                                            <TableHead className="text-xs font-semibold text-white/70">
+                                                Photo
                                             </TableHead>
                                             <TableHead className="text-xs font-semibold text-white/70 text-right">
                                                 Actions
                                             </TableHead>
                                         </TableRow>
                                     </TableHeader>
+
                                     <TableBody>
                                         {filtered.map((r) => {
-                                            const userName = getUserName(r);
+                                            const reportedBy = getReportedByName(r);
+                                            const liableBy = getLiableName(r);
                                             const book = r.bookTitle || `Book #${r.bookId}`;
 
                                             const rawPhotos: string[] = (
-                                                r.photoUrls && r.photoUrls.length
-                                                    ? r.photoUrls
-                                                    : r.photoUrl
-                                                        ? [r.photoUrl]
-                                                        : []
+                                                r.photoUrls && r.photoUrls.length ? r.photoUrls : r.photoUrl ? [r.photoUrl] : []
                                             ).filter(Boolean) as string[];
 
-                                            const absPhotos = rawPhotos
-                                                .map((url) => toAbsoluteUrl(url))
-                                                .filter(Boolean);
+                                            const absPhotos = rawPhotos.map((url) => toAbsoluteUrl(url)).filter(Boolean);
                                             const primaryAbs = absPhotos[0] || "";
                                             const totalPhotos = absPhotos.length;
 
@@ -632,29 +624,22 @@ export default function LibrarianDamageReportsPage() {
                                             const isRowDeleting = deletingId === String(r.id);
                                             const disableActions = isRowUpdating || isRowDeleting;
 
-                                            // Quick status label: only for pending now
+                                            const isArchived = r.archived || r.status === "paid";
+
                                             let statusActionLabel: string | null = null;
-                                            if (r.status === "pending") {
-                                                statusActionLabel = "Mark assessed";
-                                            }
+                                            if (!isArchived && r.status === "pending") statusActionLabel = "Mark assessed";
 
                                             return (
                                                 <TableRow
                                                     key={r.id}
                                                     className="border-white/5 hover:bg-white/5 transition-colors"
                                                 >
-                                                    <TableCell className="text-xs opacity-80">
-                                                        {r.id}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm">
-                                                        {userName}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm">
-                                                        {book}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm align-top">
-                                                        {formatDamageInfo(r)}
-                                                    </TableCell>
+                                                    <TableCell className="text-xs opacity-80">{r.id}</TableCell>
+                                                    <TableCell className="text-sm">{reportedBy}</TableCell>
+                                                    <TableCell className="text-sm">{liableBy}</TableCell>
+                                                    <TableCell className="text-sm">{book}</TableCell>
+                                                    <TableCell className="text-sm align-top">{formatDamageInfo(r)}</TableCell>
+
                                                     <TableCell className="text-sm">
                                                         {primaryAbs ? (
                                                             <div className="flex flex-col items-start gap-1">
@@ -684,9 +669,9 @@ export default function LibrarianDamageReportsPage() {
                                                             <span className="opacity-60">—</span>
                                                         )}
                                                     </TableCell>
+
                                                     <TableCell className="text-right text-xs">
                                                         <div className="inline-flex items-center justify-end gap-1">
-                                                            {/* Assess button */}
                                                             <Button
                                                                 type="button"
                                                                 size="sm"
@@ -695,10 +680,9 @@ export default function LibrarianDamageReportsPage() {
                                                                 onClick={() => openAssessDialog(r)}
                                                                 disabled={disableActions}
                                                             >
-                                                                Assess &amp; set fine
+                                                                {isArchived ? "View" : "Assess / liability"}
                                                             </Button>
 
-                                                            {/* Quick status step (pending -> assessed only) */}
                                                             {statusActionLabel && (
                                                                 <Button
                                                                     type="button"
@@ -716,7 +700,6 @@ export default function LibrarianDamageReportsPage() {
                                                                 </Button>
                                                             )}
 
-                                                            {/* Delete */}
                                                             <AlertDialog>
                                                                 <AlertDialogTrigger asChild>
                                                                     <Button
@@ -731,20 +714,16 @@ export default function LibrarianDamageReportsPage() {
                                                                         ) : (
                                                                             <Trash2 className="h-3.5 w-3.5" />
                                                                         )}
-                                                                        <span className="sr-only">
-                                                                            Delete damage report
-                                                                        </span>
+                                                                        <span className="sr-only">Delete damage report</span>
                                                                     </Button>
                                                                 </AlertDialogTrigger>
+
                                                                 <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
                                                                     <AlertDialogHeader>
-                                                                        <AlertDialogTitle>
-                                                                            Delete report #{r.id}?
-                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogTitle>Delete report #{r.id}?</AlertDialogTitle>
                                                                         <AlertDialogDescription className="text-white/70">
-                                                                            This action cannot be undone. The damage
-                                                                            report will be permanently removed from
-                                                                            the system.
+                                                                            This action cannot be undone. The damage report (active or archived)
+                                                                            will be permanently removed from the system.
                                                                         </AlertDialogDescription>
                                                                     </AlertDialogHeader>
                                                                     <AlertDialogFooter>
@@ -769,23 +748,18 @@ export default function LibrarianDamageReportsPage() {
                                 </Table>
                             </div>
 
-                            {/* Mobile: Stacked cards (vertical layout) */}
+                            {/* Mobile cards */}
                             <div className="md:hidden space-y-3">
                                 {filtered.map((r) => {
-                                    const userName = getUserName(r);
+                                    const reportedBy = getReportedByName(r);
+                                    const liableBy = getLiableName(r);
                                     const book = r.bookTitle || `Book #${r.bookId}`;
 
                                     const rawPhotos: string[] = (
-                                        r.photoUrls && r.photoUrls.length
-                                            ? r.photoUrls
-                                            : r.photoUrl
-                                                ? [r.photoUrl]
-                                                : []
+                                        r.photoUrls && r.photoUrls.length ? r.photoUrls : r.photoUrl ? [r.photoUrl] : []
                                     ).filter(Boolean) as string[];
 
-                                    const absPhotos = rawPhotos
-                                        .map((url) => toAbsoluteUrl(url))
-                                        .filter(Boolean);
+                                    const absPhotos = rawPhotos.map((url) => toAbsoluteUrl(url)).filter(Boolean);
                                     const primaryAbs = absPhotos[0] || "";
                                     const totalPhotos = absPhotos.length;
 
@@ -793,53 +767,40 @@ export default function LibrarianDamageReportsPage() {
                                     const isRowDeleting = deletingId === String(r.id);
                                     const disableActions = isRowUpdating || isRowDeleting;
 
-                                    // Quick status label: only for pending now
+                                    const isArchived = r.archived || r.status === "paid";
+
                                     let statusActionLabel: string | null = null;
-                                    if (r.status === "pending") {
-                                        statusActionLabel = "Mark assessed";
-                                    }
+                                    if (!isArchived && r.status === "pending") statusActionLabel = "Mark assessed";
 
                                     return (
-                                        <div
-                                            key={r.id}
-                                            className="rounded-xl border border-white/10 bg-slate-900/60 p-3"
-                                        >
+                                        <div key={r.id} className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
                                             <div className="flex items-center justify-between">
-                                                <div className="text-xs text-white/60">
-                                                    Damage Report ID
-                                                </div>
-                                                <div className="text-xs font-semibold">
-                                                    {r.id}
-                                                </div>
+                                                <div className="text-xs text-white/60">Report ID</div>
+                                                <div className="text-xs font-semibold">{r.id}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">
-                                                    User Name
-                                                </div>
-                                                <div className="text-sm">{userName}</div>
+                                                <div className="text-[11px] text-white/60">Reported by</div>
+                                                <div className="text-sm">{reportedBy}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">
-                                                    Book Title (or ID)
-                                                </div>
+                                                <div className="text-[11px] text-white/60">Liable user</div>
+                                                <div className="text-sm">{liableBy}</div>
+                                            </div>
+
+                                            <div className="mt-2">
+                                                <div className="text-[11px] text-white/60">Book</div>
                                                 <div className="text-sm">{book}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">
-                                                    Damage Information
-                                                </div>
-                                                <div className="text-sm">
-                                                    {formatDamageInfo(r)}
-                                                </div>
+                                                <div className="text-[11px] text-white/60">Damage info</div>
+                                                <div className="text-sm">{formatDamageInfo(r)}</div>
                                             </div>
 
                                             <div className="mt-2">
-                                                <div className="text-[11px] text-white/60">
-                                                    Uploaded Picture
-                                                </div>
+                                                <div className="text-[11px] text-white/60">Photo</div>
                                                 {primaryAbs ? (
                                                     <div className="flex flex-col items-start gap-1">
                                                         <button
@@ -869,7 +830,6 @@ export default function LibrarianDamageReportsPage() {
                                                 )}
                                             </div>
 
-                                            {/* Actions (stacked on mobile) */}
                                             <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2">
                                                 <Button
                                                     type="button"
@@ -878,7 +838,7 @@ export default function LibrarianDamageReportsPage() {
                                                     onClick={() => openAssessDialog(r)}
                                                     disabled={disableActions}
                                                 >
-                                                    Assess &amp; set fine
+                                                    {isArchived ? "View" : "Assess / liability"}
                                                 </Button>
 
                                                 {statusActionLabel && (
@@ -923,13 +883,12 @@ export default function LibrarianDamageReportsPage() {
                                                             )}
                                                         </Button>
                                                     </AlertDialogTrigger>
+
                                                     <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
                                                         <AlertDialogHeader>
-                                                            <AlertDialogTitle>
-                                                                Delete report #{r.id}?
-                                                            </AlertDialogTitle>
+                                                            <AlertDialogTitle>Delete report #{r.id}?</AlertDialogTitle>
                                                             <AlertDialogDescription className="text-white/70">
-                                                                This action cannot be undone. The damage report
+                                                                This action cannot be undone. The damage report (active or archived)
                                                                 will be permanently removed from the system.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
@@ -963,19 +922,15 @@ export default function LibrarianDamageReportsPage() {
                         <DialogTitle className="text-sm">
                             Damage photo preview
                             {photoDialogImages.length > 1
-                                ? ` (${photoDialogIndex + 1} of ${photoDialogImages.length
-                                })`
+                                ? ` (${photoDialogIndex + 1} of ${photoDialogImages.length})`
                                 : ""}
                         </DialogTitle>
                     </DialogHeader>
+
                     {currentPhotoUrl ? (
                         <div className="mt-2 flex flex-col gap-4">
                             <div className="relative max-h-[70vh] overflow-hidden rounded-lg border border-white/20 bg-black/40">
-                                <img
-                                    src={currentPhotoUrl}
-                                    alt="Damage proof"
-                                    className="max-h-[70vh] w-full object-contain"
-                                />
+                                <img src={currentPhotoUrl} alt="Damage proof" className="max-h-[70vh] w-full object-contain" />
                             </div>
                             {photoDialogImages.length > 1 && (
                                 <div className="flex items-center justify-between text-xs text-white/70">
@@ -1013,17 +968,16 @@ export default function LibrarianDamageReportsPage() {
             <Dialog
                 open={assessOpen}
                 onOpenChange={(open) => {
-                    if (!open) {
-                        closeAssessDialog();
-                    } else if (assessReport) {
-                        setAssessOpen(true);
-                    }
+                    if (!open) closeAssessDialog();
+                    else if (assessReport) setAssessOpen(true);
                 }}
             >
                 <DialogContent className="max-w-2xl bg-slate-900 text-white border-white/10">
                     <DialogHeader>
                         <DialogTitle className="text-sm">
-                            Assess damage report
+                            {assessReport?.archived || assessReport?.status === "paid"
+                                ? "View archived damage report"
+                                : "Assess damage report"}
                             {assessReport ? ` #${assessReport.id}` : ""}
                         </DialogTitle>
                     </DialogHeader>
@@ -1032,114 +986,135 @@ export default function LibrarianDamageReportsPage() {
                         <div className="mt-3 space-y-4 text-sm">
                             {/* Context */}
                             <div className="rounded-md border border-white/10 bg-slate-900/70 px-3 py-2">
-                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1">
+                                <div className="grid gap-2 md:grid-cols-2">
                                     <div>
-                                        <div className="text-xs text-white/60">User</div>
-                                        <div className="text-sm font-medium">
-                                            {getUserName(assessReport)}
-                                        </div>
+                                        <div className="text-xs text-white/60">Reported by</div>
+                                        <div className="text-sm font-medium">{getReportedByName(assessReport)}</div>
                                     </div>
-                                    <div className="mt-2 md:mt-0">
-                                        <div className="text-xs text-white/60">Book</div>
-                                        <div className="text-sm font-medium">
-                                            {assessReport.bookTitle || `Book #${assessReport.bookId}`}
-                                        </div>
+                                    <div>
+                                        <div className="text-xs text-white/60">Liable user</div>
+                                        <div className="text-sm font-medium">{getLiableName(assessReport)}</div>
                                     </div>
                                 </div>
+
                                 <div className="mt-2 text-xs text-white/70">
+                                    <div>Book: {assessReport.bookTitle || `Book #${assessReport.bookId}`}</div>
                                     <div>Damage: {assessReport.damageType}</div>
-                                    {assessReport.reportedAt && (
-                                        <div>Reported: {fmtDate(assessReport.reportedAt)}</div>
+                                    {assessReport.reportedAt && <div>Reported: {fmtDate(assessReport.reportedAt)}</div>}
+                                    {(assessReport.status === "paid" || assessReport.archived) && (
+                                        <div>Paid: {fmtDate(assessReport.paidAt)}</div>
                                     )}
                                 </div>
                             </div>
 
+                            {(assessReport.archived || assessReport.status === "paid") ? (
+                                <div className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 text-xs text-white/70">
+                                    This report is already <span className="font-semibold">paid/archived</span> and cannot be edited.
+                                </div>
+                            ) : null}
+
                             <div className="grid gap-4 md:grid-cols-2">
-                                {/* Left: severity + status + notes */}
+                                {/* Left */}
                                 <div className="space-y-3">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-white/80">
-                                            Severity
-                                        </label>
+                                        <label className="text-xs font-medium text-white/80">Severity</label>
                                         <Select
                                             value={assessSeverity}
                                             onValueChange={(v) => {
                                                 const sev = v as Severity;
                                                 setAssessSeverity(sev);
-                                                if (!feeEdited) {
-                                                    setAssessFee(
-                                                        String(suggestedFineFromSeverity(sev))
-                                                    );
-                                                }
+                                                if (!feeEdited) setAssessFee(String(suggestedFineFromSeverity(sev)));
                                             }}
+                                            disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
                                         >
                                             <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                <SelectItem value="minor">
-                                                    Minor (cosmetic)
-                                                </SelectItem>
-                                                <SelectItem value="moderate">
-                                                    Moderate (affects reading)
-                                                </SelectItem>
-                                                <SelectItem value="major">
-                                                    Major (pages missing / severe)
-                                                </SelectItem>
+                                                <SelectItem value="minor">Minor (cosmetic)</SelectItem>
+                                                <SelectItem value="moderate">Moderate (affects reading)</SelectItem>
+                                                <SelectItem value="major">Major (pages missing / severe)</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
 
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-white/80">
-                                            Status
-                                        </label>
+                                        <label className="text-xs font-medium text-white/80">Status</label>
                                         <Select
                                             value={assessStatus}
-                                            onValueChange={(v) =>
-                                                setAssessStatus(v as DamageStatus)
-                                            }
+                                            onValueChange={(v) => setAssessStatus(v as DamageStatus)}
+                                            disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
                                         >
                                             <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                <SelectItem value="pending">
-                                                    Pending (not yet assessed)
-                                                </SelectItem>
-                                                <SelectItem value="assessed">
-                                                    Assessed (awaiting payment)
-                                                </SelectItem>
-                                                <SelectItem value="paid">
-                                                    Paid (settled by user)
-                                                </SelectItem>
+                                                <SelectItem value="pending">Pending (not yet assessed)</SelectItem>
+                                                <SelectItem value="assessed">Assessed (awaiting payment)</SelectItem>
+                                                <SelectItem value="paid">Paid (archive this report)</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        <p className="text-[11px] text-white/55">
+                                            Setting status to <span className="font-semibold">Paid</span> will move this record to the paid archive.
+                                        </p>
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-medium text-white/80">
-                                            Notes for record{" "}
-                                            <span className="text-white/40">(optional)</span>
+                                            Liable User ID <span className="text-white/40">(can be previous borrower)</span>
+                                        </label>
+                                        <Input
+                                            value={assessLiableUserId}
+                                            onChange={(e) => setAssessLiableUserId(e.target.value)}
+                                            placeholder="e.g. 123"
+                                            className="bg-slate-900/70 border-white/20 text-white"
+                                            disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
+                                            inputMode="numeric"
+                                        />
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                className="text-[11px] text-amber-300 hover:text-amber-200 underline-offset-2 hover:underline"
+                                                onClick={() => setAssessLiableUserId(String(assessReport.userId))}
+                                                disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
+                                            >
+                                                Use reported-by user
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="text-[11px] text-white/60 hover:text-white/90 underline-offset-2 hover:underline"
+                                                onClick={() => setAssessLiableUserId("")}
+                                                disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
+                                            >
+                                                Clear liable user
+                                            </button>
+                                        </div>
+                                        <p className="text-[11px] text-white/55">
+                                            The fine will be charged to the liable user (if set). If blank, liability is considered “unassigned”.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-white/80">
+                                            Notes for record <span className="text-white/40">(optional)</span>
                                         </label>
                                         <textarea
                                             value={assessNotes}
                                             onChange={(e) => setAssessNotes(e.target.value)}
                                             rows={4}
                                             className="w-full rounded-md border border-white/20 bg-slate-900/70 px-3 py-2 text-xs text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-amber-500/70"
-                                            placeholder="Example: Damage existed before this borrower; no fee charged. Or: User admitted spilling water on pages."
+                                            placeholder="Example: Damage existed before this borrower; previous borrower is liable."
+                                            disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
                                         />
                                     </div>
                                 </div>
 
-                                {/* Right: fine */}
+                                {/* Right */}
                                 <div className="space-y-3">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-medium text-white/80 flex items-center justify-between gap-2">
                                             Assessed fine (₱)
-                                            <span className="text-[10px] text-white/50">
-                                                Set to 0 if borrower is not liable
-                                            </span>
+                                            <span className="text-[10px] text-white/50">Set 0 if no fine</span>
                                         </label>
                                         <Input
                                             value={assessFee}
@@ -1150,6 +1125,7 @@ export default function LibrarianDamageReportsPage() {
                                             inputMode="decimal"
                                             placeholder="0.00"
                                             className="bg-slate-900/70 border-white/20 text-white"
+                                            disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
                                         />
                                     </div>
 
@@ -1157,8 +1133,7 @@ export default function LibrarianDamageReportsPage() {
                                         <div>
                                             Suggested fine for{" "}
                                             <span className="font-semibold">
-                                                {assessSeverity.charAt(0).toUpperCase() +
-                                                    assessSeverity.slice(1)}
+                                                {assessSeverity.charAt(0).toUpperCase() + assessSeverity.slice(1)}
                                             </span>{" "}
                                             damage:{" "}
                                             <span className="font-semibold text-amber-200">
@@ -1169,23 +1144,14 @@ export default function LibrarianDamageReportsPage() {
                                             type="button"
                                             className="text-[11px] text-amber-300 hover:text-amber-200 underline-offset-2 hover:underline"
                                             onClick={() => {
-                                                setAssessFee(
-                                                    String(suggestedFineFromSeverity(assessSeverity))
-                                                );
+                                                setAssessFee(String(suggestedFineFromSeverity(assessSeverity)));
                                                 setFeeEdited(false);
                                             }}
+                                            disabled={assessSaving || assessReport.archived || assessReport.status === "paid"}
                                         >
                                             Use suggested fine
                                         </button>
-                                        <p>
-                                            You can override this amount based on library policy.
-                                        </p>
-                                        <p>
-                                            If the book was already damaged when borrowed, or
-                                            another borrower is responsible, set the fine to{" "}
-                                            <span className="font-semibold">0</span> and explain in
-                                            the notes.
-                                        </p>
+                                        <p>You can override this amount based on library policy.</p>
                                     </div>
                                 </div>
                             </div>
@@ -1198,23 +1164,26 @@ export default function LibrarianDamageReportsPage() {
                                     disabled={assessSaving}
                                     onClick={closeAssessDialog}
                                 >
-                                    Cancel
+                                    Close
                                 </Button>
-                                <Button
-                                    type="button"
-                                    className="bg-amber-600 hover:bg-amber-700 text-white"
-                                    disabled={assessSaving}
-                                    onClick={() => void handleAssessSave()}
-                                >
-                                    {assessSaving ? (
-                                        <span className="inline-flex items-center gap-2">
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            Saving…
-                                        </span>
-                                    ) : (
-                                        "Save assessment"
-                                    )}
-                                </Button>
+
+                                {!(assessReport.archived || assessReport.status === "paid") ? (
+                                    <Button
+                                        type="button"
+                                        className="bg-amber-600 hover:bg-amber-700 text-white"
+                                        disabled={assessSaving}
+                                        onClick={() => void handleAssessSave()}
+                                    >
+                                        {assessSaving ? (
+                                            <span className="inline-flex items-center gap-2">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Saving…
+                                            </span>
+                                        ) : (
+                                            "Save assessment"
+                                        )}
+                                    </Button>
+                                ) : null}
                             </div>
                         </div>
                     ) : (

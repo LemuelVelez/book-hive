@@ -7,17 +7,33 @@ export type DamageSeverity = "minor" | "moderate" | "major";
 
 export type DamageReportDTO = {
     id: string;
+
+    /** The user who submitted/reported the damage (often current borrower at the time). */
     userId: string;
     studentEmail: string | null;
     studentId: string | null;
     studentName?: string | null;
+
+    /** The user who is LIABLE for the damage (can be previous borrower). */
+    liableUserId: string | null;
+    liableStudentEmail: string | null;
+    liableStudentId: string | null;
+    liableStudentName?: string | null;
+
     bookId: string;
     bookTitle: string | null;
+
     damageType: string;
     severity: DamageSeverity;
     fee: number;
     status: DamageStatus;
+
+    /** True if moved into the paid/archive table. */
+    archived: boolean;
+
     reportedAt: string;
+    paidAt: string | null;
+
     notes: string | null;
     photoUrls: string[]; // up to 3 URLs
 };
@@ -44,14 +60,11 @@ function getErrorMessage(e: unknown): string {
     }
 }
 
-async function requestJSON<T = unknown>(
-    url: string,
-    init: FetchInit = {}
-): Promise<T> {
+async function requestJSON<T = unknown>(url: string, init: FetchInit = {}): Promise<T> {
     const { asFormData, body, headers, ...rest } = init;
 
     const finalInit: RequestInit = {
-        credentials: "include", // use cookies for auth session
+        credentials: "include",
         method: "GET",
         ...rest,
         headers: new Headers(headers || {}),
@@ -120,9 +133,7 @@ export type CreateDamageReportPayload = {
     photos?: File[]; // up to 3 files
 };
 
-export async function createDamageReport(
-    payload: CreateDamageReportPayload
-): Promise<DamageReportDTO> {
+export async function createDamageReport(payload: CreateDamageReportPayload): Promise<DamageReportDTO> {
     const fd = new FormData();
     fd.append("bookId", String(payload.bookId));
     fd.append("damageType", payload.damageType);
@@ -137,7 +148,6 @@ export async function createDamageReport(
     }
 
     if (payload.photos && payload.photos.length) {
-        // backend expects field "photos" (array), max 3
         payload.photos.slice(0, 3).forEach((file) => {
             fd.append("photos", file);
         });
@@ -155,6 +165,7 @@ export async function createDamageReport(
 
 /**
  * List all damage reports (librarian/admin).
+ * Backend returns UNION of active + archived/paid.
  */
 export async function fetchDamageReports(): Promise<DamageReportDTO[]> {
     type Resp = JsonOk<{ reports: DamageReportDTO[] }>;
@@ -167,11 +178,14 @@ export type UpdateDamageReportPayload = Partial<{
     severity: DamageSeverity;
     fee: number;
     notes: string | null;
+
+    /** Liable user can differ from reporter/current borrower */
+    liableUserId: string | number | null;
 }>;
 
 /**
- * Update a damage report (status, severity, fee, notes).
- * Used by the librarian dashboard for assessments.
+ * Update a damage report (status, severity, fee, notes, liable user).
+ * If status becomes "paid", backend archives it into a separate table.
  */
 export async function updateDamageReport(
     id: string | number,
@@ -187,10 +201,9 @@ export async function updateDamageReport(
 
 /**
  * Delete a damage report (librarian/admin).
+ * Works for both active and archived.
  */
-export async function deleteDamageReport(
-    id: string | number
-): Promise<void> {
+export async function deleteDamageReport(id: string | number): Promise<void> {
     type Resp = JsonOk<{ message?: string }>;
     await requestJSON<Resp>(DAMAGE_ROUTES.delete(id), {
         method: "DELETE",
