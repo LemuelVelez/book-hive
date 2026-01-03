@@ -10,9 +10,4 @@ export const FINES_ROUTES = {
         api(`/fines/${encodeURIComponent(String(id))}`), // not used yet
     update: (id: string | number) =>
         api(`/fines/${encodeURIComponent(String(id))}`), // PATCH (librarian/admin)
-    pay: (id: string | number) =>
-        api(`/fines/${encodeURIComponent(String(id))}/pay`), // POST (student pay -> pending_verification)
-    uploadProofs: (id: string | number) =>
-        api(`/fines/${encodeURIComponent(String(id))}/proofs`), // GET/POST (upload + list proof images)
-    paymentConfig: api("/fines/payment-config"), // GET/POST (global e-wallet phone + QR config)
 } as const;

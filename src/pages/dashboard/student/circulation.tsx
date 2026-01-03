@@ -234,7 +234,7 @@ export default function StudentCirculationPage() {
   const totalActiveFine = React.useMemo(
     () =>
       fines.reduce((sum, f) => {
-        if (f.status !== "active") return sum;
+        if (String((f as any).status) !== "active") return sum;
         const amount = normalizeFine(f.amount);
         return amount > 0 ? sum + amount : sum;
       }, 0),
@@ -415,9 +415,9 @@ export default function StudentCirculationPage() {
             </p>
 
             <p className="mt-1 text-[11px] text-emerald-200/90">
-              To <span className="font-semibold">pay any fines</span>, use your{" "}
-              <span className="font-semibold">Fines</span> page, where you can
-              upload payment receipts and track verification.
+              Fine payments are{" "}
+              <span className="font-semibold">over the counter only</span>. Please go to the library to pay
+              physically; the librarian will mark the fine as <span className="font-semibold">Paid</span>.
             </p>
           </div>
         </div>
@@ -513,13 +513,13 @@ export default function StudentCirculationPage() {
           </p>
 
           <p className="mt-1 text-[11px] text-white/60">
-            Returned rows with the{" "}
+            Rows with the{" "}
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
               Active fine
             </span>{" "}
-            tag indicate fines that are still active (unpaid). You can pay those
-            from your <span className="font-semibold">Fines</span> page.
+            tag indicate unpaid fines. Payments are{" "}
+            <span className="font-semibold">over the counter only</span>.
           </p>
         </CardHeader>
 
@@ -560,7 +560,6 @@ export default function StudentCirculationPage() {
                     value={group.key}
                     className="border-white/10"
                   >
-                    {/* ✅ slight highlight on user header */}
                     <div className="rounded-md bg-white/4 px-3">
                       <AccordionTrigger className="py-3 text-white/90 hover:no-underline items-center">
                         <div className="flex w-full items-center justify-between gap-4">
@@ -578,7 +577,6 @@ export default function StudentCirculationPage() {
                     </div>
 
                     <AccordionContent className="pb-2">
-                      {/* ✅ highlighted username above the table */}
                       <div className="mb-3 rounded-md px-3 py-2">
                         <div className="text-[11px] uppercase tracking-wide text-white/50">
                           User
@@ -596,8 +594,7 @@ export default function StudentCirculationPage() {
                             <span className="font-semibold text-white/80">{group.name}</span>. Returned rows
                             with an{" "}
                             <span className="font-semibold text-amber-200">Active fine</span>{" "}
-                            tag have unpaid fines you can pay from your{" "}
-                            <span className="font-semibold">Fines</span> page.
+                            tag have unpaid fines (pay over the counter at the library).
                           </TableCaption>
 
                           <TableHeader>
@@ -640,6 +637,13 @@ export default function StudentCirculationPage() {
                                 isPendingPickup || isPendingReturn || isLegacyPending;
 
                               const linkedFine = finesByBorrowId[record.id];
+
+                              // IMPORTANT: compare fine status as string to avoid TS2367
+                              // (FineStatus union may not include older values like "pending_verification")
+                              const linkedFineStatus = linkedFine
+                                ? String((linkedFine as any).status ?? "")
+                                : "";
+
                               const fineAmountFromRecord = normalizeFine((record as any).fine);
                               const finalFineAmount = linkedFine
                                 ? normalizeFine(linkedFine.amount)
@@ -779,26 +783,29 @@ export default function StudentCirculationPage() {
                                         </span>
                                       )}
 
-                                      {linkedFine && linkedFine.status === "active" && (
+                                      {linkedFine && linkedFineStatus === "active" && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
                                           <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
                                           Active fine (unpaid)
                                         </span>
                                       )}
-                                      {linkedFine &&
-                                        linkedFine.status === "pending_verification" && (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100 border border-amber-300/40">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-amber-200" />
-                                            Payment pending verification
-                                          </span>
-                                        )}
-                                      {linkedFine && linkedFine.status === "paid" && (
+
+                                      {/* Legacy support only (if old data exists) */}
+                                      {linkedFine && linkedFineStatus === "pending_verification" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
+                                          <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                                          Awaiting librarian update
+                                        </span>
+                                      )}
+
+                                      {linkedFine && linkedFineStatus === "paid" && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40">
                                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                                           Fine paid
                                         </span>
                                       )}
-                                      {linkedFine && linkedFine.status === "cancelled" && (
+
+                                      {linkedFine && linkedFineStatus === "cancelled" && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
                                           <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
                                           Fine cancelled

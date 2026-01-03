@@ -3,7 +3,11 @@ import { FINES_ROUTES } from "@/api/fines/route";
 import { API_BASE } from "@/api/auth/route";
 import type { BorrowStatus } from "@/lib/borrows";
 
-export type FineStatus = "active" | "pending_verification" | "paid" | "cancelled";
+/**
+ * Over-the-counter only:
+ * - Removed: pending_verification, payment config, proof uploads, student pay flow
+ */
+export type FineStatus = "active" | "paid" | "cancelled";
 
 export type FineDTO = {
   id: string;
@@ -31,19 +35,6 @@ export type FineDTO = {
   borrowStatus: BorrowStatus | null;
   borrowDueDate: string | null;
   borrowReturnDate: string | null;
-};
-
-export type FineProofDTO = {
-  id: string;
-  fineId: string;
-  imageUrl: string;
-  kind: string;
-  uploadedAt: string;
-};
-
-export type PaymentConfigDTO = {
-  eWalletPhone: string | null;
-  qrCodeUrl: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -145,7 +136,7 @@ export async function fetchMyFines(): Promise<FineDTO[]> {
  * List fines (librarian/admin).
  * Optional filters:
  *   - userId: limit to a specific user
- *   - status: active | pending_verification | paid | cancelled
+ *   - status: active | paid | cancelled
  */
 export type FetchFinesParams = Partial<{
   userId: string | number;
@@ -159,7 +150,11 @@ export async function fetchFines(params?: FetchFinesParams): Promise<FineDTO[]> 
 
   if (params) {
     const search = new URLSearchParams();
-    if (params.userId !== undefined && params.userId !== null && params.userId !== "") {
+    if (
+      params.userId !== undefined &&
+      params.userId !== null &&
+      params.userId !== ""
+    ) {
       search.set("userId", String(params.userId));
     }
     if (params.status) {
@@ -176,21 +171,10 @@ export async function fetchFines(params?: FetchFinesParams): Promise<FineDTO[]> 
 }
 
 /**
- * Student action: request payment for their own fine.
- * - Sets status to "pending_verification" on the server.
- */
-export async function requestFinePayment(
-  id: string | number
-): Promise<FineDTO> {
-  type Resp = JsonOk<{ fine: FineDTO }>;
-  const res = await requestJSON<Resp>(FINES_ROUTES.pay(id), {
-    method: "POST",
-  });
-  return res.fine;
-}
-
-/**
- * Librarian/Admin action: general fine update.
+ * Librarian/Admin action: update fine.
+ * - status: active | paid | cancelled
+ * - amount: >= 0
+ * - reason: optional note
  */
 export type UpdateFinePayload = Partial<{
   status: FineStatus;
@@ -208,77 +192,4 @@ export async function updateFine(
     body: payload,
   });
   return res.fine;
-}
-
-/* ---------------- Payment proofs (images) ---------------- */
-
-/**
- * Upload a proof image (e.g. student payment screenshot) for a fine.
- * Uses Amazon S3 on the backend.
- */
-export async function uploadFineProofImage(
-  id: string | number,
-  file: File | Blob,
-  opts?: { kind?: string }
-): Promise<FineProofDTO> {
-  const form = new FormData();
-  form.append("image", file);
-  if (opts?.kind) {
-    form.append("kind", opts.kind);
-  }
-
-  type Resp = JsonOk<{ proof: FineProofDTO }>;
-  const res = await requestJSON<Resp>(FINES_ROUTES.uploadProofs(id), {
-    method: "POST",
-    body: form,
-    asFormData: true,
-  });
-  return res.proof;
-}
-
-/**
- * List proof images for a fine (librarian / student).
- */
-export async function fetchFineProofs(
-  id: string | number
-): Promise<FineProofDTO[]> {
-  type Resp = JsonOk<{ proofs: FineProofDTO[] }>;
-  const res = await requestJSON<Resp>(FINES_ROUTES.uploadProofs(id), {
-    method: "GET",
-  });
-  return res.proofs;
-}
-
-/* ---------------- Global payment config (e-wallet + QR) ---------------- */
-
-export async function fetchPaymentConfig(): Promise<PaymentConfigDTO | null> {
-  type Resp = JsonOk<{ config: PaymentConfigDTO | null }>;
-  const res = await requestJSON<Resp>(FINES_ROUTES.paymentConfig, {
-    method: "GET",
-  });
-  return res.config ?? null;
-}
-
-/**
- * Save the library payment settings (librarian/admin only).
- * - eWalletPhone: string (empty string will clear the number)
- * - qrCodeFile: optional File to replace the QR image
- */
-export async function savePaymentConfig(
-  eWalletPhone: string,
-  qrCodeFile?: File | null
-): Promise<PaymentConfigDTO> {
-  const form = new FormData();
-  form.append("eWalletPhone", eWalletPhone);
-  if (qrCodeFile) {
-    form.append("qrCode", qrCodeFile);
-  }
-
-  type Resp = JsonOk<{ config: PaymentConfigDTO }>;
-  const res = await requestJSON<Resp>(FINES_ROUTES.paymentConfig, {
-    method: "POST",
-    body: form,
-    asFormData: true,
-  });
-  return res.config;
 }

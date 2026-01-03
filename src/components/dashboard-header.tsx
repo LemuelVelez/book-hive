@@ -570,7 +570,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
                         <DropdownMenuContent
                             align="end"
-                            className="w-[220px] bg-slate-900 text-white border-white/10"
+                            className="w-[230px] bg-slate-900 text-white border-white/10"
                         >
                             <DropdownMenuLabel className="font-normal">
                                 <div className="flex items-center gap-2">
