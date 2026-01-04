@@ -85,7 +85,6 @@ function fmtDateTime(d?: string | null) {
   try {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return d;
-    // readable but still compact
     return date.toLocaleString("en-CA", {
       year: "numeric",
       month: "2-digit",
@@ -111,17 +110,12 @@ function peso(n: number) {
   }
 }
 
-// Normalize any "fine-like" value into a safe number
 function normalizeFine(value: any): number {
   if (value === null || value === undefined) return 0;
   const num = typeof value === "number" ? value : Number(value);
   return Number.isNaN(num) ? 0 : num;
 }
 
-/**
- * Compute overdue days based purely on due date vs today (local),
- * same behavior as the librarian view.
- */
 function computeOverdueDays(dueDate?: string | null): number {
   if (!dueDate) return 0;
   const due = new Date(dueDate);
@@ -148,7 +142,6 @@ export default function StudentCirculationPage() {
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [returnBusyId, setReturnBusyId] = React.useState<string | null>(null);
 
-  // ✅ extension UI state
   const [extendBusyId, setExtendBusyId] = React.useState<string | null>(null);
   const [extendDaysById, setExtendDaysById] = React.useState<
     Record<string, string>
@@ -195,7 +188,6 @@ export default function StudentCirculationPage() {
     let rows = [...records];
 
     if (statusFilter === "borrowed") {
-      // "Active" = anything that is not returned
       rows = rows.filter((r) => r.status !== "returned");
     } else if (statusFilter === "returned") {
       rows = rows.filter((r) => r.status === "returned");
@@ -210,7 +202,6 @@ export default function StudentCirculationPage() {
       });
     }
 
-    // Newest borrow first
     return rows.sort((a, b) => b.borrowDate.localeCompare(a.borrowDate));
   }, [records, statusFilter, search]);
 
@@ -219,7 +210,6 @@ export default function StudentCirculationPage() {
     [records]
   );
 
-  // Map fines by borrow_record_id for quick lookup
   const finesByBorrowId = React.useMemo(() => {
     const map: Record<string, FineDTO> = {};
     for (const f of fines) {
@@ -230,7 +220,6 @@ export default function StudentCirculationPage() {
     return map;
   }, [fines]);
 
-  // Active fines = fines table rows whose status === 'active' (unpaid)
   const totalActiveFine = React.useMemo(
     () =>
       fines.reduce((sum, f) => {
@@ -241,7 +230,6 @@ export default function StudentCirculationPage() {
     [fines]
   );
 
-  // ✅ Group by user (studentName) for a clean, non-duplicated layout
   const groupedByUser = React.useMemo(() => {
     const map = new Map<string, BorrowRecordDTO[]>();
 
@@ -263,7 +251,6 @@ export default function StudentCirculationPage() {
       };
     });
 
-    // Put "You" first if it exists, then alphabetical
     groups.sort((a, b) => {
       if (a.name === "You" && b.name !== "You") return -1;
       if (b.name === "You" && a.name !== "You") return 1;
@@ -306,7 +293,6 @@ export default function StudentCirculationPage() {
     }
   }
 
-  // ✅ request extension (now: creates a pending request for approval)
   async function handleRequestExtension(record: BorrowRecordDTO) {
     if (record.status !== "borrowed") {
       toast.info("Extension not available", {
@@ -370,7 +356,6 @@ export default function StudentCirculationPage() {
     }
   }
 
-  // Reusable scrollbar styling for dark, thin horizontal scrollbars
   const cellScrollbarClasses =
     "overflow-x-auto whitespace-nowrap " +
     "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
@@ -382,7 +367,6 @@ export default function StudentCirculationPage() {
 
   return (
     <DashboardLayout title="My Circulation">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <Layers className="h-5 w-5" />
@@ -391,33 +375,7 @@ export default function StudentCirculationPage() {
               Borrowed books (circulation)
             </h2>
             <p className="text-xs text-white/70">
-              View all books you&apos;ve borrowed, track due dates and fines,
-              request extensions, and send online return requests.
-            </p>
-
-            <p className="mt-1 text-[11px] text-amber-200/90">
-              Books <span className="font-semibold">cannot be auto-returned</span>.
-              When you <span className="font-semibold">borrow a book online</span> or{" "}
-              <span className="font-semibold">request a return</span>, the
-              status becomes <span className="font-semibold">Pending</span>. A
-              librarian must verify the <span className="font-semibold">physical book</span>{" "}
-              before it changes to <span className="font-semibold">Borrowed</span>{" "}
-              or <span className="font-semibold">Returned</span>.
-            </p>
-
-            <p className="mt-1 text-[11px] text-sky-200/90">
-              You may also{" "}
-              <span className="font-semibold">request a due date extension</span>{" "}
-              for records that are currently{" "}
-              <span className="font-semibold">Borrowed</span>. Your request will be{" "}
-              <span className="font-semibold">reviewed by a librarian</span>, and the due date updates{" "}
-              <span className="font-semibold">only when approved</span>.
-            </p>
-
-            <p className="mt-1 text-[11px] text-emerald-200/90">
-              Fine payments are{" "}
-              <span className="font-semibold">over the counter only</span>. Please go to the library to pay
-              physically; the librarian will mark the fine as <span className="font-semibold">Paid</span>.
+              View your borrowed books, due dates, returns, extensions, and fines.
             </p>
           </div>
         </div>
@@ -462,7 +420,6 @@ export default function StudentCirculationPage() {
             <CardTitle>Circulation history</CardTitle>
 
             <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
-              {/* Search */}
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                 <Input
@@ -473,7 +430,6 @@ export default function StudentCirculationPage() {
                 />
               </div>
 
-              {/* Status filter */}
               <div className="w-full md:w-[200px]">
                 <Select
                   value={statusFilter}
@@ -494,32 +450,20 @@ export default function StudentCirculationPage() {
             </div>
           </div>
 
+          {/* Keep only short, relevant tips (no "speech") */}
           <p className="mt-2 text-[11px] text-white/60">
-            You can only{" "}
-            <span className="font-semibold text-purple-200">request a return</span>{" "}
-            for books that are still{" "}
-            <span className="font-semibold text-amber-200">Borrowed</span>.
-            Once requested, the status becomes{" "}
-            <span className="font-semibold text-amber-200">Pending</span>{" "}
-            until a librarian confirms the physical return.
+            Return requests and extension requests apply to{" "}
+            <span className="font-semibold text-amber-200">Borrowed</span>{" "}
+            records. Pending records are waiting for librarian confirmation.
           </p>
 
           <p className="mt-1 text-[11px] text-white/60">
-            You can also{" "}
-            <span className="font-semibold text-sky-200">request an extension</span>{" "}
-            for books that are currently{" "}
-            <span className="font-semibold text-amber-200">Borrowed</span>. Extension requests are{" "}
-            <span className="font-semibold">subject to librarian approval</span>.
-          </p>
-
-          <p className="mt-1 text-[11px] text-white/60">
-            Rows with the{" "}
+            The{" "}
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
               Active fine
             </span>{" "}
-            tag indicate unpaid fines. Payments are{" "}
-            <span className="font-semibold">over the counter only</span>.
+            tag indicates an unpaid fine.
           </p>
         </CardHeader>
 
@@ -543,16 +487,23 @@ export default function StudentCirculationPage() {
           ) : (
             <>
               <div className="text-xs text-white/60">
-                Showing <span className="font-semibold text-white/80">{filtered.length}</span>{" "}
+                Showing{" "}
+                <span className="font-semibold text-white/80">
+                  {filtered.length}
+                </span>{" "}
                 {filtered.length === 1 ? "record" : "records"} across{" "}
-                <span className="font-semibold text-white/80">{groupedByUser.length}</span>{" "}
+                <span className="font-semibold text-white/80">
+                  {groupedByUser.length}
+                </span>{" "}
                 {groupedByUser.length === 1 ? "user" : "users"}.
               </div>
 
               <Accordion
                 type="multiple"
                 className="w-full"
-                defaultValue={groupedByUser.length === 1 ? [groupedByUser[0].key] : []}
+                defaultValue={
+                  groupedByUser.length === 1 ? [groupedByUser[0].key] : []
+                }
               >
                 {groupedByUser.map((group) => (
                   <AccordionItem
@@ -568,8 +519,8 @@ export default function StudentCirculationPage() {
                               {group.name}
                             </span>
                             <span className="text-xs text-white/60">
-                              {group.activeCount} active • {group.returnedCount} returned •{" "}
-                              {group.rows.length} total
+                              {group.activeCount} active • {group.returnedCount}{" "}
+                              returned • {group.rows.length} total
                             </span>
                           </div>
                         </div>
@@ -591,10 +542,10 @@ export default function StudentCirculationPage() {
                           <TableCaption className="text-xs text-white/60">
                             {group.rows.length}{" "}
                             {group.rows.length === 1 ? "record" : "records"} for{" "}
-                            <span className="font-semibold text-white/80">{group.name}</span>. Returned rows
-                            with an{" "}
-                            <span className="font-semibold text-amber-200">Active fine</span>{" "}
-                            tag have unpaid fines (pay over the counter at the library).
+                            <span className="font-semibold text-white/80">
+                              {group.name}
+                            </span>
+                            .
                           </TableCaption>
 
                           <TableHeader>
@@ -630,21 +581,22 @@ export default function StudentCirculationPage() {
                             {group.rows.map((record) => {
                               const isReturned = record.status === "returned";
                               const isBorrowed = record.status === "borrowed";
-                              const isPendingPickup = record.status === "pending_pickup";
-                              const isPendingReturn = record.status === "pending_return";
+                              const isPendingPickup =
+                                record.status === "pending_pickup";
+                              const isPendingReturn =
+                                record.status === "pending_return";
                               const isLegacyPending = record.status === "pending";
                               const isAnyPending =
                                 isPendingPickup || isPendingReturn || isLegacyPending;
 
                               const linkedFine = finesByBorrowId[record.id];
-
-                              // IMPORTANT: compare fine status as string to avoid TS2367
-                              // (FineStatus union may not include older values like "pending_verification")
                               const linkedFineStatus = linkedFine
                                 ? String((linkedFine as any).status ?? "")
                                 : "";
 
-                              const fineAmountFromRecord = normalizeFine((record as any).fine);
+                              const fineAmountFromRecord = normalizeFine(
+                                (record as any).fine
+                              );
                               const finalFineAmount = linkedFine
                                 ? normalizeFine(linkedFine.amount)
                                 : fineAmountFromRecord;
@@ -658,7 +610,9 @@ export default function StudentCirculationPage() {
                               const lastExtensionDays = record.lastExtensionDays ?? null;
                               const lastExtendedAt = record.lastExtendedAt ?? null;
 
-                              const reqStatus = (record.extensionRequestStatus ?? "none").toLowerCase();
+                              const reqStatus = (
+                                record.extensionRequestStatus ?? "none"
+                              ).toLowerCase();
                               const reqDays =
                                 typeof record.extensionRequestedDays === "number"
                                   ? record.extensionRequestedDays
@@ -666,7 +620,8 @@ export default function StudentCirculationPage() {
                               const reqAt = record.extensionRequestedAt ?? null;
                               const decidedAt = record.extensionDecidedAt ?? null;
 
-                              const extensionPending = isBorrowed && reqStatus === "pending";
+                              const extensionPending =
+                                isBorrowed && reqStatus === "pending";
 
                               return (
                                 <TableRow
@@ -713,7 +668,9 @@ export default function StudentCirculationPage() {
                                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40 w-fit">
                                           <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
                                           Extension pending{" "}
-                                          {typeof reqDays === "number" ? `(+${reqDays}d)` : ""}
+                                          {typeof reqDays === "number"
+                                            ? `(+${reqDays}d)`
+                                            : ""}
                                         </span>
                                       )}
 
@@ -776,12 +733,14 @@ export default function StudentCirculationPage() {
                                     <div className="flex flex-col items-start gap-0.5">
                                       <span>{peso(finalFineAmount)}</span>
 
-                                      {isActiveBorrow && isOverdue && finalFineAmount > 0 && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
-                                          <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                          Accruing overdue fine ({peso(finalFineAmount)})
-                                        </span>
-                                      )}
+                                      {isActiveBorrow &&
+                                        isOverdue &&
+                                        finalFineAmount > 0 && (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                                            Accruing overdue fine ({peso(finalFineAmount)})
+                                          </span>
+                                        )}
 
                                       {linkedFine && linkedFineStatus === "active" && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
@@ -790,13 +749,13 @@ export default function StudentCirculationPage() {
                                         </span>
                                       )}
 
-                                      {/* Legacy support only (if old data exists) */}
-                                      {linkedFine && linkedFineStatus === "pending_verification" && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
-                                          <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                                          Awaiting librarian update
-                                        </span>
-                                      )}
+                                      {linkedFine &&
+                                        linkedFineStatus === "pending_verification" && (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                                            Awaiting librarian update
+                                          </span>
+                                        )}
 
                                       {linkedFine && linkedFineStatus === "paid" && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40">
@@ -805,12 +764,13 @@ export default function StudentCirculationPage() {
                                         </span>
                                       )}
 
-                                      {linkedFine && linkedFineStatus === "cancelled" && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
-                                          <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                                          Fine cancelled
-                                        </span>
-                                      )}
+                                      {linkedFine &&
+                                        linkedFineStatus === "cancelled" && (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                                            Fine cancelled
+                                          </span>
+                                        )}
                                     </div>
                                   </TableCell>
 
@@ -847,11 +807,7 @@ export default function StudentCirculationPage() {
                                                 Request to return this book?
                                               </AlertDialogTitle>
                                               <AlertDialogDescription className="text-white/70">
-                                                You&apos;re about to submit an online return request for{" "}
-                                                <span className="font-semibold text-white">
-                                                  “{record.bookTitle ?? `Book #${record.bookId}`}”
-                                                </span>
-                                                . The status will change to{" "}
+                                                This will change the status to{" "}
                                                 <span className="font-semibold text-amber-200">
                                                   Pending
                                                 </span>
@@ -861,31 +817,29 @@ export default function StudentCirculationPage() {
 
                                             <div className="mt-3 text-sm text-white/80 space-y-1">
                                               <p>
-                                                <span className="text-white/60">Borrowed on:</span>{" "}
+                                                <span className="text-white/60">
+                                                  Book:
+                                                </span>{" "}
+                                                <span className="font-semibold text-white">
+                                                  {record.bookTitle ?? `Book #${record.bookId}`}
+                                                </span>
+                                              </p>
+                                              <p>
+                                                <span className="text-white/60">
+                                                  Borrowed on:
+                                                </span>{" "}
                                                 {fmtDate(record.borrowDate)}
                                               </p>
                                               <p>
                                                 <span className="text-white/60">Due date:</span>{" "}
                                                 {fmtDate(record.dueDate)}
                                               </p>
-                                              <p className="text-xs text-white/70">
-                                                You{" "}
-                                                <span className="font-semibold">
-                                                  must still bring the physical book
-                                                </span>{" "}
-                                                to the library. A librarian will verify the book and then mark it as{" "}
-                                                <span className="font-semibold text-emerald-200">
-                                                  Returned
-                                                </span>
-                                                .
-                                              </p>
                                               {finalFineAmount > 0 && (
                                                 <p className="text-red-300">
-                                                  If you returned the book today, your estimated overdue fine would be{" "}
+                                                  Estimated fine if returned today:{" "}
                                                   <span className="font-semibold">
                                                     {peso(finalFineAmount)}
                                                   </span>
-                                                  .
                                                 </p>
                                               )}
                                             </div>
@@ -953,14 +907,7 @@ export default function StudentCirculationPage() {
                                                 Request due date extension
                                               </AlertDialogTitle>
                                               <AlertDialogDescription className="text-white/70">
-                                                Choose how many days to request for{" "}
-                                                <span className="font-semibold text-white">
-                                                  “{record.bookTitle ?? `Book #${record.bookId}`}”
-                                                </span>
-                                                . Your request will be reviewed by a librarian.{" "}
-                                                <span className="font-semibold">
-                                                  The due date will only change when approved.
-                                                </span>
+                                                Pick the number of days to request.
                                               </AlertDialogDescription>
                                             </AlertDialogHeader>
 
@@ -975,7 +922,7 @@ export default function StudentCirculationPage() {
 
                                                 {extensionCount > 0 && (
                                                   <p className="text-xs text-white/60">
-                                                    Approved extensions so far:{" "}
+                                                    Approved extensions:{" "}
                                                     <span className="font-semibold text-sky-200">
                                                       {extensionCount}×
                                                     </span>{" "}
@@ -989,16 +936,14 @@ export default function StudentCirculationPage() {
                                                     {typeof reqDays === "number"
                                                       ? `(+${reqDays} days)`
                                                       : ""}{" "}
-                                                    {reqAt
-                                                      ? `submitted at ${fmtDateTime(reqAt)}.`
-                                                      : "."}
+                                                    {reqAt ? `submitted at ${fmtDateTime(reqAt)}.` : "."}
                                                   </p>
                                                 )}
                                               </div>
 
                                               <div className="grid grid-cols-1 gap-2">
                                                 <label className="text-xs text-white/70">
-                                                  Request extension (days)
+                                                  Extension (days)
                                                 </label>
                                                 <Input
                                                   inputMode="numeric"
@@ -1032,14 +977,6 @@ export default function StudentCirculationPage() {
                                                   disabled={extendBusyId === record.id || extensionPending}
                                                 />
                                               </div>
-
-                                              <p className="text-[11px] text-white/60">
-                                                Tip: extension requests are only allowed while status is{" "}
-                                                <span className="font-semibold text-amber-200">
-                                                  Borrowed
-                                                </span>
-                                                .
-                                              </p>
                                             </div>
 
                                             <AlertDialogFooter>
