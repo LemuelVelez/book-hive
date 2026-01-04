@@ -166,6 +166,11 @@ export function NavMain() {
                 icon: Users2,
                 to: "/dashboard/admin/users",
             },
+            {
+                label: "Settings",
+                icon: Settings,
+                to: "/dashboard/admin/settings",
+            },
         ]
     }
 
