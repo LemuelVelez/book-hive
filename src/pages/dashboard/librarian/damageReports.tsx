@@ -1098,7 +1098,7 @@ export default function LibrarianDamageReportsPage() {
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Book Damage Reports</h2>
                         <p className="text-xs text-white/70">
-                            Paid damage fines automatically appear under <span className="font-semibold">Paid Archive</span> (even if the report’s status wasn’t updated yet).
+                            Paid damage fines automatically appear under <span className="font-semibold">Paid Archive</span>.
                         </p>
                         <p className="mt-1 text-[11px] text-white/60">
                             Active: <span className="font-semibold text-amber-200">{counts.activeCount}</span> • Paid archive:{" "}

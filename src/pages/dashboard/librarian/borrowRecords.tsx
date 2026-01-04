@@ -68,8 +68,7 @@ import {
 
 import { Calendar } from "@/components/ui/calendar";
 
-// === CONFIG: adjust fine per day here if needed ===
-const FINE_PER_DAY = 5; // ₱5.00 per overdue day
+const FINE_PER_DAY = 5;
 
 function peso(n: number) {
   if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00";
@@ -84,23 +83,18 @@ function peso(n: number) {
   }
 }
 
-// Normalize any "fine-like" value into a safe number
 function normalizeFine(value: any): number {
   if (value === null || value === undefined) return 0;
   const num = typeof value === "number" ? value : Number(value);
   return Number.isNaN(num) ? 0 : num;
 }
 
-/**
- * Format date as YYYY-MM-DD in *local* timezone
- * to avoid off-by-one issues from UTC conversions.
- */
 function fmtDate(d?: string | null) {
   if (!d) return "—";
   try {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return d;
-    return date.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    return date.toLocaleDateString("en-CA");
   } catch {
     return d;
   }
@@ -123,18 +117,12 @@ function fmtDateTime(d?: string | null) {
   }
 }
 
-/**
- * Prefer the student's full name (and do NOT show email/student ID).
- */
 function studentFullName(rec: BorrowRecordDTO): string {
   const name = (rec.studentName || "").trim();
   if (name) return name;
   return `User #${rec.userId}`;
 }
 
-/**
- * Compute overdue days and automatic fine based on due date and today (local).
- */
 function computeAutoFine(dueDate?: string | null) {
   if (!dueDate) return { overdueDays: 0, autoFine: 0 };
 
@@ -153,9 +141,6 @@ function computeAutoFine(dueDate?: string | null) {
   return { overdueDays, autoFine };
 }
 
-/**
- * Parse "YYYY-MM-DD" into a local Date object (no timezone shift).
- */
 function parseYmdToDate(d?: string | null): Date | undefined {
   if (!d) return undefined;
   const parts = d.split("-");
@@ -170,9 +155,6 @@ function parseYmdToDate(d?: string | null): Date | undefined {
   return date;
 }
 
-/**
- * Format a Date to "YYYY-MM-DD" for API.
- */
 function formatDateForApi(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -194,7 +176,6 @@ export default function LibrarianBorrowRecordsPage() {
   const [markBorrowBusyId, setMarkBorrowBusyId] =
     React.useState<string | null>(null);
 
-  // --- Return dialog state (for marking as returned) ---
   const [returnDialogOpen, setReturnDialogOpen] = React.useState(false);
   const [selectedRecord, setSelectedRecord] =
     React.useState<BorrowRecordDTO | null>(null);
@@ -203,7 +184,6 @@ export default function LibrarianBorrowRecordsPage() {
   const [autoFinePreview, setAutoFinePreview] = React.useState<number>(0);
   const [submittingReturn, setSubmittingReturn] = React.useState(false);
 
-  // --- Edit due date dialog state ---
   const [dueDialogOpen, setDueDialogOpen] = React.useState(false);
   const [dueRecord, setDueRecord] = React.useState<BorrowRecordDTO | null>(null);
   const [dueDateInput, setDueDateInput] = React.useState<Date | undefined>(
@@ -211,7 +191,6 @@ export default function LibrarianBorrowRecordsPage() {
   );
   const [submittingDue, setSubmittingDue] = React.useState(false);
 
-  // ✅ Approve/Disapprove extension request (inside edit due date)
   const [decisionNoteInput, setDecisionNoteInput] = React.useState<string>("");
   const [submittingDecision, setSubmittingDecision] = React.useState<
     "approve" | "disapprove" | null
@@ -263,14 +242,9 @@ export default function LibrarianBorrowRecordsPage() {
     setSubmittingDecision(null);
   }
 
-  /**
-   * Open dialog to mark a record as returned.
-   * Auto-compute fine (if overdue), but allow librarian to edit it.
-   */
   function openReturnDialog(rec: BorrowRecordDTO) {
     const { overdueDays, autoFine } = computeAutoFine(rec.dueDate);
 
-    // If there's already a fine stored, prefer that as initial value.
     const initialFine =
       typeof rec.fine === "number" && rec.fine > 0 ? rec.fine : autoFine;
 
@@ -422,7 +396,6 @@ export default function LibrarianBorrowRecordsPage() {
     const q = search.trim().toLowerCase();
     let rows = records;
 
-    // "Borrowed" filter: treat as "Active" (non-returned)
     if (statusFilter === "borrowed") {
       rows = rows.filter((r) => r.status !== "returned");
     } else if (statusFilter === "returned") {
@@ -430,14 +403,12 @@ export default function LibrarianBorrowRecordsPage() {
     }
 
     if (!q) {
-      // Newest first for a cleaner accordion/table experience
       return [...rows].sort((a, b) =>
         (b.borrowDate ?? "").localeCompare(a.borrowDate ?? "")
       );
     }
 
     const matched = rows.filter((r) => {
-      // ✅ show name in UI, but search can still match email/id if needed
       const student =
         (r.studentName || "") +
         " " +
@@ -453,13 +424,11 @@ export default function LibrarianBorrowRecordsPage() {
       );
     });
 
-    // Newest first
     return matched.sort((a, b) =>
       (b.borrowDate ?? "").localeCompare(a.borrowDate ?? "")
     );
   }, [records, statusFilter, search]);
 
-  // ✅ Group rows by userId to avoid duplicated usernames
   const groupedByUser = React.useMemo(() => {
     const map = new Map<
       string,
@@ -497,7 +466,6 @@ export default function LibrarianBorrowRecordsPage() {
     return groups;
   }, [filtered]);
 
-  // Reusable scrollbar styling for dark, thin horizontal scrollbars
   const cellScrollbarClasses =
     "overflow-x-auto whitespace-nowrap " +
     "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
@@ -507,7 +475,6 @@ export default function LibrarianBorrowRecordsPage() {
     "[&::-webkit-scrollbar-thumb]:rounded-full " +
     "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
 
-  // ✅ Reusable scrollbar styling for dark, thin VERTICAL scrollbars (dialogs)
   const dialogScrollbarClasses =
     "[scrollbar-width:thin] [scrollbar-color:#334155_transparent] " +
     "[&::-webkit-scrollbar]:w-2 " +
@@ -518,38 +485,54 @@ export default function LibrarianBorrowRecordsPage() {
 
   return (
     <DashboardLayout title="Borrow Records">
-      {/* Header: vertical on mobile, horizontal on desktop */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div>
             <h2 className="text-lg font-semibold leading-tight">
               Borrow &amp; Return Logs
             </h2>
+
             <p className="text-xs text-white/70">
-              Track who borrowed which book, due dates, returns, and fines.
+              Manage active loans, returns, due dates, and fines.
             </p>
-            <p className="mt-1 text-[11px] text-amber-200/90">
-              For <span className="font-semibold">pending pickup</span> records,
-              use this page to confirm that the student has received the{" "}
-              <span className="font-semibold">physical book</span> and mark the
-              status as <span className="font-semibold">Borrowed</span>. For{" "}
-              <span className="font-semibold">pending return</span> records
-              (created by the student&apos;s online return request), use this
-              page to mark the book as{" "}
-              <span className="font-semibold">Returned</span> and finalize any
-              fines.
-            </p>
-            <p className="mt-1 text-[11px] text-emerald-200/90">
-              The amount you finalize here becomes the{" "}
-              <span className="font-semibold">official fine</span> for this
-              borrow. Payment status (active, pending verification, paid) is
-              managed in the <span className="font-semibold">Fines</span> page.
-            </p>
-            <p className="mt-1 text-[11px] text-sky-200/90">
-              Due date edits for{" "}
-              <span className="font-semibold">extensions</span> are only enabled{" "}
-              after the borrower has requested an extension online.
-            </p>
+
+            <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-[11px] text-white/70">
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>
+                    <span className="font-semibold text-amber-200">
+                      Pending pickup:
+                    </span>{" "}
+                    hand the book to the student, then click{" "}
+                    <span className="font-semibold text-white">
+                      Confirm pickup → Mark borrowed
+                    </span>
+                    .
+                  </li>
+                  <li>
+                    <span className="font-semibold text-amber-200">
+                      Pending return:
+                    </span>{" "}
+                    verify the physical return, then click{" "}
+                    <span className="font-semibold text-white">
+                      Mark as returned
+                    </span>{" "}
+                    and set the final fine (if any).
+                  </li>
+                  <li>
+                    Payment status is handled in the{" "}
+                    <span className="font-semibold text-white">Fines</span> page.
+                  </li>
+                  <li>
+                    Due date edits are available after an{" "}
+                    <span className="font-semibold text-white">
+                      extension request
+                    </span>
+                    .
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -574,12 +557,10 @@ export default function LibrarianBorrowRecordsPage() {
 
       <Card className="bg-slate-800/60 border-white/10">
         <CardHeader className="pb-2">
-          {/* Controls row: vertical on mobile, horizontal on desktop */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <CardTitle>Borrow records</CardTitle>
 
             <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
-              {/* Search: full width on mobile */}
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                 <Input
@@ -590,7 +571,6 @@ export default function LibrarianBorrowRecordsPage() {
                 />
               </div>
 
-              {/* Status filter (shadcn Select): full width on mobile */}
               <div className="w-full md:w-[200px]">
                 <Select
                   value={statusFilter}
@@ -644,7 +624,7 @@ export default function LibrarianBorrowRecordsPage() {
                   <span className="font-semibold text-amber-200">
                     Active (Borrowed + Pending)
                   </span>{" "}
-                  to quickly see records that still need attention.
+                  to focus on items that still need action.
                 </span>
               </div>
 
@@ -661,7 +641,6 @@ export default function LibrarianBorrowRecordsPage() {
                     value={group.key}
                     className="border-white/10"
                   >
-                    {/* ✅ user header */}
                     <div className="rounded-md bg-white/4 px-3">
                       <AccordionTrigger className="py-3 text-white/90 hover:no-underline items-center">
                         <div className="flex w-full items-center justify-between gap-4">
@@ -679,7 +658,6 @@ export default function LibrarianBorrowRecordsPage() {
                     </div>
 
                     <AccordionContent className="pb-2">
-                      {/* ✅ username above table (no duplication in rows) */}
                       <div className="mb-3 rounded-md px-3 py-2">
                         <div className="text-[11px] uppercase tracking-wide text-white/50">
                           User
@@ -751,8 +729,6 @@ export default function LibrarianBorrowRecordsPage() {
                                 rec.dueDate
                               );
 
-                              // Overdue applies to active loans / pending returns,
-                              // but not to pending pickup.
                               const isOverdue =
                                 (isBorrowed ||
                                   isPendingReturn ||
@@ -768,8 +744,6 @@ export default function LibrarianBorrowRecordsPage() {
                                 .trim();
                               const extensionPending = reqStatus === "pending";
 
-                              // ✅ Enable due date editing once there is at least one extension request
-                              // (pending/approved/disapproved) OR previously approved extensions exist.
                               const extensionCount = Number(
                                 rec.extensionCount ?? 0
                               );
@@ -845,7 +819,6 @@ export default function LibrarianBorrowRecordsPage() {
                                     )}
                                   </TableCell>
 
-                                  {/* ₱Fine cell with scrollbar */}
                                   <TableCell
                                     className={
                                       "text-right text-sm w-[120px] max-w-[120px] " +
@@ -871,7 +844,6 @@ export default function LibrarianBorrowRecordsPage() {
                                     </div>
                                   </TableCell>
 
-                                  {/* Actions cell with horizontal scrollbar */}
                                   <TableCell
                                     className={
                                       "text-right w-40 max-w-40 " +
@@ -885,7 +857,6 @@ export default function LibrarianBorrowRecordsPage() {
                                       </span>
                                     ) : (
                                       <div className="inline-flex flex-col items-end gap-1">
-                                        {/* ✏️ Edit due date */}
                                         <div className="flex flex-col items-end gap-0.5">
                                           <Button
                                             type="button"
@@ -917,7 +888,6 @@ export default function LibrarianBorrowRecordsPage() {
                                           ) : null}
                                         </div>
 
-                                        {/* ✅ Confirm pickup → mark borrowed (only for pending_pickup) */}
                                         {isPendingPickup && (
                                           <AlertDialog>
                                             <AlertDialogTrigger asChild>
@@ -947,14 +917,15 @@ export default function LibrarianBorrowRecordsPage() {
                                                   borrowed?
                                                 </AlertDialogTitle>
                                                 <AlertDialogDescription className="text-white/70">
-                                                  You&apos;re about to confirm
-                                                  that the student has received
-                                                  the{" "}
+                                                  Confirm that{" "}
+                                                  <span className="font-semibold text-white">
+                                                    {studentLabel}
+                                                  </span>{" "}
+                                                  received{" "}
                                                   <span className="font-semibold text-white">
                                                     “{bookLabel}”
                                                   </span>{" "}
-                                                  and change this record&apos;s
-                                                  status from{" "}
+                                                  and change the status from{" "}
                                                   <span className="font-semibold text-amber-200">
                                                     Pending pickup
                                                   </span>{" "}
@@ -969,12 +940,6 @@ export default function LibrarianBorrowRecordsPage() {
                                               <div className="mt-3 text-sm text-white/80 space-y-1">
                                                 <p>
                                                   <span className="text-white/60">
-                                                    Student:
-                                                  </span>{" "}
-                                                  {studentLabel}
-                                                </p>
-                                                <p>
-                                                  <span className="text-white/60">
                                                     Borrowed on:
                                                   </span>{" "}
                                                   {fmtDate(rec.borrowDate)}
@@ -986,16 +951,12 @@ export default function LibrarianBorrowRecordsPage() {
                                                   {fmtDate(rec.dueDate)}
                                                 </p>
                                                 <p className="text-xs text-white/70 pt-1">
-                                                  After confirming, this book
-                                                  remains{" "}
-                                                  <span className="font-semibold">
-                                                    unavailable
-                                                  </span>{" "}
-                                                  until it is marked as{" "}
+                                                  The book stays unavailable
+                                                  until it’s marked as{" "}
                                                   <span className="font-semibold text-emerald-200">
                                                     Returned
-                                                  </span>{" "}
-                                                  on this page.
+                                                  </span>
+                                                  .
                                                 </p>
                                               </div>
 
@@ -1031,9 +992,6 @@ export default function LibrarianBorrowRecordsPage() {
                                           </AlertDialog>
                                         )}
 
-                                        {/* Mark as returned:
-                                            - only for pending_return
-                                            - or legacy pending */}
                                         {(isPendingReturn || isLegacyPending) && (
                                           <Button
                                             type="button"
@@ -1063,7 +1021,6 @@ export default function LibrarianBorrowRecordsPage() {
         </CardContent>
       </Card>
 
-      {/* Global dialog for confirming return & fine computation */}
       <AlertDialog
         open={returnDialogOpen}
         onOpenChange={(open) => {
@@ -1119,7 +1076,9 @@ export default function LibrarianBorrowRecordsPage() {
                   <>
                     {" "}
                     · Auto fine @ {peso(FINE_PER_DAY)} per day:{" "}
-                    <span className="font-semibold">{peso(autoFinePreview)}</span>
+                    <span className="font-semibold">
+                      {peso(autoFinePreview)}
+                    </span>
                   </>
                 ) : (
                   " (No overdue days → auto fine is ₱0.00)"
@@ -1167,9 +1126,9 @@ export default function LibrarianBorrowRecordsPage() {
                 </Button>
               </div>
               <p className="text-[11px] text-white/60">
-                The amount you set here is the{" "}
+                The fine you set here becomes the{" "}
                 <span className="font-semibold">official fine</span> for this
-                borrow. Whether it is paid or still pending is handled in the{" "}
+                borrow. Payment status is managed in the{" "}
                 <span className="font-semibold">Fines</span> page.
               </p>
             </div>
@@ -1200,7 +1159,6 @@ export default function LibrarianBorrowRecordsPage() {
         )}
       </AlertDialog>
 
-      {/* Dialog for editing due date */}
       <AlertDialog
         open={dueDialogOpen}
         onOpenChange={(open) => {
@@ -1227,7 +1185,9 @@ export default function LibrarianBorrowRecordsPage() {
                   “{dueRecord.bookTitle ?? `Book #${dueRecord.bookId}`}”
                 </span>{" "}
                 borrowed by{" "}
-                <span className="font-semibold">{studentFullName(dueRecord)}</span>
+                <span className="font-semibold">
+                  {studentFullName(dueRecord)}
+                </span>
                 .
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -1243,7 +1203,6 @@ export default function LibrarianBorrowRecordsPage() {
               </p>
             </div>
 
-            {/* ✅ Extension request review box (Approve/Disapprove) */}
             <div className="mt-4 rounded-md border border-white/10 bg-slate-950/40 p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-white/80">
@@ -1364,7 +1323,6 @@ export default function LibrarianBorrowRecordsPage() {
                       disabled={submittingDecision !== null || submittingDue}
                     />
 
-                    {/* ✅ Approve / Disapprove (Check & Cross lucide icons) */}
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Button
                         type="button"
@@ -1432,8 +1390,8 @@ export default function LibrarianBorrowRecordsPage() {
                 </p>
               </div>
               <p className="text-[11px] text-white/60">
-                Extending the due date will automatically reduce or remove
-                overdue fines for this record while it is still active.
+                Extending the due date can reduce (or remove) overdue fines while
+                this record is still active.
               </p>
             </div>
 
