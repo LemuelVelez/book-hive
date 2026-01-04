@@ -1,3 +1,4 @@
+// src/App.tsx
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { PageLoadingOverlay } from './components/loading'
@@ -58,6 +59,9 @@ const FacultyCirculationPage = lazy(
 const FacultyFinesPage = lazy(() => import('./pages/dashboard/faculty/fines'))
 const FacultyInsightsHubPage = lazy(
   () => import('./pages/dashboard/faculty/insightsHub')
+)
+const FacultySettingsPage = lazy(
+  () => import('./pages/dashboard/faculty/settings')
 )
 
 const AdminDashboard = lazy(() => import('./pages/dashboard/admin/dashboard'))
@@ -315,6 +319,16 @@ function App() {
             element={
               <RequireRole allow={['faculty']}>
                 <FacultyInsightsHubPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Faculty Settings page */}
+          <Route
+            path="/dashboard/faculty/settings"
+            element={
+              <RequireRole allow={['faculty']}>
+                <FacultySettingsPage />
               </RequireRole>
             }
           />

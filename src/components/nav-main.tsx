@@ -1,3 +1,4 @@
+// src/components/nav-main.tsx
 import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import {
@@ -46,10 +47,7 @@ export function NavMain() {
     const isAdmin = pathname.startsWith("/dashboard/admin")
 
     const isBorrowerSection =
-        pathname.startsWith("/dashboard") &&
-        !isLibrarian &&
-        !isFaculty &&
-        !isAdmin
+        pathname.startsWith("/dashboard") && !isLibrarian && !isFaculty && !isAdmin
 
     if (isBorrowerSection) {
         // Shared navigation for "student" and "other" roles
@@ -166,6 +164,11 @@ export function NavMain() {
                 icon: MessageSquare,
                 to: "/dashboard/faculty/insights",
             },
+            {
+                label: "Settings",
+                icon: Settings,
+                to: "/dashboard/faculty/settings",
+            },
         ]
     } else if (isAdmin) {
         groupLabel = "Admin"
@@ -196,9 +199,7 @@ export function NavMain() {
 
     return (
         <SidebarGroup>
-            <SidebarGroupLabel className="text-white/70">
-                {groupLabel}
-            </SidebarGroupLabel>
+            <SidebarGroupLabel className="text-white/70">{groupLabel}</SidebarGroupLabel>
 
             <SidebarGroupContent>
                 {/* Horizontal scroll for tight layouts, styled by .support-scroll */}
@@ -212,10 +213,7 @@ export function NavMain() {
                                 : pathname === item.to || pathname.startsWith(item.to + "/")
 
                             return (
-                                <SidebarMenuItem
-                                    key={item.label}
-                                    className="whitespace-nowrap"
-                                >
+                                <SidebarMenuItem key={item.label} className="whitespace-nowrap">
                                     <SidebarMenuButton
                                         asChild
                                         isActive={isActive}
