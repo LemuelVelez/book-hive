@@ -32,22 +32,10 @@ import {
 import { toast } from "sonner"
 
 import { fetchBooks, type BookDTO } from "@/lib/books"
-import {
-    fetchMyBorrowRecords,
-    type BorrowRecordDTO,
-} from "@/lib/borrows"
-import {
-    fetchMyFeedbacks,
-    type FeedbackDTO,
-} from "@/lib/feedbacks"
-import {
-    fetchMyDamageReports,
-    type DamageReportDTO,
-} from "@/lib/damageReports"
-import {
-    fetchMyFines,
-    type FineDTO,
-} from "@/lib/fines"
+import { fetchMyBorrowRecords, type BorrowRecordDTO } from "@/lib/borrows"
+import { fetchMyFeedbacks, type FeedbackDTO } from "@/lib/feedbacks"
+import { fetchMyDamageReports, type DamageReportDTO } from "@/lib/damageReports"
+import { fetchMyFines, type FineDTO, type FineStatus } from "@/lib/fines"
 
 import {
     ResponsiveContainer,
@@ -71,8 +59,7 @@ function fmtDate(d?: string | null) {
     try {
         const date = new Date(d)
         if (Number.isNaN(date.getTime())) return d
-        // en-CA -> 2025-11-13 (YYYY-MM-DD)
-        return date.toLocaleDateString("en-CA")
+        return date.toLocaleDateString("en-CA") // 2025-11-13
     } catch {
         return d
     }
@@ -99,6 +86,45 @@ function normalizeFine(value: any): number {
 }
 
 /**
+ * Compute how many full days a record is overdue based on due date and today
+ * in the local timezone. Returns 0 if not overdue or invalid date.
+ */
+function computeOverdueDays(d?: string | null) {
+    if (!d) return 0
+    const due = new Date(d)
+    if (Number.isNaN(due.getTime())) return 0
+
+    const now = new Date()
+    const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate())
+    const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    const diffMs = todayLocal.getTime() - dueLocal.getTime()
+    const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    return rawDays > 0 ? rawDays : 0
+}
+
+/**
+ * ✅ Remaining copies helper (matches Books page):
+ * BookDTO.numberOfCopies is REMAINING/AVAILABLE copies (backend deducts as users borrow).
+ * If it’s missing, fall back to 1 if `available`, else 0.
+ */
+function getRemainingCopies(book: BookDTO): number {
+    if (typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)) {
+        return Math.max(0, Math.floor(book.numberOfCopies))
+    }
+    return book.available ? 1 : 0
+}
+
+/**
+ * ✅ A book is borrowable only if:
+ * - backend says available AND
+ * - there is at least 1 remaining copy
+ */
+function isBorrowable(book: BookDTO): boolean {
+    return Boolean(book.available) && getRemainingCopies(book) > 0
+}
+
+/**
  * Best-effort helper to detect if a fine is related to a damage report.
  * Mirrors the logic used on the My Fines page so the overview stays in sync.
  */
@@ -117,21 +143,43 @@ function isDamageFine(fine: FineDTO): boolean {
     )
 }
 
+/**
+ * Fines page normalizes fine statuses for students:
+ * - paid -> paid
+ * - cancelled -> cancelled
+ * - everything else -> active
+ */
+function normalizeFineStatus(raw: any): FineStatus {
+    const v = String(raw ?? "").toLowerCase()
+    if (v === "paid") return "paid"
+    if (v === "cancelled") return "cancelled"
+    return "active"
+}
+
+function normalizeBorrowStatus(status: any): string {
+    return String(status ?? "").toLowerCase()
+}
+
 function isActiveStatus(status: any): boolean {
-    const s = String(status ?? "").toLowerCase()
-    return s === "borrowed" || s === "pending"
+    const s = normalizeBorrowStatus(status)
+    return (
+        s === "borrowed" ||
+        s === "pending" ||
+        s === "pending_pickup" ||
+        s === "pending_return"
+    )
 }
 
 function isReturnedStatus(status: any): boolean {
-    return String(status ?? "").toLowerCase() === "returned"
+    return normalizeBorrowStatus(status) === "returned"
 }
 
 const FEEDBACK_COLORS = ["#22c55e", "#a855f7", "#f97316", "#38bdf8", "#f43f5e"]
 
 const CIRCULATION_COLORS: Record<string, string> = {
     Active: "#22c55e",
-    Returned: "#a855f7",
     Overdue: "#f97316",
+    Returned: "#a855f7",
 }
 
 export default function StudentDashboardPage() {
@@ -149,19 +197,14 @@ export default function StudentDashboardPage() {
         setError(null)
         setLoading(true)
         try {
-            const [
-                booksData,
-                recordsData,
-                feedbacksData,
-                damageData,
-                finesData,
-            ] = await Promise.all([
-                fetchBooks(),
-                fetchMyBorrowRecords(),
-                fetchMyFeedbacks(),
-                fetchMyDamageReports(),
-                fetchMyFines(),
-            ])
+            const [booksData, recordsData, feedbacksData, damageData, finesData] =
+                await Promise.all([
+                    fetchBooks(),
+                    fetchMyBorrowRecords(),
+                    fetchMyFeedbacks(),
+                    fetchMyDamageReports(),
+                    fetchMyFines(),
+                ])
 
             setBooks(booksData)
             setRecords(recordsData)
@@ -194,9 +237,11 @@ export default function StudentDashboardPage() {
 
     // ---- Derived metrics ----
     const totalBooks = books.length
-    const availableBooks = books.filter((b) => b.available).length
+    const borrowableBooks = React.useMemo(
+        () => books.filter((b) => isBorrowable(b)).length,
+        [books],
+    )
 
-    // Make status handling tolerant (borrowed / pending / returned etc, any casing)
     const activeRecords = React.useMemo(
         () => records.filter((r) => isActiveStatus(r.status)),
         [records],
@@ -207,83 +252,74 @@ export default function StudentDashboardPage() {
         [records],
     )
 
-    // Overdue (for chart) = active record with a positive fine (historical)
     const overdueCount = React.useMemo(
-        () =>
-            activeRecords.filter((r) => normalizeFine((r as any).fine) > 0).length,
+        () => activeRecords.filter((r) => computeOverdueDays(r.dueDate) > 0).length,
         [activeRecords],
     )
 
-    // Fines metrics come from the dedicated fines table so they stay in sync
+    const finesByBorrowId = React.useMemo(() => {
+        const map: Record<string, FineDTO> = {}
+        for (const f of fines) {
+            const key = (f as any).borrowRecordId
+            if (key != null) map[String(key)] = f
+        }
+        return map
+    }, [fines])
+
+    // Fines metrics (mirrors My Fines page normalization)
     const {
         activeFineTotal,
-        pendingFineTotal,
         totalFineAll,
         paidFineTotal,
         cancelledFineTotal,
         damageFineTotal,
         activeFineCount,
-        pendingFineCount,
         paidFineCount,
         cancelledFineCount,
         damageFineCount,
     } = React.useMemo(() => {
         let active = 0
-        let pending = 0
         let total = 0
         let paid = 0
         let cancelled = 0
         let damageAmount = 0
 
         let activeCount = 0
-        let pendingCount = 0
         let paidCount = 0
         let cancelledCount = 0
         let damageCount = 0
 
         for (const f of fines) {
-            const amt = normalizeFine((f as any).amount)
-            if (amt > 0) {
-                total += amt
-            }
+            const amt = normalizeFine((f as any).amount ?? (f as any).fine)
+            if (amt <= 0) continue
 
-            const status = (f as any).status
-            switch (status) {
-                case "active":
-                    active += amt
-                    activeCount += 1
-                    break
-                case "pending_verification":
-                    pending += amt
-                    pendingCount += 1
-                    break
-                case "paid":
-                    paid += amt
-                    paidCount += 1
-                    break
-                case "cancelled":
-                    cancelled += amt
-                    cancelledCount += 1
-                    break
-                default:
-                    break
+            total += amt
+
+            const status = normalizeFineStatus((f as any).status)
+            if (status === "active") {
+                active += amt
+                activeCount += 1
+            } else if (status === "paid") {
+                paid += amt
+                paidCount += 1
+            } else if (status === "cancelled") {
+                cancelled += amt
+                cancelledCount += 1
             }
 
             if (isDamageFine(f)) {
-                if (amt > 0) damageAmount += amt
+                damageAmount += amt
                 damageCount += 1
             }
         }
 
         return {
             activeFineTotal: active,
-            pendingFineTotal: pending,
             totalFineAll: total,
             paidFineTotal: paid,
             cancelledFineTotal: cancelled,
             damageFineTotal: damageAmount,
             activeFineCount: activeCount,
-            pendingFineCount: pendingCount,
             paidFineCount: paidCount,
             cancelledFineCount: cancelledCount,
             damageFineCount: damageCount,
@@ -294,45 +330,30 @@ export default function StudentDashboardPage() {
     const totalDamageReports = damageReports.length
 
     const recentBorrows = React.useMemo(
-        () =>
-            [...records]
-                .sort(
-                    (a, b) =>
-                        (a.borrowDate ?? "").localeCompare(b.borrowDate ?? "") * -1,
-                )
-                .slice(0, 5),
+        () => [...records].sort((a, b) => (b.borrowDate ?? "").localeCompare(a.borrowDate ?? "")).slice(0, 5),
         [records],
     )
 
     const recentFeedbacks = React.useMemo(
-        () =>
-            [...feedbacks]
-                .sort((a, b) =>
-                    (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
-                )
-                .slice(0, 3),
+        () => [...feedbacks].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 3),
         [feedbacks],
     )
 
     const recentDamageReports = React.useMemo(
-        () =>
-            [...damageReports]
-                .sort((a, b) =>
-                    (b.reportedAt ?? "").localeCompare(a.reportedAt ?? ""),
-                )
-                .slice(0, 3),
+        () => [...damageReports].sort((a, b) => (b.reportedAt ?? "").localeCompare(a.reportedAt ?? "")).slice(0, 3),
         [damageReports],
     )
 
-    // ---- Chart data ----
-    const circulationChartData = React.useMemo(
-        () => [
-            { name: "Active", value: activeRecords.length },
+    // ---- Chart data (mutually exclusive buckets) ----
+    const circulationChartData = React.useMemo(() => {
+        const overdue = overdueCount
+        const activeNonOverdue = Math.max(0, activeRecords.length - overdue)
+        return [
+            { name: "Active", value: activeNonOverdue },
+            { name: "Overdue", value: overdue },
             { name: "Returned", value: returnedRecords.length },
-            { name: "Overdue", value: overdueCount },
-        ],
-        [activeRecords.length, returnedRecords.length, overdueCount],
-    )
+        ]
+    }, [activeRecords.length, returnedRecords.length, overdueCount])
 
     const feedbackChartData = React.useMemo(() => {
         if (!feedbacks.length) return []
@@ -344,12 +365,60 @@ export default function StudentDashboardPage() {
         })
         return Array.from({ length: 5 }, (_, i) => {
             const rating = i + 1
-            return {
-                name: `${rating}★`,
-                value: counts[rating] || 0,
-            }
+            return { name: `${rating}★`, value: counts[rating] || 0 }
         }).filter((d) => d.value > 0)
     }, [feedbacks])
+
+    function getBorrowBadge(r: BorrowRecordDTO) {
+        const s = normalizeBorrowStatus(r.status)
+
+        const isReturned = s === "returned"
+        const isBorrowed = s === "borrowed"
+        const isPendingPickup = s === "pending_pickup"
+        const isPendingReturn = s === "pending_return"
+        const isLegacyPending = s === "pending"
+        const isAnyPending = isPendingPickup || isPendingReturn || isLegacyPending
+
+        const isActiveBorrow = isBorrowed || isAnyPending
+        const overdueDays = computeOverdueDays(r.dueDate)
+        const isOverdue = isActiveBorrow && overdueDays > 0
+
+        let badgeColor =
+            "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
+        let badgeLabel = "Borrowed"
+        let badgeIcon = <Clock3 className="h-3 w-3" />
+
+        if (isReturned) {
+            badgeColor =
+                "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
+            badgeLabel = "Returned"
+            badgeIcon = <CheckCircle2 className="h-3 w-3" />
+        } else if (isPendingPickup) {
+            badgeColor =
+                "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
+            badgeLabel = "Pending pickup"
+            badgeIcon = <Clock3 className="h-3 w-3" />
+        } else if (isPendingReturn) {
+            badgeColor =
+                "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
+            badgeLabel = "Pending return"
+            badgeIcon = <Clock3 className="h-3 w-3" />
+        } else if (isLegacyPending) {
+            badgeColor =
+                "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
+            badgeLabel = "Pending"
+            badgeIcon = <Clock3 className="h-3 w-3" />
+        }
+
+        if (isOverdue) {
+            badgeColor =
+                "bg-red-500/80 hover:bg-red-500 text-white border-red-400/80"
+            badgeLabel = "Overdue"
+            badgeIcon = <AlertTriangle className="h-3 w-3" />
+        }
+
+        return { badgeColor, badgeLabel, badgeIcon }
+    }
 
     return (
         <DashboardLayout title="My Library overview">
@@ -385,7 +454,6 @@ export default function StudentDashboardPage() {
                         <span className="sr-only">Refresh overview</span>
                     </Button>
 
-                    {/* Buttons: vertical on mobile, horizontal on desktop */}
                     <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                         <Button
                             asChild
@@ -449,14 +517,14 @@ export default function StudentDashboardPage() {
                             <Skeleton className="h-8 w-20" />
                         ) : (
                             <p className="text-3xl font-bold">
-                                {availableBooks}/{totalBooks}
+                                {borrowableBooks}/{totalBooks}
                             </p>
                         )}
                         <p className="text-xs text-white/70">
                             <span className="font-medium text-emerald-300">
-                                {availableBooks}
+                                {borrowableBooks}
                             </span>{" "}
-                            available to borrow out of{" "}
+                            borrowable now out of{" "}
                             <span className="font-medium">{totalBooks}</span> books.
                         </p>
                         <Button
@@ -510,14 +578,14 @@ export default function StudentDashboardPage() {
                                     </span>
                                 </p>
                                 <p>
-                                    Currently overdue (from active borrows):{" "}
+                                    Currently overdue (by due date):{" "}
                                     <span className="font-semibold text-amber-300">
                                         {overdueCount}
                                     </span>
                                 </p>
                                 <p className="text-[11px] text-white/60">
-                                    Overdue status here is based on your borrow records. The
-                                    exact fine amounts and payment status are shown on your{" "}
+                                    Overdue status here is based on your record due dates. Fine
+                                    amounts and payment status are shown on your{" "}
                                     <span className="font-semibold">Fines</span> page.
                                 </p>
                             </>
@@ -536,7 +604,7 @@ export default function StudentDashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* Fines & payments summary (overview of My Fines page) */}
+                {/* Fines summary */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2 flex flex-row items-center justify-between">
                         <div className="space-y-1">
@@ -544,8 +612,7 @@ export default function StudentDashboardPage() {
                                 Fines &amp; payments
                             </CardTitle>
                             <p className="text-[11px] text-white/60">
-                                Live snapshot from{" "}
-                                <span className="font-medium">My Fines</span>.
+                                Live snapshot from <span className="font-medium">My Fines</span>.
                             </p>
                         </div>
                         <div className="rounded-full bg-rose-500/20 p-2">
@@ -574,6 +641,7 @@ export default function StudentDashboardPage() {
                                         ({peso(totalFineAll)})
                                     </span>
                                 </p>
+
                                 <p>
                                     Active (unpaid):{" "}
                                     <span className="font-semibold text-amber-300">
@@ -586,18 +654,7 @@ export default function StudentDashboardPage() {
                                         </span>
                                     )}
                                 </p>
-                                <p>
-                                    Pending verification:{" "}
-                                    <span className="font-semibold text-emerald-200">
-                                        {peso(pendingFineTotal)}
-                                    </span>
-                                    {pendingFineCount > 0 && (
-                                        <span className="ml-1 text-[11px] text-white/70">
-                                            ({pendingFineCount}{" "}
-                                            {pendingFineCount === 1 ? "fine" : "fines"})
-                                        </span>
-                                    )}
-                                </p>
+
                                 <p className="text-xs">
                                     Paid so far:{" "}
                                     <span className="font-semibold text-emerald-300">
@@ -610,6 +667,7 @@ export default function StudentDashboardPage() {
                                         </span>
                                     )}
                                 </p>
+
                                 {cancelledFineCount > 0 && (
                                     <p className="text-xs">
                                         Cancelled:{" "}
@@ -622,22 +680,23 @@ export default function StudentDashboardPage() {
                                         </span>
                                     </p>
                                 )}
+
                                 {damageFineCount > 0 && (
                                     <p className="text-[11px] text-rose-200">
                                         Damage-related fines:{" "}
-                                        <span className="font-semibold">
-                                            {damageFineCount}
-                                        </span>{" "}
+                                        <span className="font-semibold">{damageFineCount}</span>{" "}
                                         ({peso(damageFineTotal)})
                                     </p>
                                 )}
+
                                 <p className="text-[11px] text-white/60">
-                                    Use the fines page to upload receipts, track online
-                                    payments, and see full details for overdue or damage
-                                    fines.
+                                    Payment is <span className="font-semibold">over the counter</span>. Visit the
+                                    library to pay, then the librarian will mark your fine as{" "}
+                                    <span className="font-semibold">Paid</span>.
                                 </p>
                             </>
                         )}
+
                         <Button
                             asChild
                             size="sm"
@@ -645,7 +704,7 @@ export default function StudentDashboardPage() {
                             className="px-0 text-xs text-rose-200 hover:text-rose-100 hover:bg-transparent"
                         >
                             <Link to="/dashboard/fines">
-                                Manage fines &amp; receipts
+                                View fines
                                 <ArrowRight className="h-3 w-3 ml-1" />
                             </Link>
                         </Button>
@@ -830,9 +889,7 @@ export default function StudentDashboardPage() {
                                         {feedbackChartData.map((_, index) => (
                                             <Cell
                                                 key={`cell-${index}`}
-                                                fill={
-                                                    FEEDBACK_COLORS[index % FEEDBACK_COLORS.length]
-                                                }
+                                                fill={FEEDBACK_COLORS[index % FEEDBACK_COLORS.length]}
                                             />
                                         ))}
                                     </Pie>
@@ -893,38 +950,13 @@ export default function StudentDashboardPage() {
                                         {recentBorrows.length === 1 ? "record" : "records"}.
                                     </p>
                                     {recentBorrows.map((r) => {
-                                        const isBorrowed = isActiveStatus(r.status) &&
-                                            String(r.status ?? "").toLowerCase() === "borrowed"
-                                        const isPending =
-                                            String(r.status ?? "").toLowerCase() === "pending"
-                                        const isReturned = isReturnedStatus(r.status)
-                                        const isActive = isBorrowed || isPending
+                                        const { badgeColor, badgeIcon, badgeLabel } =
+                                            getBorrowBadge(r)
 
-                                        const fine = normalizeFine((r as any).fine)
-                                        const isOverdue = isActive && fine > 0
-
-                                        let badgeColor =
-                                            "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
-                                        let badgeLabel = "Borrowed"
-                                        let badgeIcon = <Clock3 className="h-3 w-3" />
-
-                                        if (isReturned) {
-                                            badgeColor =
-                                                "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                            badgeLabel = "Returned"
-                                            badgeIcon = <CheckCircle2 className="h-3 w-3" />
-                                        } else if (isPending) {
-                                            badgeColor =
-                                                "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
-                                            badgeLabel = "Pending"
-                                            badgeIcon = <Clock3 className="h-3 w-3" />
-                                        }
-                                        if (isOverdue) {
-                                            badgeColor =
-                                                "bg-red-500/80 hover:bg-red-500 text-white border-red-400/80"
-                                            badgeLabel = "Overdue"
-                                            badgeIcon = <AlertTriangle className="h-3 w-3" />
-                                        }
+                                        const linkedFine = finesByBorrowId[String(r.id)]
+                                        const fine = linkedFine
+                                            ? normalizeFine((linkedFine as any).amount)
+                                            : normalizeFine((r as any).fine)
 
                                         return (
                                             <div
@@ -997,37 +1029,13 @@ export default function StudentDashboardPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {recentBorrows.map((r) => {
-                                                const statusStr = String(r.status ?? "").toLowerCase()
-                                                const isBorrowed = statusStr === "borrowed"
-                                                const isPending = statusStr === "pending"
-                                                const isReturned = statusStr === "returned"
-                                                const isActive = isBorrowed || isPending
+                                                const { badgeColor, badgeIcon, badgeLabel } =
+                                                    getBorrowBadge(r)
 
-                                                const fine = normalizeFine((r as any).fine)
-                                                const isOverdue = isActive && fine > 0
-
-                                                let badgeColor =
-                                                    "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
-                                                let badgeLabel = "Borrowed"
-                                                let badgeIcon = <Clock3 className="h-3 w-3" />
-
-                                                if (isReturned) {
-                                                    badgeColor =
-                                                        "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                    badgeLabel = "Returned"
-                                                    badgeIcon = <CheckCircle2 className="h-3 w-3" />
-                                                } else if (isPending) {
-                                                    badgeColor =
-                                                        "bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80"
-                                                    badgeLabel = "Pending"
-                                                    badgeIcon = <Clock3 className="h-3 w-3" />
-                                                }
-                                                if (isOverdue) {
-                                                    badgeColor =
-                                                        "bg-red-500/80 hover:bg-red-500 text-white border-red-400/80"
-                                                    badgeLabel = "Overdue"
-                                                    badgeIcon = <AlertTriangle className="h-3 w-3" />
-                                                }
+                                                const linkedFine = finesByBorrowId[String(r.id)]
+                                                const fine = linkedFine
+                                                    ? normalizeFine((linkedFine as any).amount)
+                                                    : normalizeFine((r as any).fine)
 
                                                 return (
                                                     <TableRow
