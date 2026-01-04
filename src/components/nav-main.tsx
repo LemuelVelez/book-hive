@@ -1,3 +1,4 @@
+// src/components/nav-main.tsx
 import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import {
@@ -145,6 +146,11 @@ export function NavMain() {
                 icon: Home,
                 to: "/dashboard/faculty",
                 exact: true,
+            },
+            {
+                label: "Books",
+                icon: BookOpen,
+                to: "/dashboard/faculty/books",
             },
         ]
     } else if (isAdmin) {

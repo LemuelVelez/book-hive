@@ -73,6 +73,10 @@ const LibrarianSettingsPage = lazy(
 const FacultyDashboard = lazy(
   () => import('./pages/dashboard/faculty/dashboard')
 )
+const FacultyBooksPage = lazy(
+  () => import('./pages/dashboard/faculty/book')
+)
+
 const AdminDashboard = lazy(
   () => import('./pages/dashboard/admin/dashboard')
 )
@@ -297,6 +301,15 @@ function App() {
             element={
               <RequireRole allow={['faculty']}>
                 <FacultyDashboard />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/dashboard/faculty/books"
+            element={
+              <RequireRole allow={['faculty']}>
+                <FacultyBooksPage />
               </RequireRole>
             }
           />
