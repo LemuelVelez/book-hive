@@ -18,6 +18,7 @@ import {
     ReceiptText,
     Settings,
     Coins,
+    BarChart3,
 } from "lucide-react"
 
 type Item = {
@@ -155,7 +156,11 @@ export function NavMain() {
                 to: "/dashboard/admin",
                 exact: true,
             },
-            // ✅ NEW: Admin Users
+            {
+                label: "Analytics",
+                icon: BarChart3,
+                to: "/dashboard/admin/analytics",
+            },
             {
                 label: "Users",
                 icon: Users2,

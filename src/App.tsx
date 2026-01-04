@@ -77,9 +77,13 @@ const AdminDashboard = lazy(
   () => import('./pages/dashboard/admin/dashboard')
 )
 
-// ✅ NEW: Admin Users page
+// ✅ Admin pages
 const AdminUsersPage = lazy(
   () => import('./pages/dashboard/admin/users')
+)
+
+const AdminAnalyticsPage = lazy(
+  () => import('./pages/dashboard/admin/analytics')
 )
 
 function App() {
@@ -303,7 +307,17 @@ function App() {
             }
           />
 
-          {/* ✅ NEW: Admin Users Management */}
+          {/* ✅ Admin Analytics */}
+          <Route
+            path="/dashboard/admin/analytics"
+            element={
+              <RequireRole allow={['admin']}>
+                <AdminAnalyticsPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Admin Users Management */}
           <Route
             path="/dashboard/admin/users"
             element={
