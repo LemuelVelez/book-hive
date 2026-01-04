@@ -9,35 +9,23 @@ import { RequireRole } from '@/components/roleguard'
 // Lazy-loaded pages for code-splitting
 const LandingPage = lazy(() => import('./pages/landing'))
 const AuthPage = lazy(() => import('./pages/auth/auth'))
-const ForgotPasswordPage = lazy(
-  () => import('./pages/auth/forgot-password')
-)
-const ResetPasswordPage = lazy(
-  () => import('./pages/auth/reset-password')
-)
-const VerifyEmailPage = lazy(
-  () => import('./pages/auth/verify-email')
-)
+const ForgotPasswordPage = lazy(() => import('./pages/auth/forgot-password'))
+const ResetPasswordPage = lazy(() => import('./pages/auth/reset-password'))
+const VerifyEmailPage = lazy(() => import('./pages/auth/verify-email'))
 const VerifyEmailCallbackPage = lazy(
   () => import('./pages/auth/verify-email-callback')
 )
 
 // Dashboards
-const StudentDashboard = lazy(
-  () => import('./pages/dashboard/student/dashboard')
-)
-const StudentBooksPage = lazy(
-  () => import('./pages/dashboard/student/book')
-)
+const StudentDashboard = lazy(() => import('./pages/dashboard/student/dashboard'))
+const StudentBooksPage = lazy(() => import('./pages/dashboard/student/book'))
 const StudentCirculationPage = lazy(
   () => import('./pages/dashboard/student/circulation')
 )
 const StudentInsightsHubPage = lazy(
   () => import('./pages/dashboard/student/insightsHub')
 )
-const StudentFinesPage = lazy(
-  () => import('./pages/dashboard/student/fines')
-)
+const StudentFinesPage = lazy(() => import('./pages/dashboard/student/fines'))
 const StudentSettingsPage = lazy(
   () => import('./pages/dashboard/student/settings')
 )
@@ -45,12 +33,8 @@ const StudentSettingsPage = lazy(
 const LibrarianDashboard = lazy(
   () => import('./pages/dashboard/librarian/dashboard')
 )
-const LibrarianBooksPage = lazy(
-  () => import('./pages/dashboard/librarian/books')
-)
-const LibrarianUsersPage = lazy(
-  () => import('./pages/dashboard/librarian/users')
-)
+const LibrarianBooksPage = lazy(() => import('./pages/dashboard/librarian/books'))
+const LibrarianUsersPage = lazy(() => import('./pages/dashboard/librarian/users'))
 const LibrarianBorrowRecordsPage = lazy(
   () => import('./pages/dashboard/librarian/borrowRecords')
 )
@@ -60,38 +44,25 @@ const LibrarianFeedbacksPage = lazy(
 const LibrarianDamageReportsPage = lazy(
   () => import('./pages/dashboard/librarian/damageReports')
 )
-const LibrarianFinesPage = lazy(
-  () => import('./pages/dashboard/librarian/fines')
-)
-const LibrarianIncomePage = lazy(
-  () => import('./pages/dashboard/librarian/income')
-)
+const LibrarianFinesPage = lazy(() => import('./pages/dashboard/librarian/fines'))
+const LibrarianIncomePage = lazy(() => import('./pages/dashboard/librarian/income'))
 const LibrarianSettingsPage = lazy(
   () => import('./pages/dashboard/librarian/settings')
 )
 
-const FacultyDashboard = lazy(
-  () => import('./pages/dashboard/faculty/dashboard')
-)
-const FacultyBooksPage = lazy(
-  () => import('./pages/dashboard/faculty/book')
-)
-
-const AdminDashboard = lazy(
-  () => import('./pages/dashboard/admin/dashboard')
+const FacultyDashboard = lazy(() => import('./pages/dashboard/faculty/dashboard'))
+const FacultyBooksPage = lazy(() => import('./pages/dashboard/faculty/book'))
+const FacultyCirculationPage = lazy(
+  () => import('./pages/dashboard/faculty/circulation')
 )
 
-const AdminUsersPage = lazy(
-  () => import('./pages/dashboard/admin/users')
-)
+const AdminDashboard = lazy(() => import('./pages/dashboard/admin/dashboard'))
 
-const AdminAnalyticsPage = lazy(
-  () => import('./pages/dashboard/admin/analytics')
-)
+const AdminUsersPage = lazy(() => import('./pages/dashboard/admin/users'))
 
-const AdminSettingsPage = lazy(
-  () => import('./pages/dashboard/admin/settings')
-)
+const AdminAnalyticsPage = lazy(() => import('./pages/dashboard/admin/analytics'))
+
+const AdminSettingsPage = lazy(() => import('./pages/dashboard/admin/settings'))
 
 function App() {
   return (
@@ -310,6 +281,16 @@ function App() {
             element={
               <RequireRole allow={['faculty']}>
                 <FacultyBooksPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Faculty circulation page */}
+          <Route
+            path="/dashboard/faculty/circulation"
+            element={
+              <RequireRole allow={['faculty']}>
+                <FacultyCirculationPage />
               </RequireRole>
             }
           />

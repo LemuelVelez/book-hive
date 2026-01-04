@@ -1,4 +1,3 @@
-// src/components/nav-main.tsx
 import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import {
@@ -151,6 +150,11 @@ export function NavMain() {
                 label: "Books",
                 icon: BookOpen,
                 to: "/dashboard/faculty/books",
+            },
+            {
+                label: "Circulation",
+                icon: ListChecks,
+                to: "/dashboard/faculty/circulation",
             },
         ]
     } else if (isAdmin) {
