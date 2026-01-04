@@ -156,6 +156,11 @@ export function NavMain() {
                 icon: ListChecks,
                 to: "/dashboard/faculty/circulation",
             },
+            {
+                label: "Fines",
+                icon: ReceiptText,
+                to: "/dashboard/faculty/fines",
+            },
         ]
     } else if (isAdmin) {
         groupLabel = "Admin"
