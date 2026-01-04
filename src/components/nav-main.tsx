@@ -161,6 +161,11 @@ export function NavMain() {
                 icon: ReceiptText,
                 to: "/dashboard/faculty/fines",
             },
+            {
+                label: "Insights Hub",
+                icon: MessageSquare,
+                to: "/dashboard/faculty/insights",
+            },
         ]
     } else if (isAdmin) {
         groupLabel = "Admin"

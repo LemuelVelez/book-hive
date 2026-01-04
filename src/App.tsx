@@ -56,6 +56,9 @@ const FacultyCirculationPage = lazy(
   () => import('./pages/dashboard/faculty/circulation')
 )
 const FacultyFinesPage = lazy(() => import('./pages/dashboard/faculty/fines'))
+const FacultyInsightsHubPage = lazy(
+  () => import('./pages/dashboard/faculty/insightsHub')
+)
 
 const AdminDashboard = lazy(() => import('./pages/dashboard/admin/dashboard'))
 
@@ -302,6 +305,16 @@ function App() {
             element={
               <RequireRole allow={['faculty']}>
                 <FacultyFinesPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Faculty Insights Hub page */}
+          <Route
+            path="/dashboard/faculty/insights"
+            element={
+              <RequireRole allow={['faculty']}>
+                <FacultyInsightsHubPage />
               </RequireRole>
             }
           />
