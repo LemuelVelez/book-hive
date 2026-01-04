@@ -155,6 +155,12 @@ export function NavMain() {
                 to: "/dashboard/admin",
                 exact: true,
             },
+            // ✅ NEW: Admin Users
+            {
+                label: "Users",
+                icon: Users2,
+                to: "/dashboard/admin/users",
+            },
         ]
     }
 

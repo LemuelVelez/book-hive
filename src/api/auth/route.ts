@@ -56,11 +56,13 @@ export const ROUTES = {
     // ✅ manual verification send for logged-in user
     meVerifyEmail: api("/users/me/verify-email"), // POST
 
-    // ✅ NEW: librarian/admin user management
+    // ✅ librarian/admin user management
     list: api("/users"), // GET
+    create: api("/users"), // POST ✅ NEW
     pending: api("/users/pending"), // GET
     approve: (id: string) => api(`/users/${encodeURIComponent(id)}/approve`), // PATCH
     disapprove: (id: string) => api(`/users/${encodeURIComponent(id)}/disapprove`), // PATCH
+    updateRole: (id: string) => api(`/users/${encodeURIComponent(id)}/role`), // PATCH ✅ NEW
     delete: (id: string) => api(`/users/${encodeURIComponent(id)}`), // DELETE
   },
   support: {

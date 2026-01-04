@@ -382,3 +382,44 @@ export async function deleteUserById(id: string) {
     method: "DELETE",
   });
 }
+
+/* ---------------- admin create user + role change ---------------- */
+
+export type CreateUserPayload = {
+  fullName: string;
+  email: string;
+  password: string;
+  role: Role;
+
+  // Some backends store both. If yours doesn’t, it can ignore one.
+  accountType?: Role;
+
+  // Optional (primarily student)
+  studentId?: string;
+  course?: string;
+  yearLevel?: string;
+
+  // Optional approval on create (backend may ignore)
+  isApproved?: boolean;
+};
+
+export async function createUser(payload: CreateUserPayload): Promise<UserDTO> {
+  const data = await requestJSON<any>(ROUTES.users.create, {
+    method: "POST",
+    body: payload as any,
+  });
+
+  // Accept shapes: { ok:true, user }, { user }, or direct user object
+  const user = data?.user ?? data;
+  return normalizeUserDTO(user);
+}
+
+export async function updateUserRoleById(id: string, role: Role): Promise<UserDTO> {
+  const data = await requestJSON<any>(ROUTES.users.updateRole(id), {
+    method: "PATCH",
+    body: { role, accountType: role },
+  });
+
+  const user = data?.user ?? data;
+  return normalizeUserDTO(user);
+}
