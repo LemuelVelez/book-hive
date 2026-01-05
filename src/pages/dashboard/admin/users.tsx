@@ -81,6 +81,7 @@ type UserRowDTO = {
     // optional timestamps
     createdAt?: string | null;
 
+    // ✅ display picture
     avatarUrl?: string | null;
 };
 
@@ -123,6 +124,61 @@ function normalizeRole(raw: unknown): Role {
     if (v === "faculty") return "faculty";
     if (v === "admin") return "admin";
     return "other";
+}
+
+function initialsFromName(name: string) {
+    const s = String(name || "").trim();
+    if (!s) return "U";
+    const parts = s.split(/\s+/).filter(Boolean);
+    const a = parts[0]?.[0] ?? "U";
+    const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+    return (a + b).toUpperCase();
+}
+
+function resolveAvatarUrl(url?: string | null) {
+    const s = String(url ?? "").trim();
+    if (!s) return null;
+    if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/")) return s;
+    // common case: backend returns "uploads/..." without leading slash
+    return `/${s}`;
+}
+
+function UserAvatar({
+    name,
+    email,
+    avatarUrl,
+    size = 36,
+}: {
+    name?: string | null;
+    email?: string | null;
+    avatarUrl?: string | null;
+    size?: number;
+}) {
+    const [broken, setBroken] = React.useState(false);
+    const resolved = resolveAvatarUrl(avatarUrl);
+    const label = String(name || "").trim() || String(email || "").trim() || "User";
+    const showImg = !!resolved && !broken;
+
+    return (
+        <div
+            className="rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center"
+            style={{ width: size, height: size }}
+            title={label}
+        >
+            {showImg ? (
+                <img
+                    src={resolved!}
+                    alt={`${label} avatar`}
+                    className="h-full w-full object-cover object-center"
+                    onError={() => setBroken(true)}
+                />
+            ) : (
+                <span className="text-[11px] font-semibold text-white/80">
+                    {initialsFromName(label)}
+                </span>
+            )}
+        </div>
+    );
 }
 
 async function requestJSON<T = unknown>(url: string, init: RequestInit): Promise<T> {
@@ -168,6 +224,8 @@ function normalizeUserRow(u: any): UserRowDTO | null {
     const isApproved = Boolean(u.isApproved ?? u.is_approved ?? false);
     const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
     const createdAt = (u.createdAt ?? u.created_at ?? null) as string | null;
+
+    // ✅ avatar url
     const avatarUrl = (u.avatarUrl ?? u.avatar_url ?? null) as string | null;
 
     return {
@@ -760,6 +818,9 @@ export default function AdminUsersPage() {
                                     <TableHead className="w-[92px] text-xs font-semibold text-white/70">
                                         User ID
                                     </TableHead>
+                                    <TableHead className="w-16 text-xs font-semibold text-white/70">
+                                        Photo
+                                    </TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Email</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Full name</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Role</TableHead>
@@ -796,6 +857,15 @@ export default function AdminUsersPage() {
                                                         you
                                                     </span>
                                                 ) : null}
+                                            </TableCell>
+
+                                            <TableCell>
+                                                <UserAvatar
+                                                    name={u.fullName}
+                                                    email={u.email}
+                                                    avatarUrl={u.avatarUrl}
+                                                    size={34}
+                                                />
                                             </TableCell>
 
                                             <TableCell className="text-sm opacity-90">{u.email}</TableCell>
