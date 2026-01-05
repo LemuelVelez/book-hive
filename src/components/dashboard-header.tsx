@@ -98,7 +98,7 @@ function dashboardHomeForRole(role?: Role): string {
     if (role === "librarian") return "/dashboard/librarian"
     if (role === "faculty") return "/dashboard/faculty"
     if (role === "admin") return "/dashboard/admin"
-    return "/dashboard" // student + other
+    return "/dashboard" // student + other (guest)
 }
 
 function settingsPathForRole(role?: Role): string | null {
@@ -153,7 +153,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         if (path.startsWith("/dashboard/librarian")) return "librarian"
         if (path.startsWith("/dashboard/faculty")) return "faculty"
         if (path.startsWith("/dashboard/admin")) return "admin"
-        if (path.startsWith("/dashboard")) return "student"
         return undefined
     }
 
@@ -161,7 +160,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         if (!raw) return ""
         const map: Record<string, string> = {
             student: "Student",
-            other: "Guest",
+            other: "Guest", // ✅ "other" is still Guest
             librarian: "Librarian",
             faculty: "Faculty",
             admin: "Admin",
@@ -169,10 +168,15 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
     }
 
+    /**
+     * ✅ Use ROLE (not accountType) as the effective role everywhere in the header.
+     * We only fall back to path/accountType if role is missing.
+     */
     const rawRole: Role | undefined =
-        (user?.accountType as Role | undefined) ??
         (user?.role as Role | undefined) ??
-        inferRoleFromPath(pathname)
+        inferRoleFromPath(pathname) ??
+        (user?.accountType as Role | undefined) ??
+        undefined
 
     const roleLabel = formatRole(rawRole)
 
@@ -181,6 +185,8 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         user?.name ||
         user?.full_name ||
         user?.student_name ||
+        user?.admin_name ||
+        user?.staff_name ||
         user?.email ||
         ""
 
@@ -453,7 +459,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                 </p>
                                             </div>
 
-                                            {/* ✅ NEW: copies selector */}
+                                            {/* ✅ copies selector */}
                                             <div className="pt-1">
                                                 <div className="text-xs font-medium text-white/80 mb-1">
                                                     Copies to borrow
