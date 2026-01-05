@@ -111,6 +111,25 @@ const LEGEND_WRAPPER_STYLE: React.CSSProperties = {
     fontSize: 12,
 };
 
+function normalizeRole(raw: unknown): Role {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (v === "student") return "student";
+    if (v === "librarian") return "librarian";
+    if (v === "faculty") return "faculty";
+    if (v === "admin") return "admin";
+    return "other";
+}
+
+/**
+ * ✅ Use ROLE for authorization/analytics.
+ * accountType is informational only, so we only use it as a fallback if role is missing.
+ */
+function getEffectiveRole(u: any): Role {
+    return normalizeRole(
+        u?.role ?? u?.userRole ?? u?.user_role ?? u?.accountType ?? u?.account_type ?? "student"
+    );
+}
+
 function safeParseDate(v?: string | null): Date | null {
     if (!v) return null;
     const d = new Date(v);
@@ -239,6 +258,7 @@ export default function AdminAnalyticsPage() {
         [users]
     );
 
+    // ✅ USE role (authorization) not accountType (informational)
     const countsByRole = React.useMemo(() => {
         const m: Record<Role, number> = {
             student: 0,
@@ -248,7 +268,7 @@ export default function AdminAnalyticsPage() {
             admin: 0,
         };
         for (const u of users) {
-            const r = u.accountType;
+            const r = getEffectiveRole(u as any);
             m[r] = (m[r] ?? 0) + 1;
         }
         return m;

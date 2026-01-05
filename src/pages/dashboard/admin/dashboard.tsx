@@ -103,6 +103,25 @@ const LEGEND_WRAPPER_STYLE: React.CSSProperties = {
     fontSize: 12,
 };
 
+function normalizeRole(raw: unknown): Role {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (v === "student") return "student";
+    if (v === "librarian") return "librarian";
+    if (v === "faculty") return "faculty";
+    if (v === "admin") return "admin";
+    return "other";
+}
+
+/**
+ * ✅ Use ROLE for authorization/metrics.
+ * accountType is informational only, so we only use it as a fallback if role is missing.
+ */
+function getEffectiveRole(u: any): Role {
+    return normalizeRole(
+        u?.role ?? u?.userRole ?? u?.user_role ?? u?.accountType ?? u?.account_type ?? "student"
+    );
+}
+
 function safeParseDate(v?: string | null): Date | null {
     if (!v) return null;
     const d = new Date(v);
@@ -246,7 +265,7 @@ export default function AdminDashboard() {
         return 12;
     }, [range]);
 
-    // ---------- Users overview (from users.tsx) ----------
+    // ---------- Users overview ----------
     const pendingUsers = React.useMemo(
         () => users.filter((u) => !u.isApproved).length,
         [users]
@@ -257,6 +276,7 @@ export default function AdminDashboard() {
         [users]
     );
 
+    // ✅ USE role (authorization) not accountType (informational)
     const countsByRole = React.useMemo(() => {
         const m: Record<Role, number> = {
             student: 0,
@@ -265,7 +285,10 @@ export default function AdminDashboard() {
             librarian: 0,
             admin: 0,
         };
-        for (const u of users) m[u.accountType] = (m[u.accountType] ?? 0) + 1;
+        for (const u of users) {
+            const r = getEffectiveRole(u as any);
+            m[r] = (m[r] ?? 0) + 1;
+        }
         return m;
     }, [users]);
 
@@ -295,7 +318,7 @@ export default function AdminDashboard() {
         return withDate;
     }, [users]);
 
-    // ---------- Analytics overview (from analytics.tsx) ----------
+    // ---------- Analytics overview ----------
     const activeBorrows = React.useMemo(
         () => borrows.filter((b) => b.status !== "returned").length,
         [borrows]
@@ -608,7 +631,7 @@ export default function AdminDashboard() {
                     <CardHeader className="pb-2">
                         <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                             <CardTitle className="text-sm">Users by role</CardTitle>
-                            <div className="text-xs text-white/60">From Admin Users overview</div>
+                            <div className="text-xs text-white/60">Role-based access distribution</div>
                         </div>
                     </CardHeader>
                     <CardContent className="h-80">
@@ -884,22 +907,34 @@ export default function AdminDashboard() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {pendingPreview.map((u) => (
-                                        <TableRow
-                                            key={u.id}
-                                            className="border-white/5 hover:bg-white/5 transition-colors"
-                                        >
-                                            <TableCell className="text-xs opacity-80 max-w-[180px] truncate font-mono">
-                                                {u.id}
-                                            </TableCell>
-                                            <TableCell className="text-sm opacity-90">{u.email}</TableCell>
-                                            <TableCell>
-                                                <Badge className={roleBadgeClasses(u.accountType)}>
-                                                    {u.accountType}
-                                                </Badge>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {pendingPreview.map((u) => {
+                                        const role = getEffectiveRole(u as any);
+                                        return (
+                                            <TableRow
+                                                key={u.id}
+                                                className="border-white/5 hover:bg-white/5 transition-colors"
+                                            >
+                                                <TableCell className="text-xs opacity-80 max-w-[180px] truncate font-mono">
+                                                    {u.id}
+                                                </TableCell>
+                                                <TableCell className="text-sm opacity-90">{u.email}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-1">
+                                                        <Badge className={roleBadgeClasses(role)}>{role}</Badge>
+                                                        {/* accountType is informational only */}
+                                                        {(u as any).accountType ? (
+                                                            <div className="text-[11px] text-white/45">
+                                                                account type:{" "}
+                                                                <span className="text-white/70">
+                                                                    {String((u as any).accountType)}
+                                                                </span>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
                                 </TableBody>
                             </Table>
                         )}
