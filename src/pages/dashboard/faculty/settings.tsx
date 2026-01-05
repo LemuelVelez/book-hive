@@ -1,4 +1,3 @@
-// src/pages/dashboard/faculty/settings.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react"
 import DashboardLayout from "@/components/dashboard-layout"
@@ -20,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 import { toast } from "sonner"
-import { me as apiMe } from "@/lib/authentication"
+import { me as apiMe, type Role } from "@/lib/authentication"
 import * as auth from "@/lib/authentication"
 
 import {
@@ -34,8 +33,6 @@ import {
     Save,
     X,
 } from "lucide-react"
-
-type Role = "student" | "other" | "faculty" | "librarian" | "admin"
 
 function fmtValue(v: unknown) {
     if (v === null || v === undefined) return "—"
@@ -73,6 +70,7 @@ function extractVerifyToken(input: string) {
     const s = String(input || "").trim()
     if (!s) return null
 
+    // If user pasted a full URL
     try {
         const u = new URL(s)
         const t = u.searchParams.get("token")
@@ -81,9 +79,11 @@ function extractVerifyToken(input: string) {
         // ignore
     }
 
+    // If user pasted something containing token=...
     const m = s.match(/[?&]token=([a-f0-9]{16,})/i)
     if (m?.[1]) return m[1].trim()
 
+    // If user pasted raw token
     if (/^[a-f0-9]{32,}$/i.test(s)) return s
 
     return null
@@ -372,10 +372,10 @@ export default function FacultySettingsPage() {
         return () => window.clearInterval(t)
     }, [resendCooldown])
 
-    const rawRole: Role | undefined =
-        (user?.accountType as Role | undefined) ??
-        (user?.role as Role | undefined) ??
-        undefined
+    /**
+     * ✅ Use `role` (NOT accountType) as the effective authorization role.
+     */
+    const effectiveRole: Role | undefined = (user?.role as Role | undefined) ?? undefined
 
     const fullName =
         user?.fullName || user?.name || user?.full_name || user?.faculty_name || "—"
@@ -398,6 +398,9 @@ export default function FacultySettingsPage() {
 
     const department =
         user?.department || user?.dept || user?.departmentName || user?.college || null
+
+    const position =
+        user?.position || user?.jobTitle || user?.job_title || user?.title || null
 
     const avatarUrl = avatarPreview || user?.avatarUrl || user?.avatar_url || null
     const hasAvatar = !!(user?.avatarUrl || user?.avatar_url)
@@ -510,9 +513,13 @@ export default function FacultySettingsPage() {
 
         setProfileBusy(true)
         try {
-            const r = await tryUpdateProfile({ fullName: name, email: nextEmail })
-            const updatedUser = r?.user ?? null
-            if (!updatedUser) throw new Error("Invalid response from server.")
+            const payload: any = { fullName: name, email: nextEmail }
+            const r = await tryUpdateProfile(payload)
+
+            const updatedUser = r?.user ?? r
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.")
+            }
 
             setUser(updatedUser)
             setEditing(false)
@@ -523,7 +530,9 @@ export default function FacultySettingsPage() {
                         "Your email was changed and marked as unverified. A verification email should be sent to your new address. You can resend/verify from this Settings page.",
                 })
             } else {
-                toast.success("Profile updated", { description: "Your personal information has been saved." })
+                toast.success("Profile updated", {
+                    description: "Your personal information has been saved.",
+                })
             }
         } catch (err: any) {
             toast.error("Update failed", {
@@ -644,8 +653,10 @@ export default function FacultySettingsPage() {
         setAvatarBusy(true)
         try {
             const r = await tryUploadAvatar(avatarFile)
-            const updatedUser = r?.user ?? null
-            if (!updatedUser) throw new Error("Invalid response from server.")
+            const updatedUser = r?.user ?? r
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.")
+            }
 
             setUser(updatedUser)
 
@@ -669,8 +680,10 @@ export default function FacultySettingsPage() {
         setAvatarBusy(true)
         try {
             const r = await tryRemoveAvatar()
-            const updatedUser = r?.user ?? null
-            if (!updatedUser) throw new Error("Invalid response from server.")
+            const updatedUser = r?.user ?? r
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.")
+            }
 
             setUser(updatedUser)
 
@@ -748,9 +761,9 @@ export default function FacultySettingsPage() {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {/* Avatar row */}
-                                <div className="flex items-center gap-4">
-                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center">
+                                {/* Avatar row (match admin responsiveness) */}
+                                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center mx-auto md:mx-0">
                                         {avatarUrl ? (
                                             <img
                                                 src={avatarUrl}
@@ -764,12 +777,10 @@ export default function FacultySettingsPage() {
                                         )}
                                     </div>
 
-                                    <div className="flex flex-col gap-2">
-                                        <div className="text-sm text-white/80 font-medium">
-                                            Display picture
-                                        </div>
+                                    <div className="flex flex-col gap-2 w-full md:w-auto items-center md:items-start">
+                                        <div className="text-sm text-white/80 font-medium">Display picture</div>
 
-                                        <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                                             <Input
                                                 ref={fileRef}
                                                 type="file"
@@ -807,10 +818,7 @@ export default function FacultySettingsPage() {
                                                 )}
                                             </Button>
 
-                                            <AlertDialog
-                                                open={removeConfirmOpen}
-                                                onOpenChange={setRemoveConfirmOpen}
-                                            >
+                                            <AlertDialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
                                                 <Button
                                                     type="button"
                                                     variant="destructive"
@@ -826,12 +834,9 @@ export default function FacultySettingsPage() {
 
                                                 <AlertDialogContent className="bg-slate-900 text-white border-white/10">
                                                     <AlertDialogHeader>
-                                                        <AlertDialogTitle>
-                                                            Remove display picture?
-                                                        </AlertDialogTitle>
+                                                        <AlertDialogTitle>Remove display picture?</AlertDialogTitle>
                                                         <AlertDialogDescription className="text-white/70">
-                                                            This will delete your current display picture. You can
-                                                            upload a new one anytime.
+                                                            This will delete your current display picture. You can upload a new one anytime.
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
@@ -860,9 +865,7 @@ export default function FacultySettingsPage() {
                                             </AlertDialog>
                                         </div>
 
-                                        <div className="text-[11px] text-white/50">
-                                            PNG/JPG/WebP • Max 5MB
-                                        </div>
+                                        <div className="text-[11px] text-white/50">PNG/JPG/WebP • Max 5MB</div>
                                     </div>
                                 </div>
 
@@ -913,17 +916,18 @@ export default function FacultySettingsPage() {
                                                 />
                                                 <p className="text-[11px] text-white/50">
                                                     Changing your email will mark it as{" "}
-                                                    <span className="font-semibold text-amber-300">unverified</span>
-                                                    . After saving, you can resend/verify it here.
+                                                    <span className="font-semibold text-amber-300">unverified</span>. After saving, you can
+                                                    resend/verify it here without logging out.
                                                 </p>
                                             </div>
                                         )}
 
+                                        {/* Email verification controls */}
                                         {!isEmailVerified ? (
                                             <div className="mt-3 space-y-2">
                                                 <p className="text-[11px] text-amber-200/80">
-                                                    Your email is not verified. Resend the verification email and
-                                                    verify using the token/link from your inbox.
+                                                    Your email is not verified. Use the buttons below to resend the verification email and verify
+                                                    using the token/link from your inbox.
                                                 </p>
 
                                                 <div className="flex flex-wrap items-center gap-2">
@@ -971,24 +975,18 @@ export default function FacultySettingsPage() {
                                                     </Button>
                                                 </div>
 
-                                                <AlertDialog
-                                                    open={verifyDialogOpen}
-                                                    onOpenChange={setVerifyDialogOpen}
-                                                >
+                                                <AlertDialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>
                                                     <AlertDialogContent className="bg-slate-900 text-white border-white/10">
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Verify your email</AlertDialogTitle>
                                                             <AlertDialogDescription className="text-white/70">
-                                                                Paste the verification link or token from the email you
-                                                                received. (You can paste the whole link — we’ll extract
-                                                                the token.)
+                                                                Paste the verification link or token from the email you received. (You can paste the
+                                                                whole link — we’ll extract the token.)
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
 
                                                         <div className="space-y-2">
-                                                            <Label className="text-xs text-white/80">
-                                                                Verification link / token
-                                                            </Label>
+                                                            <Label className="text-xs text-white/80">Verification link / token</Label>
                                                             <Input
                                                                 value={verifyTokenInput}
                                                                 onChange={(e) => setVerifyTokenInput(e.target.value)}
@@ -1029,9 +1027,11 @@ export default function FacultySettingsPage() {
                                         ) : null}
                                     </div>
 
+                                    {/* ✅ Role (use user.role) */}
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                        <div className="text-xs text-white/60">Account type</div>
-                                        <div className="mt-0.5 font-medium">{roleLabel(rawRole)}</div>
+                                        <div className="text-xs text-white/60">Role</div>
+                                        <div className="mt-0.5 font-medium">{roleLabel(effectiveRole)}</div>
+                                        <p className="mt-1 text-[11px] text-white/45">Used for access control / routing.</p>
                                     </div>
 
                                     {facultyId ? (
@@ -1045,6 +1045,13 @@ export default function FacultySettingsPage() {
                                         <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                             <div className="text-xs text-white/60">Department / College</div>
                                             <div className="mt-0.5 font-medium">{fmtValue(department)}</div>
+                                        </div>
+                                    ) : null}
+
+                                    {position ? (
+                                        <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                            <div className="text-xs text-white/60">Position</div>
+                                            <div className="mt-0.5 font-medium">{fmtValue(position)}</div>
                                         </div>
                                     ) : null}
                                 </div>
@@ -1070,9 +1077,7 @@ export default function FacultySettingsPage() {
                                             )}
                                         </Button>
 
-                                        {!profileDirty ? (
-                                            <span className="text-xs text-white/50">No changes to save.</span>
-                                        ) : null}
+                                        {!profileDirty ? <span className="text-xs text-white/50">No changes to save.</span> : null}
                                     </div>
                                 ) : null}
                             </div>
@@ -1110,11 +1115,7 @@ export default function FacultySettingsPage() {
                                         className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white"
                                         aria-label={showCurrent ? "Hide password" : "Show password"}
                                     >
-                                        {showCurrent ? (
-                                            <EyeOff className="h-4 w-4" />
-                                        ) : (
-                                            <Eye className="h-4 w-4" />
-                                        )}
+                                        {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </button>
                                 </div>
                             </div>
@@ -1135,11 +1136,7 @@ export default function FacultySettingsPage() {
                                         className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white"
                                         aria-label={showNext ? "Hide password" : "Show password"}
                                     >
-                                        {showNext ? (
-                                            <EyeOff className="h-4 w-4" />
-                                        ) : (
-                                            <Eye className="h-4 w-4" />
-                                        )}
+                                        {showNext ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </button>
                                 </div>
                                 <p className="text-[11px] text-white/50">Minimum 8 characters.</p>
@@ -1161,11 +1158,7 @@ export default function FacultySettingsPage() {
                                         className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white"
                                         aria-label={showConfirm ? "Hide password" : "Show password"}
                                     >
-                                        {showConfirm ? (
-                                            <EyeOff className="h-4 w-4" />
-                                        ) : (
-                                            <Eye className="h-4 w-4" />
-                                        )}
+                                        {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </button>
                                 </div>
 

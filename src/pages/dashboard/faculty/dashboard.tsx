@@ -148,6 +148,22 @@ function SimpleTooltip({
     );
 }
 
+/* ----------------------------- chart colors ----------------------------- */
+
+const FALLBACK_CHART_COLORS = [
+    "#8b5cf6", // purple
+    "#38bdf8", // sky
+    "#22c55e", // green
+    "#f59e0b", // amber
+    "#ef4444", // red
+];
+
+function readCssVar(name: string, fallback: string) {
+    if (typeof window === "undefined") return fallback;
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+}
+
 /* ----------------------------- page ----------------------------- */
 
 export default function FacultyDashboardPage() {
@@ -159,6 +175,21 @@ export default function FacultyDashboardPage() {
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+
+    // ✅ Chart palette resolved from CSS variables (works with your oklch(...) tokens)
+    const [chartPalette, setChartPalette] = React.useState<string[]>(FALLBACK_CHART_COLORS);
+
+    React.useEffect(() => {
+        // Pull --chart-* from your CSS and use directly (no hsl(...) wrapper).
+        // Your index.css defines them as oklch(...), which is valid as-is.
+        setChartPalette([
+            readCssVar("--chart-1", FALLBACK_CHART_COLORS[0]),
+            readCssVar("--chart-2", FALLBACK_CHART_COLORS[1]),
+            readCssVar("--chart-3", FALLBACK_CHART_COLORS[2]),
+            readCssVar("--chart-4", FALLBACK_CHART_COLORS[3]),
+            readCssVar("--chart-5", FALLBACK_CHART_COLORS[4]),
+        ]);
+    }, []);
 
     const loadAll = React.useCallback(async () => {
         setError(null);
@@ -308,14 +339,11 @@ export default function FacultyDashboardPage() {
         return Object.entries(counts).map(([name, value]) => ({ name, value }));
     }, [fines]);
 
-    // Palette (tries to use CSS vars if defined; otherwise falls back)
-    const chartPalette = [
-        "hsl(var(--chart-1, 262 83% 58%))",
-        "hsl(var(--chart-2, 199 89% 48%))",
-        "hsl(var(--chart-3, 142 71% 45%))",
-        "hsl(var(--chart-4, 38 92% 50%))",
-        "hsl(var(--chart-5, 0 84% 60%))",
-    ];
+    // Common chart styling (prevents Recharts defaults from showing black on dark UI)
+    const axisTick = { fill: "rgba(255,255,255,0.75)", fontSize: 12 };
+    const axisLine = { stroke: "rgba(255,255,255,0.18)" };
+    const tickLine = { stroke: "rgba(255,255,255,0.18)" };
+    const legendStyle = { color: "rgba(255,255,255,0.75)" } as React.CSSProperties;
 
     /* ----------------------------- render ----------------------------- */
 
@@ -408,9 +436,7 @@ export default function FacultyDashboardPage() {
                                 </div>
                                 <div className="mt-1 text-xs text-white/60">
                                     Total fine records:{" "}
-                                    <span className="font-semibold text-white/80">
-                                        {fines.length}
-                                    </span>
+                                    <span className="font-semibold text-white/80">{fines.length}</span>
                                 </div>
                             </>
                         )}
@@ -460,13 +486,13 @@ export default function FacultyDashboardPage() {
                                     {damageReports.length}
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/70">
-                                    <Badge className="bg-slate-700/70 border-white/10">
+                                    <Badge className="bg-slate-700/70 border-white/10 text-white">
                                         Pending: {damageStatusSummary.Pending}
                                     </Badge>
-                                    <Badge className="bg-amber-600/70 border-amber-400/20">
+                                    <Badge className="bg-amber-600/70 border-amber-400/20 text-white">
                                         Assessed: {damageStatusSummary.Assessed}
                                     </Badge>
-                                    <Badge className="bg-emerald-600/70 border-emerald-400/20">
+                                    <Badge className="bg-emerald-600/70 border-emerald-400/20 text-white">
                                         Paid: {damageStatusSummary.Paid}
                                     </Badge>
                                 </div>
@@ -549,14 +575,18 @@ export default function FacultyDashboardPage() {
                                         />
                                         <XAxis
                                             dataKey="name"
-                                            tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
+                                            tick={axisTick}
+                                            axisLine={axisLine}
+                                            tickLine={tickLine}
                                         />
                                         <YAxis
                                             allowDecimals={false}
-                                            tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
+                                            tick={axisTick}
+                                            axisLine={axisLine}
+                                            tickLine={tickLine}
                                         />
                                         <RechartsTooltip content={<SimpleTooltip />} />
-                                        <Legend />
+                                        <Legend wrapperStyle={legendStyle} />
                                         <Bar
                                             dataKey="value"
                                             name="Records"
@@ -587,14 +617,18 @@ export default function FacultyDashboardPage() {
                                         />
                                         <XAxis
                                             dataKey="month"
-                                            tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
+                                            tick={axisTick}
+                                            axisLine={axisLine}
+                                            tickLine={tickLine}
                                         />
                                         <YAxis
                                             allowDecimals={false}
-                                            tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
+                                            tick={axisTick}
+                                            axisLine={axisLine}
+                                            tickLine={tickLine}
                                         />
                                         <RechartsTooltip content={<SimpleTooltip />} />
-                                        <Legend />
+                                        <Legend wrapperStyle={legendStyle} />
                                         <Line
                                             type="monotone"
                                             dataKey="Borrows"
@@ -617,15 +651,13 @@ export default function FacultyDashboardPage() {
                         {loading ? (
                             <Skeleton className="h-60 w-full" />
                         ) : fines.length === 0 ? (
-                            <div className="py-10 text-center text-sm text-white/70">
-                                No fines found.
-                            </div>
+                            <div className="py-10 text-center text-sm text-white/70">No fines found.</div>
                         ) : (
                             <div className="h-72">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <RechartsTooltip content={<SimpleTooltip />} />
-                                        <Legend />
+                                        <Legend wrapperStyle={legendStyle} />
                                         <Pie
                                             data={fineStatusChart}
                                             dataKey="value"
@@ -633,6 +665,7 @@ export default function FacultyDashboardPage() {
                                             innerRadius={60}
                                             outerRadius={100}
                                             paddingAngle={2}
+                                            stroke="rgba(255,255,255,0.08)"
                                         >
                                             {fineStatusChart.map((_, idx) => (
                                                 <Cell
