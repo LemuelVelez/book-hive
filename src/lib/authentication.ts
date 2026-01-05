@@ -302,10 +302,9 @@ export async function sendMyVerifyEmail() {
 }
 
 export async function checkStudentIdAvailability(studentId: string) {
-  return requestJSON<{ available: boolean }>(
-    ROUTES.users.checkStudentId(studentId),
-    { method: "GET" }
-  );
+  return requestJSON<{ available: boolean }>(ROUTES.users.checkStudentId(studentId), {
+    method: "GET",
+  });
 }
 
 export async function submitSupportTicket(form: FormData) {
@@ -319,18 +318,98 @@ export async function submitSupportTicket(form: FormData) {
 
 /* ---------------- profile update + avatar upload ---------------- */
 
-export async function updateMyProfile(payload: {
+export type UpdateMyProfilePayload = {
   fullName?: string;
   email?: string;
   course?: string;
-  yearLevel?: string;
-}) {
+
+  // preferred casing
+  yearLevel?: string | null;
+  studentId?: string | null;
+
+  // backend compatibility (some APIs expect snake_case)
+  year_level?: string | null;
+  student_id?: string | null;
+};
+
+function sameNullable(a: unknown, b: unknown) {
+  // compares string-ish values, keeping null meaningful
+  const an = a === undefined ? undefined : a === null ? null : String(a).trim();
+  const bn = b === undefined ? undefined : b === null ? null : String(b).trim();
+  return an === bn;
+}
+
+export async function updateMyProfile(payload: UpdateMyProfilePayload) {
   type Resp = JsonOk<{ user: any }>;
-  const r = await requestJSON<Resp>(ROUTES.users.me, {
-    method: "PATCH",
-    body: payload,
-  });
-  return { ...r, user: normalizeUserDTO(r.user) } as JsonOk<{ user: UserDTO }>;
+
+  const hasStudentId =
+    Object.prototype.hasOwnProperty.call(payload, "studentId") ||
+    Object.prototype.hasOwnProperty.call(payload, "student_id");
+
+  const hasYearLevel =
+    Object.prototype.hasOwnProperty.call(payload, "yearLevel") ||
+    Object.prototype.hasOwnProperty.call(payload, "year_level");
+
+  const desiredStudentId =
+    payload.studentId !== undefined ? payload.studentId : payload.student_id;
+
+  const desiredYearLevel =
+    payload.yearLevel !== undefined ? payload.yearLevel : payload.year_level;
+
+  // Build camelCase body first (most common for JSON APIs)
+  const bodyCamel: any = {};
+  if (payload.fullName !== undefined) bodyCamel.fullName = payload.fullName;
+  if (payload.email !== undefined) bodyCamel.email = payload.email;
+  if (payload.course !== undefined) bodyCamel.course = payload.course;
+  if (hasYearLevel) bodyCamel.yearLevel = desiredYearLevel;
+  if (hasStudentId) bodyCamel.studentId = desiredStudentId;
+
+  const doPatch = async (body: any) => {
+    const r = await requestJSON<Resp>(ROUTES.users.me, {
+      method: "PATCH",
+      body,
+    });
+    return { ...r, user: normalizeUserDTO(r.user) } as JsonOk<{ user: UserDTO }>;
+  };
+
+  // 1) Try camelCase update
+  try {
+    const r1 = await doPatch(bodyCamel);
+
+    // If server ignored studentId/yearLevel (common mismatch: expects snake_case),
+    // retry ONLY those fields using snake_case to ensure they persist.
+    const needStudentRetry =
+      hasStudentId && !sameNullable(r1.user.studentId, desiredStudentId);
+    const needYearRetry =
+      hasYearLevel && !sameNullable(r1.user.yearLevel, desiredYearLevel);
+
+    if (needStudentRetry || needYearRetry) {
+      const bodySnake: any = {};
+      if (needStudentRetry) bodySnake.student_id = desiredStudentId;
+      if (needYearRetry) bodySnake.year_level = desiredYearLevel;
+
+      const r2 = await doPatch(bodySnake);
+      return r2;
+    }
+
+    return r1;
+  } catch (e1) {
+    // 2) If camelCase failed and student/year fields exist, try snake_case.
+    // This protects strict validators that reject unknown keys like `studentId`.
+    if (hasStudentId || hasYearLevel) {
+      const bodySnakeAll: any = {};
+      if (payload.fullName !== undefined) bodySnakeAll.fullName = payload.fullName;
+      if (payload.email !== undefined) bodySnakeAll.email = payload.email;
+      if (payload.course !== undefined) bodySnakeAll.course = payload.course;
+
+      if (hasStudentId) bodySnakeAll.student_id = desiredStudentId;
+      if (hasYearLevel) bodySnakeAll.year_level = desiredYearLevel;
+
+      // NOTE: no useless try/catch here — if it fails, the thrown error is the "most recent" one.
+      return doPatch(bodySnakeAll);
+    }
+    throw e1;
+  }
 }
 
 export async function uploadMyAvatar(file: File) {

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 import { toast } from "sonner"
-import { me as apiMe } from "@/lib/authentication"
+import { me as apiMe, type Role } from "@/lib/authentication"
 import * as auth from "@/lib/authentication"
 
 import {
@@ -33,8 +33,6 @@ import {
     Save,
     X,
 } from "lucide-react"
-
-type Role = "student" | "other" | "faculty" | "librarian" | "admin"
 
 function fmtValue(v: unknown) {
     if (v === null || v === undefined) return "—"
@@ -64,7 +62,6 @@ function initialsFromName(name: string) {
 }
 
 function isValidEmail(email: string) {
-    // simple, practical validation
     const s = String(email || "").trim()
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
 }
@@ -161,6 +158,9 @@ async function tryUpdateProfile(payload: {
     email?: string
     course?: string
     yearLevel?: string
+    // ✅ allow either casing (we'll send the one that matches the user object)
+    studentId?: string
+    student_id?: string
 }) {
     const anyAuth = auth as any
     if (typeof anyAuth.updateMyProfile === "function") {
@@ -246,7 +246,6 @@ async function tryResendVerifyEmail(email: string) {
         return await anyAuth.resendVerificationEmail(email)
     }
 
-    // best-effort fallback endpoints (won't break if missing)
     const endpoints = [
         "/api/auth/resend-verify-email",
         "/api/auth/resendVerifyEmail",
@@ -267,7 +266,6 @@ async function tryResendVerifyEmail(email: string) {
             if (!res.ok) continue
             return { ok: true }
         } catch {
-            // ignore and try next
             continue
         }
     }
@@ -278,16 +276,11 @@ async function tryResendVerifyEmail(email: string) {
 async function tryConfirmVerifyEmail(token: string) {
     const anyAuth = auth as any
 
-    // ✅ preferred: lib/authentication.ts
     if (typeof anyAuth.confirmVerifyEmail === "function") {
         return await anyAuth.confirmVerifyEmail(token)
     }
 
-    // best-effort fallback
-    const endpoints = [
-        "/api/auth/verify-email/confirm",
-        "/api/auth/verifyEmail/confirm",
-    ]
+    const endpoints = ["/api/auth/verify-email/confirm", "/api/auth/verifyEmail/confirm"]
 
     let lastErr: string | null = null
 
@@ -349,6 +342,8 @@ export default function StudentSettingsPage() {
     const [emailInput, setEmailInput] = React.useState("")
     const [courseInput, setCourseInput] = React.useState("")
     const [yearLevelInput, setYearLevelInput] = React.useState("")
+    // ✅ student id input (now editable)
+    const [studentIdInput, setStudentIdInput] = React.useState("")
 
     // avatar upload
     const fileRef = React.useRef<HTMLInputElement | null>(null)
@@ -359,7 +354,7 @@ export default function StudentSettingsPage() {
     // alert dialog state for remove
     const [removeConfirmOpen, setRemoveConfirmOpen] = React.useState(false)
 
-    // ✅ email verification UI state
+    // email verification UI state
     const [resendBusy, setResendBusy] = React.useState(false)
     const [resendCooldown, setResendCooldown] = React.useState(0)
     const [verifyDialogOpen, setVerifyDialogOpen] = React.useState(false)
@@ -392,13 +387,18 @@ export default function StudentSettingsPage() {
         return () => window.clearInterval(t)
     }, [resendCooldown])
 
-    const rawRole: Role | undefined =
-        (user?.accountType as Role | undefined) ??
+    /**
+     * ✅ Use `role` (NOT accountType) as the effective authorization role.
+     * ✅ BUT fall back to accountType/account_type if role is missing (prevents student fields from being skipped).
+     */
+    const effectiveRole: Role | undefined =
         (user?.role as Role | undefined) ??
+        (user?.accountType as Role | undefined) ??
+        (user?.account_type as Role | undefined) ??
         undefined
 
-    const isStudent = rawRole === "student"
-    const isGuest = rawRole === "other"
+    const isStudent = effectiveRole === "student"
+    const isGuest = effectiveRole === "other"
 
     const fullName =
         user?.fullName || user?.name || user?.full_name || user?.student_name || "—"
@@ -429,6 +429,7 @@ export default function StudentSettingsPage() {
     const college = user?.college || user?.school || user?.collegeName || null
 
     const avatarUrl = avatarPreview || user?.avatarUrl || user?.avatar_url || null
+    const hasAvatar = !!(user?.avatarUrl || user?.avatar_url)
 
     // populate inputs from user (avoid overriding while editing)
     React.useEffect(() => {
@@ -446,6 +447,16 @@ export default function StudentSettingsPage() {
         setYearLevelInput(
             String(user?.yearLevel || user?.year_level || user?.year || user?.level || "")
         )
+        // ✅ set student id input
+        setStudentIdInput(
+            String(
+                user?.studentId ||
+                user?.student_id ||
+                user?.studentID ||
+                user?.idNumber ||
+                ""
+            )
+        )
     }, [user, editing])
 
     // cleanup avatar preview
@@ -459,18 +470,25 @@ export default function StudentSettingsPage() {
     const oldEmailTrim = String(email === "—" ? "" : email || "").trim()
     const newEmailTrim = String(emailInput || "").trim()
     const emailChanged =
-        !!oldEmailTrim && !!newEmailTrim && oldEmailTrim.toLowerCase() !== newEmailTrim.toLowerCase()
+        !!oldEmailTrim &&
+        !!newEmailTrim &&
+        oldEmailTrim.toLowerCase() !== newEmailTrim.toLowerCase()
+
+    const oldStudentIdTrim =
+        studentId === null || studentId === undefined ? "" : String(studentId).trim()
 
     const profileDirty =
         String(fullNameInput || "").trim() !==
         String(fullName === "—" ? "" : fullName || "").trim() ||
         String(emailInput || "").trim() !== oldEmailTrim ||
+        (isStudent && String(studentIdInput || "").trim() !== oldStudentIdTrim) ||
         (isStudent && String(courseInput || "").trim() !== String(program || "").trim()) ||
         (isStudent && String(yearLevelInput || "").trim() !== String(yearLevel || "").trim())
 
     function resetProfileForm() {
         setFullNameInput(String(fullName === "—" ? "" : fullName || ""))
         setEmailInput(String(oldEmailTrim || ""))
+        setStudentIdInput(String(oldStudentIdTrim || ""))
         setCourseInput(String(program || ""))
         setYearLevelInput(String(yearLevel || ""))
         setEditing(false)
@@ -531,6 +549,7 @@ export default function StudentSettingsPage() {
     async function onSaveProfile() {
         const name = String(fullNameInput || "").trim()
         const nextEmail = String(emailInput || "").trim()
+        const nextStudentId = String(studentIdInput || "").trim()
 
         if (!name) {
             toast.warning("Full name required", { description: "Please enter your full name." })
@@ -546,6 +565,13 @@ export default function StudentSettingsPage() {
         }
 
         if (isStudent) {
+            // ✅ student id now editable + required
+            if (!nextStudentId) {
+                toast.warning("Student ID required", {
+                    description: "Please enter your student ID.",
+                })
+                return
+            }
             if (!String(courseInput || "").trim()) {
                 toast.warning("Program / Course required", {
                     description: "Please enter your program/course.",
@@ -563,20 +589,29 @@ export default function StudentSettingsPage() {
         setProfileBusy(true)
         try {
             const payload: any = { fullName: name, email: nextEmail }
+
             if (isStudent) {
                 payload.course = String(courseInput || "").trim()
                 payload.yearLevel = String(yearLevelInput || "").trim()
+
+                // ✅ send student id using the key that matches the existing user shape (snake_case vs camelCase)
+                if (user && Object.prototype.hasOwnProperty.call(user, "student_id")) {
+                    payload.student_id = nextStudentId
+                } else {
+                    payload.studentId = nextStudentId
+                }
             }
 
             const r = await tryUpdateProfile(payload)
-            const updatedUser = r?.user ?? null
-            if (!updatedUser) throw new Error("Invalid response from server.")
+            const updatedUser = r?.user ?? r
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.")
+            }
 
             setUser(updatedUser)
             setEditing(false)
 
             if (emailChanged) {
-                // ✅ FIX: Don't resend here — backend already sends on email change
                 toast.success("Profile updated", {
                     description:
                         "Your email was changed and marked as unverified. A verification email should be sent to your new address. You can resend/verify from this Settings page.",
@@ -608,9 +643,7 @@ export default function StudentSettingsPage() {
         setResendBusy(true)
         try {
             const r = await tryResendVerifyEmail(targetEmail)
-            if (r?.ok === false) {
-                throw new Error("Resend endpoint is not available.")
-            }
+            if (r?.ok === false) throw new Error("Resend endpoint is not available.")
 
             toast.success("Verification email sent", {
                 description: `We sent a verification email to ${targetEmail}.`,
@@ -645,7 +678,6 @@ export default function StudentSettingsPage() {
             setVerifyDialogOpen(false)
             setVerifyTokenInput("")
 
-            // refresh /me to reflect isEmailVerified=true
             const u = await apiMe()
             setUser(u)
         } catch (err: any) {
@@ -662,9 +694,13 @@ export default function StudentSettingsPage() {
         try {
             const u = await apiMe()
             setUser(u)
-            toast.success("Status refreshed", { description: "Your email verification status was refreshed." })
+            toast.success("Status refreshed", {
+                description: "Your email verification status was refreshed.",
+            })
         } catch {
-            toast.error("Refresh failed", { description: "Could not refresh your profile. Please try again." })
+            toast.error("Refresh failed", {
+                description: "Could not refresh your profile. Please try again.",
+            })
         } finally {
             setRefreshBusy(false)
         }
@@ -703,8 +739,10 @@ export default function StudentSettingsPage() {
         setAvatarBusy(true)
         try {
             const r = await tryUploadAvatar(avatarFile)
-            const updatedUser = r?.user ?? null
-            if (!updatedUser) throw new Error("Invalid response from server.")
+            const updatedUser = r?.user ?? r
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.")
+            }
 
             setUser(updatedUser)
 
@@ -728,8 +766,10 @@ export default function StudentSettingsPage() {
         setAvatarBusy(true)
         try {
             const r = await tryRemoveAvatar()
-            const updatedUser = r?.user ?? null
-            if (!updatedUser) throw new Error("Invalid response from server.")
+            const updatedUser = r?.user ?? r
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.")
+            }
 
             setUser(updatedUser)
 
@@ -749,8 +789,6 @@ export default function StudentSettingsPage() {
             setAvatarBusy(false)
         }
     }
-
-    const hasAvatar = !!(user?.avatarUrl || user?.avatar_url)
 
     return (
         <DashboardLayout title="Settings">
@@ -812,9 +850,9 @@ export default function StudentSettingsPage() {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {/* Avatar row */}
-                                <div className="flex items-center gap-4">
-                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center">
+                                {/* Avatar row (match admin responsiveness) */}
+                                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center mx-auto md:mx-0">
                                         {avatarUrl ? (
                                             <img
                                                 src={avatarUrl}
@@ -828,10 +866,10 @@ export default function StudentSettingsPage() {
                                         )}
                                     </div>
 
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-2 w-full md:w-auto items-center md:items-start">
                                         <div className="text-sm text-white/80 font-medium">Display picture</div>
 
-                                        <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                                             <Input
                                                 ref={fileRef}
                                                 type="file"
@@ -887,8 +925,7 @@ export default function StudentSettingsPage() {
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>Remove display picture?</AlertDialogTitle>
                                                         <AlertDialogDescription className="text-white/70">
-                                                            This will delete your current display picture. You can upload a new one
-                                                            anytime.
+                                                            This will delete your current display picture. You can upload a new one anytime.
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
@@ -968,18 +1005,18 @@ export default function StudentSettingsPage() {
                                                 />
                                                 <p className="text-[11px] text-white/50">
                                                     Changing your email will mark it as{" "}
-                                                    <span className="font-semibold text-amber-300">unverified</span>. After saving,
-                                                    you can resend/verify it here without logging out.
+                                                    <span className="font-semibold text-amber-300">unverified</span>. After saving, you can
+                                                    resend/verify it here without logging out.
                                                 </p>
                                             </div>
                                         )}
 
-                                        {/* ✅ Email verification controls */}
+                                        {/* Email verification controls */}
                                         {!isEmailVerified ? (
                                             <div className="mt-3 space-y-2">
                                                 <p className="text-[11px] text-amber-200/80">
-                                                    Your email is not verified. Use the buttons below to resend the verification email
-                                                    and verify using the token/link from your inbox.
+                                                    Your email is not verified. Use the buttons below to resend the verification email and verify
+                                                    using the token/link from your inbox.
                                                 </p>
 
                                                 <div className="flex flex-wrap items-center gap-2">
@@ -1032,8 +1069,8 @@ export default function StudentSettingsPage() {
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Verify your email</AlertDialogTitle>
                                                             <AlertDialogDescription className="text-white/70">
-                                                                Paste the verification link or token from the email you received.
-                                                                (You can paste the whole link — we’ll extract the token.)
+                                                                Paste the verification link or token from the email you received. (You can paste the
+                                                                whole link — we’ll extract the token.)
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
 
@@ -1079,16 +1116,30 @@ export default function StudentSettingsPage() {
                                         ) : null}
                                     </div>
 
+                                    {/* ✅ Role (not account type) */}
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
-                                        <div className="text-xs text-white/60">Account type</div>
-                                        <div className="mt-0.5 font-medium">{roleLabel(rawRole)}</div>
+                                        <div className="text-xs text-white/60">Role</div>
+                                        <div className="mt-0.5 font-medium">{roleLabel(effectiveRole)}</div>
+                                        <p className="mt-1 text-[11px] text-white/45">Used for access control / routing.</p>
                                     </div>
 
-                                    {isStudent && (
+                                    {isStudent ? (
                                         <>
                                             <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                                 <div className="text-xs text-white/60">Student ID</div>
-                                                <div className="mt-0.5 font-medium">{fmtValue(studentId)}</div>
+                                                {!editing ? (
+                                                    <div className="mt-0.5 font-medium">{fmtValue(studentId)}</div>
+                                                ) : (
+                                                    <div className="mt-2 space-y-1">
+                                                        <Label className="text-xs text-white/80">Student ID</Label>
+                                                        <Input
+                                                            value={studentIdInput}
+                                                            onChange={(e) => setStudentIdInput(e.target.value)}
+                                                            className="bg-slate-900/70 border-white/20 text-white"
+                                                            placeholder="Enter student ID"
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
@@ -1130,7 +1181,7 @@ export default function StudentSettingsPage() {
                                                 </div>
                                             ) : null}
                                         </>
-                                    )}
+                                    ) : null}
                                 </div>
 
                                 {editing ? (
@@ -1154,9 +1205,7 @@ export default function StudentSettingsPage() {
                                             )}
                                         </Button>
 
-                                        {!profileDirty ? (
-                                            <span className="text-xs text-white/50">No changes to save.</span>
-                                        ) : null}
+                                        {!profileDirty ? <span className="text-xs text-white/50">No changes to save.</span> : null}
                                     </div>
                                 ) : null}
                             </div>
@@ -1171,9 +1220,7 @@ export default function StudentSettingsPage() {
                             <KeyRound className="h-5 w-5" />
                             Change password
                         </CardTitle>
-                        <p className="text-xs text-white/70">
-                            For security, you must enter your current password.
-                        </p>
+                        <p className="text-xs text-white/70">For security, you must enter your current password.</p>
                     </CardHeader>
 
                     <CardContent className="pt-2">
@@ -1247,11 +1294,7 @@ export default function StudentSettingsPage() {
                             </div>
 
                             <div className="pt-1">
-                                <Button
-                                    type="submit"
-                                    className="bg-purple-600 hover:bg-purple-700 text-white"
-                                    disabled={pwBusy}
-                                >
+                                <Button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white" disabled={pwBusy}>
                                     {pwBusy ? (
                                         <span className="inline-flex items-center gap-2">
                                             <Loader2 className="h-4 w-4 animate-spin" />
