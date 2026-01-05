@@ -29,6 +29,8 @@ import {
     UserPlus,
     Save,
     ShieldAlert,
+    Eye,
+    EyeOff,
 } from "lucide-react";
 import {
     Select,
@@ -226,6 +228,7 @@ export default function AdminUsersPage() {
     const [cFullName, setCFullName] = React.useState("");
     const [cEmail, setCEmail] = React.useState("");
     const [cPassword, setCPassword] = React.useState("");
+    const [showCreatePassword, setShowCreatePassword] = React.useState(false);
     const [cRole, setCRole] = React.useState<Role>("student");
 
     // accountType is informational only — keep simple: student/other
@@ -247,13 +250,13 @@ export default function AdminUsersPage() {
         // - other roles => accountType=other
         if (cRole === "student") setCAccountType("student");
         else setCAccountType("other");
-
     }, [cRole]);
 
     const resetCreateForm = () => {
         setCFullName("");
         setCEmail("");
         setCPassword("");
+        setShowCreatePassword(false);
         setCRole("student");
         setCAccountType("student");
         setCStudentId("");
@@ -542,14 +545,28 @@ export default function AdminUsersPage() {
 
                                 <div className="grid gap-2">
                                     <Label htmlFor="c-password">Password</Label>
-                                    <Input
-                                        id="c-password"
-                                        type="password"
-                                        value={cPassword}
-                                        onChange={(e) => setCPassword(e.target.value)}
-                                        placeholder="At least 8 characters"
-                                        className="bg-slate-900/70 border-white/10 text-white"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            id="c-password"
+                                            type={showCreatePassword ? "text" : "password"}
+                                            value={cPassword}
+                                            onChange={(e) => setCPassword(e.target.value)}
+                                            placeholder="At least 8 characters"
+                                            className="bg-slate-900/70 border-white/10 text-white pr-10"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCreatePassword((s) => !s)}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white"
+                                            aria-label={showCreatePassword ? "Hide password" : "Show password"}
+                                        >
+                                            {showCreatePassword ? (
+                                                <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                                <Eye className="h-4 w-4" />
+                                            )}
+                                        </button>
+                                    </div>
                                     <p className="text-xs text-white/50">
                                         Tip: Use a temporary password and let the user change it later.
                                     </p>

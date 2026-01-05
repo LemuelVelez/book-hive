@@ -771,8 +771,8 @@ export default function AdminSettingsPage() {
                         ) : (
                             <div className="space-y-4">
                                 {/* Avatar row */}
-                                <div className="flex items-center gap-4">
-                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center">
+                                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center mx-auto md:mx-0">
                                         {avatarUrl ? (
                                             <img
                                                 src={avatarUrl}
@@ -786,10 +786,10 @@ export default function AdminSettingsPage() {
                                         )}
                                     </div>
 
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-2 w-full md:w-auto items-center md:items-start">
                                         <div className="text-sm text-white/80 font-medium">Display picture</div>
 
-                                        <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                                             <Input
                                                 ref={fileRef}
                                                 type="file"
