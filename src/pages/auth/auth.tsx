@@ -67,6 +67,7 @@ import {
     type Role,
     useSession,
     setSessionUser,
+    getUserRole, // ✅ NEW: prefer user.role over accountType
 } from "@/hooks/use-session";
 
 import logo from "@/assets/images/logo.svg";
@@ -222,7 +223,8 @@ export default function AuthPage() {
 
         if (!sessionUser) return;
 
-        const rawRole = (sessionUser.accountType as Role) ?? "student";
+        // ✅ FIX: use ROLE (user.role) first, fallback to accountType
+        const rawRole = (getUserRole(sessionUser) ?? "student") as Role;
         const dest = redirectParam ?? resolveDashboardForRole(rawRole);
 
         toast.info("You are already signed in.", {
@@ -353,7 +355,8 @@ export default function AuthPage() {
                     : "Redirecting to your dashboard…",
             });
 
-            const rawRole = (user.accountType as Role) ?? "student";
+            // ✅ FIX: use ROLE (user.role) first, fallback to accountType
+            const rawRole = (getUserRole(user) ?? "student") as Role;
             const dest = redirectParam ?? resolveDashboardForRole(rawRole);
 
             navigate(dest, { replace: true });
