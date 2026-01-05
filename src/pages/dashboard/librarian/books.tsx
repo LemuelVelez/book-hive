@@ -2275,7 +2275,7 @@ export default function LibrarianBooksPage() {
 
                                             <TableCell
                                                 className={
-                                                    "text-sm opacity-80 align-top w-20 max-w-20 " +
+                                                    "text-sm opacity-80 align-top w-[60px] max-w-[60px] " +
                                                     cellScrollbarClasses
                                                 }
                                             >
@@ -2284,7 +2284,7 @@ export default function LibrarianBooksPage() {
 
                                             <TableCell
                                                 className={
-                                                    "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
+                                                    "text-sm opacity-80 align-top w-[50px] max-w-[50px] " +
                                                     cellScrollbarClasses
                                                 }
                                             >
