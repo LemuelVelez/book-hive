@@ -1,3 +1,4 @@
+// src/pages/dashboard/admin/analytics.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -482,7 +483,7 @@ export default function AdminAnalyticsPage() {
     return (
         <DashboardLayout title="Analytics">
             <TooltipProvider>
-                <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+                <div className="flex flex-col items-stretch md:flex-row md:items-start md:justify-between md:flex-wrap mb-4 gap-3">
                     <div className="flex items-center gap-2">
                         <BarChart3 className="h-5 w-5" />
                         <div>
@@ -501,10 +502,10 @@ export default function AdminAnalyticsPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <div className="w-[170px]">
+                    <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+                        <div className="w-full md:w-[170px]">
                             <Select value={range} onValueChange={(v) => setRange(v as TimeRange)}>
-                                <SelectTrigger className="bg-slate-900/70 border-white/15 text-white">
+                                <SelectTrigger className="bg-slate-900/70 border-white/15 text-white w-full">
                                     <SelectValue placeholder="Range" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-slate-900 text-white border-white/10">
@@ -518,7 +519,7 @@ export default function AdminAnalyticsPage() {
                         <Button
                             type="button"
                             variant="outline"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            className="border-white/20 text-white/90 hover:bg-white/10 w-full md:w-auto"
                             onClick={handleRefresh}
                             disabled={refreshing || loading}
                         >
@@ -558,7 +559,7 @@ export default function AdminAnalyticsPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="text-2xl font-semibold">{kpi.totalUsers}</div>
-                                    <div className="mt-1 text-xs text-white/70 flex items-center gap-2 flex-wrap">
+                                    <div className="mt-1 text-xs text-white/70 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:flex-wrap">
                                         <Badge className="bg-emerald-600/80 border-emerald-500/60 text-white">
                                             approved: {kpi.approvedUsers}
                                         </Badge>
@@ -635,11 +636,31 @@ export default function AdminAnalyticsPage() {
                 </div>
 
                 <Tabs defaultValue="overview" className="w-full">
-                    <TabsList className="bg-slate-900/60 border border-white/10">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
-                        <TabsTrigger value="trends">Trends</TabsTrigger>
-                        <TabsTrigger value="finance">Fines & Reports</TabsTrigger>
-                        <TabsTrigger value="feedback">Feedback</TabsTrigger>
+                    <TabsList className="w-full flex flex-col items-stretch bg-slate-900/60 border border-white/10 h-auto md:w-auto md:flex-row md:items-center md:h-10">
+                        <TabsTrigger
+                            value="overview"
+                            className="w-full justify-start md:w-auto md:justify-center"
+                        >
+                            Overview
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="trends"
+                            className="w-full justify-start md:w-auto md:justify-center"
+                        >
+                            Trends
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="finance"
+                            className="w-full justify-start md:w-auto md:justify-center"
+                        >
+                            Fines & Reports
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="feedback"
+                            className="w-full justify-start md:w-auto md:justify-center"
+                        >
+                            Feedback
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-3 space-y-3">
@@ -756,7 +777,7 @@ export default function AdminAnalyticsPage() {
                     <TabsContent value="trends" className="mt-3 space-y-3">
                         <Card className="bg-slate-800/60 border-white/10">
                             <CardHeader className="pb-2">
-                                <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                                     <CardTitle className="text-sm">Monthly activity (selected range)</CardTitle>
                                     <div className="text-xs text-white/60">
                                         Borrows • Returns • Fines created • Damage reports
@@ -866,7 +887,7 @@ export default function AdminAnalyticsPage() {
                                 </CardContent>
                                 <Separator className="bg-white/10" />
                                 <CardContent className="pt-3 text-xs text-white/70">
-                                    <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:flex-wrap">
                                         <Badge className="bg-white/10 text-white border-white/10">
                                             active: {finesByStatus.active.count} • ₱
                                             {finesByStatus.active.amount.toFixed(2)}

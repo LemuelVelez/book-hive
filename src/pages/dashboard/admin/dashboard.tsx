@@ -1,3 +1,4 @@
+// src/pages/dashboard/admin/dashboard.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import { Link } from "react-router-dom";
@@ -436,7 +437,7 @@ export default function AdminDashboard() {
     // ---------- UI ----------
     return (
         <DashboardLayout title="Admin Overview">
-            <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+            <div className="flex flex-col items-stretch md:flex-row md:items-start md:justify-between md:flex-wrap mb-4 gap-3">
                 <div className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5" />
                     <div>
@@ -456,10 +457,10 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <div className="w-[170px]">
+                <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+                    <div className="w-full md:w-[170px]">
                         <Select value={range} onValueChange={(v) => setRange(v as TimeRange)}>
-                            <SelectTrigger className="bg-slate-900/70 border-white/15 text-white">
+                            <SelectTrigger className="bg-slate-900/70 border-white/15 text-white w-full">
                                 <SelectValue placeholder="Range" />
                             </SelectTrigger>
                             <SelectContent className="bg-slate-900 text-white border-white/10">
@@ -473,7 +474,7 @@ export default function AdminDashboard() {
                     <Button
                         type="button"
                         variant="outline"
-                        className="border-white/20 text-white/90 hover:bg-white/10"
+                        className="border-white/20 text-white/90 hover:bg-white/10 w-full md:w-auto"
                         onClick={handleRefresh}
                         disabled={refreshing || loading}
                     >
@@ -485,7 +486,7 @@ export default function AdminDashboard() {
 
                     <Button
                         asChild
-                        className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+                        className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 w-full md:w-auto"
                     >
                         <Link to="/dashboard/admin/analytics">
                             Analytics <ArrowRight className="h-4 w-4 ml-2" />
@@ -495,7 +496,7 @@ export default function AdminDashboard() {
                     <Button
                         asChild
                         variant="outline"
-                        className="border-white/20 text-white/90 hover:bg-white/10"
+                        className="border-white/20 text-white/90 hover:bg-white/10 w-full md:w-auto"
                     >
                         <Link to="/dashboard/admin/users">
                             Users <ArrowRight className="h-4 w-4 ml-2" />
@@ -524,7 +525,7 @@ export default function AdminDashboard() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-semibold">{users.length}</div>
-                                <div className="mt-1 text-xs text-white/70 flex items-center gap-2 flex-wrap">
+                                <div className="mt-1 text-xs text-white/70 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:flex-wrap">
                                     <Badge className="bg-emerald-600/80 border-emerald-500/60 text-white">
                                         approved: {approvedUsers}
                                     </Badge>
@@ -606,7 +607,7 @@ export default function AdminDashboard() {
             <div className="grid gap-3 lg:grid-cols-2 mb-4">
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                             <CardTitle className="text-sm">Users by role</CardTitle>
                             <div className="text-xs text-white/60">From Admin Users overview</div>
                         </div>
@@ -650,7 +651,7 @@ export default function AdminDashboard() {
 
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                             <CardTitle className="text-sm">Monthly activity (selected range)</CardTitle>
                             <div className="text-xs text-white/60">
                                 Borrows • Returns • Fines • Damage reports
@@ -717,7 +718,7 @@ export default function AdminDashboard() {
             <div className="grid gap-3 lg:grid-cols-2 mb-4">
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                             <CardTitle className="text-sm">Approval status</CardTitle>
                             <div className="text-xs text-white/60">Quick view from Users page</div>
                         </div>
@@ -749,7 +750,7 @@ export default function AdminDashboard() {
                     </CardContent>
                     <Separator className="bg-white/10" />
                     <CardContent className="pt-3 text-xs text-white/70">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:flex-wrap">
                             <Badge className="bg-emerald-600/20 border-emerald-500/30 text-emerald-100">
                                 approved: {approvedUsers}
                             </Badge>
@@ -762,7 +763,7 @@ export default function AdminDashboard() {
 
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                             <CardTitle className="text-sm inline-flex items-center gap-2">
                                 <MessageSquare className="h-4 w-4" />
                                 Feedback rating distribution
@@ -802,7 +803,7 @@ export default function AdminDashboard() {
             <div className="grid gap-3 lg:grid-cols-2">
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                             <CardTitle className="text-sm">Borrow status breakdown</CardTitle>
                             <div className="text-xs text-white/60">Snapshot from Analytics</div>
                         </div>
@@ -840,12 +841,12 @@ export default function AdminDashboard() {
 
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
                             <CardTitle className="text-sm">Pending approvals (preview)</CardTitle>
                             <Button
                                 asChild
                                 variant="outline"
-                                className="border-white/20 text-white/90 hover:bg-white/10"
+                                className="border-white/20 text-white/90 hover:bg-white/10 w-full md:w-auto"
                             >
                                 <Link to="/dashboard/admin/users">
                                     Manage <ArrowRight className="h-4 w-4 ml-2" />
