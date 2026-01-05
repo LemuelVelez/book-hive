@@ -63,23 +63,45 @@ import {
     type BorrowStatus,
 } from "@/lib/borrows";
 import { fetchFines, type FineDTO, type FineStatus } from "@/lib/fines";
-import {
-    fetchDamageReports,
-    type DamageReportDTO,
-} from "@/lib/damageReports";
+import { fetchDamageReports, type DamageReportDTO } from "@/lib/damageReports";
 import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
 
 type TimeRange = "6m" | "12m" | "24m";
 
 const ROLE_ORDER: Role[] = ["student", "other", "faculty", "librarian", "admin"];
 
+/**
+ * IMPORTANT:
+ * Your CSS variables (e.g. --chart-1) are defined as `oklch(...)`.
+ * Using them like `hsl(var(--chart-1))` makes the color invalid -> charts turn black.
+ * So we use the variables directly: `var(--chart-1)`.
+ */
 const CHART_COLORS = [
-    "hsl(var(--chart-1))",
-    "hsl(var(--chart-2))",
-    "hsl(var(--chart-3))",
-    "hsl(var(--chart-4))",
-    "hsl(var(--chart-5))",
+    "var(--chart-1)",
+    "var(--chart-2)",
+    "var(--chart-3)",
+    "var(--chart-4)",
+    "var(--chart-5)",
 ];
+
+const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
+    background: "var(--popover)",
+    border: "1px solid var(--border)",
+    color: "var(--popover-foreground)",
+};
+
+const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
+    color: "var(--popover-foreground)",
+};
+
+const TOOLTIP_ITEM_STYLE: React.CSSProperties = {
+    color: "var(--popover-foreground)",
+};
+
+const LEGEND_WRAPPER_STYLE: React.CSSProperties = {
+    color: "var(--foreground)",
+    fontSize: 12,
+};
 
 function safeParseDate(v?: string | null): Date | null {
     if (!v) return null;
@@ -461,13 +483,20 @@ export default function AdminDashboard() {
                         Refresh
                     </Button>
 
-                    <Button asChild className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600">
+                    <Button
+                        asChild
+                        className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+                    >
                         <Link to="/dashboard/admin/analytics">
                             Analytics <ArrowRight className="h-4 w-4 ml-2" />
                         </Link>
                     </Button>
 
-                    <Button asChild variant="outline" className="border-white/20 text-white/90 hover:bg-white/10">
+                    <Button
+                        asChild
+                        variant="outline"
+                        className="border-white/20 text-white/90 hover:bg-white/10"
+                    >
                         <Link to="/dashboard/admin/users">
                             Users <ArrowRight className="h-4 w-4 ml-2" />
                         </Link>
@@ -522,7 +551,9 @@ export default function AdminDashboard() {
                                         <>
                                             {" "}
                                             • Borrowed:{" "}
-                                            <span className="text-white/85 font-medium">{booksTotals.borrowedCopies}</span>
+                                            <span className="text-white/85 font-medium">
+                                                {booksTotals.borrowedCopies}
+                                            </span>
                                         </>
                                     ) : null}
                                 </div>
@@ -538,7 +569,9 @@ export default function AdminDashboard() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-semibold">{activeBorrows}</div>
-                                <div className="mt-1 text-xs text-white/70">Active borrow records (not returned)</div>
+                                <div className="mt-1 text-xs text-white/70">
+                                    Active borrow records (not returned)
+                                </div>
                             </CardContent>
                         </Card>
 
@@ -555,10 +588,13 @@ export default function AdminDashboard() {
                                 </div>
                                 <div className="mt-1 text-xs text-white/70">
                                     Active fines:{" "}
-                                    <span className="text-white/85 font-medium">{finesByStatus.active.count}</span>
-                                    {" "}
+                                    <span className="text-white/85 font-medium">
+                                        {finesByStatus.active.count}
+                                    </span>{" "}
                                     • Damage fees total:{" "}
-                                    <span className="text-white/85 font-medium">₱{totalDamageFees.toFixed(2)}</span>
+                                    <span className="text-white/85 font-medium">
+                                        ₱{totalDamageFees.toFixed(2)}
+                                    </span>
                                 </div>
                             </CardContent>
                         </Card>
@@ -586,13 +622,11 @@ export default function AdminDashboard() {
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <RechartsTooltip
-                                        contentStyle={{
-                                            background: "hsl(var(--background))",
-                                            border: "1px solid rgba(255,255,255,0.12)",
-                                            color: "hsl(var(--foreground))",
-                                        }}
+                                        contentStyle={TOOLTIP_CONTENT_STYLE}
+                                        labelStyle={TOOLTIP_LABEL_STYLE}
+                                        itemStyle={TOOLTIP_ITEM_STYLE}
                                     />
-                                    <Legend />
+                                    <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
                                     <Pie
                                         data={usersByRoleChart}
                                         dataKey="value"
@@ -633,47 +667,43 @@ export default function AdminDashboard() {
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={trends}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" opacity={0.35} />
                                     <XAxis
                                         dataKey="month"
                                         tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
                                     />
-                                    <YAxis
-                                        tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
-                                    />
+                                    <YAxis tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }} />
                                     <RechartsTooltip
-                                        contentStyle={{
-                                            background: "hsl(var(--background))",
-                                            border: "1px solid rgba(255,255,255,0.12)",
-                                            color: "hsl(var(--foreground))",
-                                        }}
+                                        contentStyle={TOOLTIP_CONTENT_STYLE}
+                                        labelStyle={TOOLTIP_LABEL_STYLE}
+                                        itemStyle={TOOLTIP_ITEM_STYLE}
                                     />
-                                    <Legend />
+                                    <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
                                     <Line
                                         type="monotone"
                                         dataKey="borrows"
-                                        stroke="hsl(var(--chart-1))"
+                                        stroke={CHART_COLORS[0]}
                                         strokeWidth={2}
                                         dot={false}
                                     />
                                     <Line
                                         type="monotone"
                                         dataKey="returns"
-                                        stroke="hsl(var(--chart-2))"
+                                        stroke={CHART_COLORS[1]}
                                         strokeWidth={2}
                                         dot={false}
                                     />
                                     <Line
                                         type="monotone"
                                         dataKey="fines"
-                                        stroke="hsl(var(--chart-3))"
+                                        stroke={CHART_COLORS[2]}
                                         strokeWidth={2}
                                         dot={false}
                                     />
                                     <Line
                                         type="monotone"
                                         dataKey="damages"
-                                        stroke="hsl(var(--chart-4))"
+                                        stroke={CHART_COLORS[3]}
                                         strokeWidth={2}
                                         dot={false}
                                     />
@@ -698,7 +728,7 @@ export default function AdminDashboard() {
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={approvalChart}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" opacity={0.35} />
                                     <XAxis
                                         dataKey="status"
                                         tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
@@ -708,13 +738,11 @@ export default function AdminDashboard() {
                                         allowDecimals={false}
                                     />
                                     <RechartsTooltip
-                                        contentStyle={{
-                                            background: "hsl(var(--background))",
-                                            border: "1px solid rgba(255,255,255,0.12)",
-                                            color: "hsl(var(--foreground))",
-                                        }}
+                                        contentStyle={TOOLTIP_CONTENT_STYLE}
+                                        labelStyle={TOOLTIP_LABEL_STYLE}
+                                        itemStyle={TOOLTIP_ITEM_STYLE}
                                     />
-                                    <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[6, 6, 0, 0]} />
+                                    <Bar dataKey="value" fill={CHART_COLORS[1]} radius={[6, 6, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
@@ -748,7 +776,7 @@ export default function AdminDashboard() {
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={ratingDistribution}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" opacity={0.35} />
                                     <XAxis
                                         dataKey="rating"
                                         tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
@@ -758,13 +786,11 @@ export default function AdminDashboard() {
                                         allowDecimals={false}
                                     />
                                     <RechartsTooltip
-                                        contentStyle={{
-                                            background: "hsl(var(--background))",
-                                            border: "1px solid rgba(255,255,255,0.12)",
-                                            color: "hsl(var(--foreground))",
-                                        }}
+                                        contentStyle={TOOLTIP_CONTENT_STYLE}
+                                        labelStyle={TOOLTIP_LABEL_STYLE}
+                                        itemStyle={TOOLTIP_ITEM_STYLE}
                                     />
-                                    <Bar dataKey="value" fill="hsl(var(--chart-4))" radius={[6, 6, 0, 0]} />
+                                    <Bar dataKey="value" fill={CHART_COLORS[3]} radius={[6, 6, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
@@ -791,7 +817,7 @@ export default function AdminDashboard() {
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={borrowStatusChart}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" opacity={0.35} />
                                     <XAxis
                                         dataKey="status"
                                         tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
@@ -801,13 +827,11 @@ export default function AdminDashboard() {
                                         allowDecimals={false}
                                     />
                                     <RechartsTooltip
-                                        contentStyle={{
-                                            background: "hsl(var(--background))",
-                                            border: "1px solid rgba(255,255,255,0.12)",
-                                            color: "hsl(var(--foreground))",
-                                        }}
+                                        contentStyle={TOOLTIP_CONTENT_STYLE}
+                                        labelStyle={TOOLTIP_LABEL_STYLE}
+                                        itemStyle={TOOLTIP_ITEM_STYLE}
                                     />
-                                    <Bar dataKey="value" fill="hsl(var(--chart-2))" radius={[6, 6, 0, 0]} />
+                                    <Bar dataKey="value" fill={CHART_COLORS[1]} radius={[6, 6, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
@@ -818,7 +842,11 @@ export default function AdminDashboard() {
                     <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-3 flex-wrap">
                             <CardTitle className="text-sm">Pending approvals (preview)</CardTitle>
-                            <Button asChild variant="outline" className="border-white/20 text-white/90 hover:bg-white/10">
+                            <Button
+                                asChild
+                                variant="outline"
+                                className="border-white/20 text-white/90 hover:bg-white/10"
+                            >
                                 <Link to="/dashboard/admin/users">
                                     Manage <ArrowRight className="h-4 w-4 ml-2" />
                                 </Link>
@@ -847,8 +875,12 @@ export default function AdminDashboard() {
                                         <TableHead className="text-xs font-semibold text-white/70 w-[120px]">
                                             User ID
                                         </TableHead>
-                                        <TableHead className="text-xs font-semibold text-white/70">Email</TableHead>
-                                        <TableHead className="text-xs font-semibold text-white/70">Role</TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Email
+                                        </TableHead>
+                                        <TableHead className="text-xs font-semibold text-white/70">
+                                            Role
+                                        </TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -862,7 +894,9 @@ export default function AdminDashboard() {
                                             </TableCell>
                                             <TableCell className="text-sm opacity-90">{u.email}</TableCell>
                                             <TableCell>
-                                                <Badge className={roleBadgeClasses(u.accountType)}>{u.accountType}</Badge>
+                                                <Badge className={roleBadgeClasses(u.accountType)}>
+                                                    {u.accountType}
+                                                </Badge>
                                             </TableCell>
                                         </TableRow>
                                     ))}

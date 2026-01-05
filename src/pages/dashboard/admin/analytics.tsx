@@ -78,13 +78,38 @@ type TimeRange = "6m" | "12m" | "24m";
 
 const ROLE_ORDER: Role[] = ["student", "other", "faculty", "librarian", "admin"];
 
+/**
+ * FIX:
+ * Your CSS chart vars are `oklch(...)` in index.css.
+ * Using `hsl(var(--chart-1))` makes an invalid color -> Recharts falls back to black.
+ * Use the CSS variables directly.
+ */
 const CHART_COLORS = [
-    "hsl(var(--chart-1))",
-    "hsl(var(--chart-2))",
-    "hsl(var(--chart-3))",
-    "hsl(var(--chart-4))",
-    "hsl(var(--chart-5))",
+    "var(--chart-1)",
+    "var(--chart-2)",
+    "var(--chart-3)",
+    "var(--chart-4)",
+    "var(--chart-5)",
 ];
+
+const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
+    background: "var(--popover)",
+    border: "1px solid var(--border)",
+    color: "var(--popover-foreground)",
+};
+
+const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
+    color: "var(--popover-foreground)",
+};
+
+const TOOLTIP_ITEM_STYLE: React.CSSProperties = {
+    color: "var(--popover-foreground)",
+};
+
+const LEGEND_WRAPPER_STYLE: React.CSSProperties = {
+    color: "var(--foreground)",
+    fontSize: 12,
+};
 
 function safeParseDate(v?: string | null): Date | null {
     if (!v) return null;
@@ -139,9 +164,7 @@ export default function AdminAnalyticsPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [borrows, setBorrows] = React.useState<BorrowRecordDTO[]>([]);
     const [fines, setFines] = React.useState<FineDTO[]>([]);
-    const [damageReports, setDamageReports] = React.useState<DamageReportDTO[]>(
-        []
-    );
+    const [damageReports, setDamageReports] = React.useState<DamageReportDTO[]>([]);
     const [feedbacks, setFeedbacks] = React.useState<FeedbackDTO[]>([]);
 
     const [partialErrors, setPartialErrors] = React.useState<string[]>([]);
@@ -169,19 +192,13 @@ export default function AdminAnalyticsPage() {
         else errors.push(booksRes.reason?.message || "Failed to load books.");
 
         if (borrowsRes.status === "fulfilled") setBorrows(borrowsRes.value);
-        else
-            errors.push(
-                borrowsRes.reason?.message || "Failed to load borrow records."
-            );
+        else errors.push(borrowsRes.reason?.message || "Failed to load borrow records.");
 
         if (finesRes.status === "fulfilled") setFines(finesRes.value);
         else errors.push(finesRes.reason?.message || "Failed to load fines.");
 
         if (damageRes.status === "fulfilled") setDamageReports(damageRes.value);
-        else
-            errors.push(
-                damageRes.reason?.message || "Failed to load damage reports."
-            );
+        else errors.push(damageRes.reason?.message || "Failed to load damage reports.");
 
         if (feedbacksRes.status === "fulfilled") setFeedbacks(feedbacksRes.value);
         else errors.push(feedbacksRes.reason?.message || "Failed to load feedbacks.");
@@ -469,19 +486,15 @@ export default function AdminAnalyticsPage() {
                     <div className="flex items-center gap-2">
                         <BarChart3 className="h-5 w-5" />
                         <div>
-                            <h2 className="text-lg font-semibold leading-tight">
-                                Admin analytics
-                            </h2>
+                            <h2 className="text-lg font-semibold leading-tight">Admin analytics</h2>
                             <p className="text-xs text-white/70">
-                                High-level metrics for users, circulation, fines, feedback, and
-                                reports.
+                                High-level metrics for users, circulation, fines, feedback, and reports.
                             </p>
                             {partialErrors.length ? (
                                 <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-200/90">
                                     <AlertTriangle className="h-3.5 w-3.5" />
                                     <span>
-                                        Partial data loaded ({partialErrors.length}). Some charts may
-                                        be incomplete.
+                                        Partial data loaded ({partialErrors.length}). Some charts may be incomplete.
                                     </span>
                                 </div>
                             ) : null}
@@ -490,10 +503,7 @@ export default function AdminAnalyticsPage() {
 
                     <div className="flex items-center gap-2">
                         <div className="w-[170px]">
-                            <Select
-                                value={range}
-                                onValueChange={(v) => setRange(v as TimeRange)}
-                            >
+                            <Select value={range} onValueChange={(v) => setRange(v as TimeRange)}>
                                 <SelectTrigger className="bg-slate-900/70 border-white/15 text-white">
                                     <SelectValue placeholder="Range" />
                                 </SelectTrigger>
@@ -513,8 +523,7 @@ export default function AdminAnalyticsPage() {
                             disabled={refreshing || loading}
                         >
                             <RefreshCcw
-                                className={`h-4 w-4 mr-2 ${refreshing || loading ? "animate-spin" : ""
-                                    }`}
+                                className={`h-4 w-4 mr-2 ${refreshing || loading ? "animate-spin" : ""}`}
                             />
                             Refresh
                         </Button>
@@ -539,9 +548,7 @@ export default function AdminAnalyticsPage() {
                                         Users
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <span className="ml-1 cursor-help text-white/40">
-                                                    ⓘ
-                                                </span>
+                                                <span className="ml-1 cursor-help text-white/40">ⓘ</span>
                                             </TooltipTrigger>
                                             <TooltipContent className="bg-slate-900 text-white border-white/10">
                                                 Total users and approval backlog.
@@ -573,16 +580,12 @@ export default function AdminAnalyticsPage() {
                                     <div className="text-2xl font-semibold">{kpi.bookTitles}</div>
                                     <div className="mt-1 text-xs text-white/70">
                                         Copies tracked:{" "}
-                                        <span className="text-white/85 font-medium">
-                                            {kpi.totalCopies}
-                                        </span>
+                                        <span className="text-white/85 font-medium">{kpi.totalCopies}</span>
                                         {kpi.borrowedCopies ? (
                                             <>
                                                 {" "}
                                                 • Borrowed:{" "}
-                                                <span className="text-white/85 font-medium">
-                                                    {kpi.borrowedCopies}
-                                                </span>
+                                                <span className="text-white/85 font-medium">{kpi.borrowedCopies}</span>
                                             </>
                                         ) : null}
                                     </div>
@@ -597,9 +600,7 @@ export default function AdminAnalyticsPage() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-semibold">
-                                        {kpi.activeBorrows}
-                                    </div>
+                                    <div className="text-2xl font-semibold">{kpi.activeBorrows}</div>
                                     <div className="mt-1 text-xs text-white/70">
                                         Active borrow records (not returned)
                                     </div>
@@ -614,14 +615,10 @@ export default function AdminAnalyticsPage() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-semibold">
-                                        ₱{kpi.activeFineAmount.toFixed(2)}
-                                    </div>
+                                    <div className="text-2xl font-semibold">₱{kpi.activeFineAmount.toFixed(2)}</div>
                                     <div className="mt-1 text-xs text-white/70">
                                         Active:{" "}
-                                        <span className="text-white/85 font-medium">
-                                            {kpi.activeFineCount}
-                                        </span>{" "}
+                                        <span className="text-white/85 font-medium">{kpi.activeFineCount}</span>{" "}
                                         {kpi.pendingDamage || kpi.assessedDamage ? (
                                             <>
                                                 • Damage pending/assessed:{" "}
@@ -662,13 +659,11 @@ export default function AdminAnalyticsPage() {
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
                                                 <RechartsTooltip
-                                                    contentStyle={{
-                                                        background: "hsl(var(--background))",
-                                                        border: "1px solid rgba(255,255,255,0.12)",
-                                                        color: "hsl(var(--foreground))",
-                                                    }}
+                                                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                                                    labelStyle={TOOLTIP_LABEL_STYLE}
+                                                    itemStyle={TOOLTIP_ITEM_STYLE}
                                                 />
-                                                <Legend />
+                                                <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
                                                 <Pie
                                                     data={usersByRoleChart}
                                                     dataKey="value"
@@ -704,26 +699,22 @@ export default function AdminAnalyticsPage() {
                                     ) : (
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={borrowStatusChart}>
-                                                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                                <CartesianGrid
+                                                    stroke="var(--border)"
+                                                    strokeDasharray="3 3"
+                                                    opacity={0.35}
+                                                />
                                                 <XAxis
                                                     dataKey="status"
                                                     tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
                                                 />
-                                                <YAxis
-                                                    tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
-                                                />
+                                                <YAxis tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }} />
                                                 <RechartsTooltip
-                                                    contentStyle={{
-                                                        background: "hsl(var(--background))",
-                                                        border: "1px solid rgba(255,255,255,0.12)",
-                                                        color: "hsl(var(--foreground))",
-                                                    }}
+                                                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                                                    labelStyle={TOOLTIP_LABEL_STYLE}
+                                                    itemStyle={TOOLTIP_ITEM_STYLE}
                                                 />
-                                                <Bar
-                                                    dataKey="value"
-                                                    fill="hsl(var(--chart-2))"
-                                                    radius={[6, 6, 0, 0]}
-                                                />
+                                                <Bar dataKey="value" fill={CHART_COLORS[1]} radius={[6, 6, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     )}
@@ -739,15 +730,11 @@ export default function AdminAnalyticsPage() {
                                 <ul className="list-disc pl-5 space-y-1">
                                     <li>
                                         Pending approvals:{" "}
-                                        <span className="text-white/85 font-medium">
-                                            {kpi.pendingUsers}
-                                        </span>
+                                        <span className="text-white/85 font-medium">{kpi.pendingUsers}</span>
                                     </li>
                                     <li>
                                         Active borrow records:{" "}
-                                        <span className="text-white/85 font-medium">
-                                            {kpi.activeBorrows}
-                                        </span>
+                                        <span className="text-white/85 font-medium">{kpi.activeBorrows}</span>
                                     </li>
                                     <li>
                                         Active fines amount:{" "}
@@ -770,9 +757,7 @@ export default function AdminAnalyticsPage() {
                         <Card className="bg-slate-800/60 border-white/10">
                             <CardHeader className="pb-2">
                                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                                    <CardTitle className="text-sm">
-                                        Monthly activity (selected range)
-                                    </CardTitle>
+                                    <CardTitle className="text-sm">Monthly activity (selected range)</CardTitle>
                                     <div className="text-xs text-white/60">
                                         Borrows • Returns • Fines created • Damage reports
                                     </div>
@@ -788,47 +773,47 @@ export default function AdminAnalyticsPage() {
                                 ) : (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart data={trends}>
-                                            <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                            <CartesianGrid
+                                                stroke="var(--border)"
+                                                strokeDasharray="3 3"
+                                                opacity={0.35}
+                                            />
                                             <XAxis
                                                 dataKey="month"
                                                 tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
                                             />
-                                            <YAxis
-                                                tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
-                                            />
+                                            <YAxis tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }} />
                                             <RechartsTooltip
-                                                contentStyle={{
-                                                    background: "hsl(var(--background))",
-                                                    border: "1px solid rgba(255,255,255,0.12)",
-                                                    color: "hsl(var(--foreground))",
-                                                }}
+                                                contentStyle={TOOLTIP_CONTENT_STYLE}
+                                                labelStyle={TOOLTIP_LABEL_STYLE}
+                                                itemStyle={TOOLTIP_ITEM_STYLE}
                                             />
-                                            <Legend />
+                                            <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
                                             <Line
                                                 type="monotone"
                                                 dataKey="borrows"
-                                                stroke="hsl(var(--chart-1))"
+                                                stroke={CHART_COLORS[0]}
                                                 strokeWidth={2}
                                                 dot={false}
                                             />
                                             <Line
                                                 type="monotone"
                                                 dataKey="returns"
-                                                stroke="hsl(var(--chart-2))"
+                                                stroke={CHART_COLORS[1]}
                                                 strokeWidth={2}
                                                 dot={false}
                                             />
                                             <Line
                                                 type="monotone"
                                                 dataKey="fines"
-                                                stroke="hsl(var(--chart-3))"
+                                                stroke={CHART_COLORS[2]}
                                                 strokeWidth={2}
                                                 dot={false}
                                             />
                                             <Line
                                                 type="monotone"
                                                 dataKey="damages"
-                                                stroke="hsl(var(--chart-4))"
+                                                stroke={CHART_COLORS[3]}
                                                 strokeWidth={2}
                                                 dot={false}
                                             />
@@ -851,39 +836,30 @@ export default function AdminAnalyticsPage() {
                                     ) : (
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={finesStatusChart}>
-                                                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                                <CartesianGrid
+                                                    stroke="var(--border)"
+                                                    strokeDasharray="3 3"
+                                                    opacity={0.35}
+                                                />
                                                 <XAxis
                                                     dataKey="status"
                                                     tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
                                                 />
-                                                <YAxis
-                                                    tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
-                                                />
+                                                <YAxis tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }} />
                                                 <RechartsTooltip
-                                                    // ✅ removed unused `props` param
                                                     formatter={(value: any, name: any) => {
                                                         if (name === "amount") {
                                                             return [`₱${Number(value).toFixed(2)}`, "amount"];
                                                         }
                                                         return [value, name];
                                                     }}
-                                                    contentStyle={{
-                                                        background: "hsl(var(--background))",
-                                                        border: "1px solid rgba(255,255,255,0.12)",
-                                                        color: "hsl(var(--foreground))",
-                                                    }}
+                                                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                                                    labelStyle={TOOLTIP_LABEL_STYLE}
+                                                    itemStyle={TOOLTIP_ITEM_STYLE}
                                                 />
-                                                <Legend />
-                                                <Bar
-                                                    dataKey="count"
-                                                    fill="hsl(var(--chart-2))"
-                                                    radius={[6, 6, 0, 0]}
-                                                />
-                                                <Bar
-                                                    dataKey="amount"
-                                                    fill="hsl(var(--chart-3))"
-                                                    radius={[6, 6, 0, 0]}
-                                                />
+                                                <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
+                                                <Bar dataKey="count" fill={CHART_COLORS[1]} radius={[6, 6, 0, 0]} />
+                                                <Bar dataKey="amount" fill={CHART_COLORS[2]} radius={[6, 6, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     )}
@@ -989,26 +965,22 @@ export default function AdminAnalyticsPage() {
                                     ) : (
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={ratingDistribution}>
-                                                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                                <CartesianGrid
+                                                    stroke="var(--border)"
+                                                    strokeDasharray="3 3"
+                                                    opacity={0.35}
+                                                />
                                                 <XAxis
                                                     dataKey="rating"
                                                     tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
                                                 />
-                                                <YAxis
-                                                    tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }}
-                                                />
+                                                <YAxis tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }} />
                                                 <RechartsTooltip
-                                                    contentStyle={{
-                                                        background: "hsl(var(--background))",
-                                                        border: "1px solid rgba(255,255,255,0.12)",
-                                                        color: "hsl(var(--foreground))",
-                                                    }}
+                                                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                                                    labelStyle={TOOLTIP_LABEL_STYLE}
+                                                    itemStyle={TOOLTIP_ITEM_STYLE}
                                                 />
-                                                <Bar
-                                                    dataKey="value"
-                                                    fill="hsl(var(--chart-4))"
-                                                    radius={[6, 6, 0, 0]}
-                                                />
+                                                <Bar dataKey="value" fill={CHART_COLORS[3]} radius={[6, 6, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     )}
@@ -1031,9 +1003,7 @@ export default function AdminAnalyticsPage() {
                                             <Skeleton className="h-9 w-full" />
                                         </div>
                                     ) : recentFeedbacks.length === 0 ? (
-                                        <div className="py-10 text-center text-sm text-white/70">
-                                            No feedback yet.
-                                        </div>
+                                        <div className="py-10 text-center text-sm text-white/70">No feedback yet.</div>
                                     ) : (
                                         <Table>
                                             <TableCaption className="text-xs text-white/60">
@@ -1044,9 +1014,7 @@ export default function AdminAnalyticsPage() {
                                                     <TableHead className="text-xs font-semibold text-white/70">
                                                         Rating
                                                     </TableHead>
-                                                    <TableHead className="text-xs font-semibold text-white/70">
-                                                        Book
-                                                    </TableHead>
+                                                    <TableHead className="text-xs font-semibold text-white/70">Book</TableHead>
                                                     <TableHead className="text-xs font-semibold text-white/70">
                                                         Comment
                                                     </TableHead>
@@ -1064,14 +1032,10 @@ export default function AdminAnalyticsPage() {
                                                             </Badge>
                                                         </TableCell>
                                                         <TableCell className="text-xs text-white/85 max-w-[220px] truncate">
-                                                            {f.bookTitle || (
-                                                                <span className="text-white/50">—</span>
-                                                            )}
+                                                            {f.bookTitle || <span className="text-white/50">—</span>}
                                                         </TableCell>
                                                         <TableCell className="text-xs text-white/70 max-w-[360px] truncate">
-                                                            {f.comment || (
-                                                                <span className="text-white/50">—</span>
-                                                            )}
+                                                            {f.comment || <span className="text-white/50">—</span>}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
