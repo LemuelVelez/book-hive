@@ -7,8 +7,17 @@ export type UserDTO = {
   id: string;
   email: string;
   fullName: string;
+
+  /**
+   * accountType is typically student/other (end-user classification),
+   * but some backends also reuse it for staff roles.
+   */
   accountType: Role;
-  // Optional explicit role field if backend stores both
+
+  /**
+   * ✅ role is what guards/redirects should rely on.
+   * Some DBs keep both fields; role can change while accountType stays student.
+   */
   role?: Role;
 
   isEmailVerified: boolean;
@@ -77,8 +86,20 @@ function normalizeUserDTO(u: any): UserDTO {
   const email = String(u?.email ?? "").trim();
   const fullName = String(u?.fullName ?? u?.full_name ?? "").trim();
 
+  /**
+   * Keep accountType as-is (student/other in many systems),
+   * but DO NOT rely on it for routing decisions.
+   */
   const accountType = normalizeRole(
-    u?.accountType ?? u?.account_type ?? u?.role ?? "student"
+    u?.accountType ?? u?.account_type ?? "student"
+  );
+
+  /**
+   * ✅ role is the effective authorization role.
+   * IMPORTANT: prioritize `u.role` over accountType.
+   */
+  const role = normalizeRole(
+    u?.role ?? u?.accountType ?? u?.account_type ?? "student"
   );
 
   const isEmailVerified = Boolean(
@@ -99,7 +120,7 @@ function normalizeUserDTO(u: any): UserDTO {
     email,
     fullName,
     accountType,
-    role: u?.role ? normalizeRole(u.role) : undefined,
+    role, // ✅ always set role (guards/redirects use this)
     isEmailVerified,
     isApproved: isApproved === undefined ? undefined : Boolean(isApproved),
     approvedAt,
@@ -118,7 +139,11 @@ function normalizeUserListItem(u: any): UserListItemDTO | null {
   if (!id || !email) return null;
 
   const fullName = String(u.fullName ?? u.full_name ?? "").trim();
-  const accountType = normalizeRole(u.accountType ?? u.account_type ?? u.role ?? "student");
+
+  // keep list item compatible, but still normalize
+  const accountType = normalizeRole(
+    u.accountType ?? u.account_type ?? u.role ?? "student"
+  );
 
   const isApproved = Boolean(u.isApproved ?? u.is_approved ?? false);
   const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
@@ -162,7 +187,6 @@ async function requestJSON<T = unknown>(
   try {
     resp = await fetch(url, finalInit);
   } catch (e) {
-    // Network-level failure (connection refused / reset / DNS / etc.)
     const details = getErrorMessage(e);
     const tail = details ? ` Details: ${details}` : "";
     throw new Error(
@@ -175,7 +199,6 @@ async function requestJSON<T = unknown>(
   const isJson = ct.includes("application/json");
 
   if (!resp.ok) {
-    // Try to extract JSON error shape { ok:false, message?:string }
     let message = `HTTP ${resp.status}`;
     if (isJson) {
       try {
@@ -189,7 +212,7 @@ async function requestJSON<T = unknown>(
           message = (data as { message: string }).message;
         }
       } catch {
-        // ignore JSON parse error, fall back below
+        // ignore
       }
     } else {
       try {
@@ -240,13 +263,10 @@ export async function register(payload: {
   email: string;
   password: string;
   accountType: "student" | "other";
-  // Explicit role saved in DB — for now should mirror accountType
   role: Role;
   studentId?: string;
-  course?: string; // program
+  course?: string;
   yearLevel?: string;
-
-  // ✅ optional avatar url (if you ever want to set on registration)
   avatarUrl?: string | null;
 }) {
   type Resp = JsonOk<{ user: any }>;
@@ -265,7 +285,6 @@ export async function resendVerifyEmail(email: string) {
   });
 }
 
-/** ✅ confirm verification using token (lets Settings verify without logout) */
 export async function confirmVerifyEmail(token: string) {
   type Resp = JsonOk<{ message: string }>;
   return requestJSON<Resp>(ROUTES.auth.verifyConfirm, {
@@ -274,7 +293,6 @@ export async function confirmVerifyEmail(token: string) {
   });
 }
 
-/** ✅ NEW: send verification email for currently logged-in user */
 export async function sendMyVerifyEmail() {
   type Resp = JsonOk<{ message: string }>;
   return requestJSON<Resp>(ROUTES.users.meVerifyEmail, {
@@ -292,7 +310,6 @@ export async function checkStudentIdAvailability(studentId: string) {
 
 export async function submitSupportTicket(form: FormData) {
   type Resp = JsonOk<{ ticketId?: string }>;
-  // Do NOT set Content-Type manually for FormData
   return requestJSON<Resp>(ROUTES.support.ticket, {
     method: "POST",
     body: form,
@@ -304,7 +321,7 @@ export async function submitSupportTicket(form: FormData) {
 
 export async function updateMyProfile(payload: {
   fullName?: string;
-  email?: string; // ✅ now supported
+  email?: string;
   course?: string;
   yearLevel?: string;
 }) {
@@ -350,13 +367,21 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 export async function listUsers(): Promise<UserListItemDTO[]> {
   const data = await requestJSON<any>(ROUTES.users.list, { method: "GET" });
-  const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
+  const arr: any[] = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.users)
+      ? data.users
+      : [];
   return arr.map(normalizeUserListItem).filter(Boolean) as UserListItemDTO[];
 }
 
 export async function listPendingUsers(): Promise<UserListItemDTO[]> {
   const data = await requestJSON<any>(ROUTES.users.pending, { method: "GET" });
-  const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
+  const arr: any[] = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.users)
+      ? data.users
+      : [];
   return arr.map(normalizeUserListItem).filter(Boolean) as UserListItemDTO[];
 }
 
@@ -390,16 +415,10 @@ export type CreateUserPayload = {
   email: string;
   password: string;
   role: Role;
-
-  // Some backends store both. If yours doesn’t, it can ignore one.
   accountType?: Role;
-
-  // Optional (primarily student)
   studentId?: string;
   course?: string;
   yearLevel?: string;
-
-  // Optional approval on create (backend may ignore)
   isApproved?: boolean;
 };
 
@@ -409,7 +428,6 @@ export async function createUser(payload: CreateUserPayload): Promise<UserDTO> {
     body: payload as any,
   });
 
-  // Accept shapes: { ok:true, user }, { user }, or direct user object
   const user = data?.user ?? data;
   return normalizeUserDTO(user);
 }

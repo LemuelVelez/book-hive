@@ -37,7 +37,20 @@ export function dashboardForRole(
 let cachedUser: UserDTO | null = null
 let hasResolved = false
 let inFlight: Promise<UserDTO | null> | null = null
+let lastFetchAt = 0
 
+type SessionSnapshot = { user: UserDTO | null; hasResolved: boolean }
+type SessionListener = (s: SessionSnapshot) => void
+const listeners = new Set<SessionListener>()
+
+function emit() {
+  const snap: SessionSnapshot = { user: cachedUser, hasResolved }
+  for (const fn of listeners) fn(snap)
+}
+
+/**
+ * Fetch session using cache (only once) — used by useSession()
+ */
 async function fetchSessionOnce(): Promise<UserDTO | null> {
   // If we've already resolved a session in this tab, reuse it
   if (hasResolved) return cachedUser
@@ -46,13 +59,11 @@ async function fetchSessionOnce(): Promise<UserDTO | null> {
   if (!inFlight) {
     inFlight = apiMe()
       .then((u) => {
-        cachedUser = u
-        hasResolved = true
+        setSessionUser(u)
         return u
       })
       .catch(() => {
-        cachedUser = null
-        hasResolved = true
+        setSessionUser(null)
         return null
       })
       .finally(() => {
@@ -61,6 +72,27 @@ async function fetchSessionOnce(): Promise<UserDTO | null> {
   }
 
   return inFlight
+}
+
+/**
+ * Force refresh session from the server (bypasses cache).
+ * ✅ This is the key fix so Navicat role changes can be picked up immediately.
+ */
+export async function refreshSession(): Promise<UserDTO | null> {
+  const u = await apiMe() // apiMe already returns null on error/unauth
+  setSessionUser(u)
+  return u
+}
+
+/**
+ * Ensure session is fresh enough; if too old, refresh.
+ * Useful if you want to reduce refresh calls.
+ */
+export async function ensureFreshSession(maxAgeMs = 15_000): Promise<UserDTO | null> {
+  if (!hasResolved) return fetchSessionOnce()
+  const age = Date.now() - lastFetchAt
+  if (age <= maxAgeMs) return cachedUser
+  return refreshSession()
 }
 
 /** Hook: fetch current session once per browser tab (cached) */
@@ -72,27 +104,28 @@ export function useSession(): { loading: boolean; user: UserDTO | null } {
   useEffect(() => {
     let cancelled = false
 
-    // If we already know the session, sync the state and bail
-    if (hasResolved) {
-      setUser(cachedUser)
-      setLoading(false)
-      return
+    const onChange: SessionListener = (snap) => {
+      if (cancelled) return
+      setUser(snap.user)
+      setLoading(!snap.hasResolved)
     }
 
-    fetchSessionOnce()
-      .then((u) => {
-        if (cancelled) return
-        setUser(u)
-        setLoading(false)
+    // Subscribe so updates (role changes, login, logout) propagate everywhere
+    listeners.add(onChange)
+
+    // Sync immediately with current snapshot
+    onChange({ user: cachedUser, hasResolved })
+
+    // If we haven't resolved yet, fetch once
+    if (!hasResolved) {
+      fetchSessionOnce().catch(() => {
+        // fetchSessionOnce already sets user via setSessionUser(null)
       })
-      .catch(() => {
-        if (cancelled) return
-        setUser(null)
-        setLoading(false)
-      })
+    }
 
     return () => {
       cancelled = true
+      listeners.delete(onChange)
     }
   }, [])
 
@@ -104,6 +137,8 @@ export function setSessionUser(u: UserDTO | null) {
   cachedUser = u
   hasResolved = true
   inFlight = null
+  lastFetchAt = Date.now()
+  emit()
 }
 
 /** Optional helper: call this after LOGOUT if you want to reset the cache */
@@ -111,4 +146,6 @@ export function clearSessionCache() {
   cachedUser = null
   hasResolved = false
   inFlight = null
+  lastFetchAt = 0
+  emit()
 }
