@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from "react"
-import DashboardLayout from "@/components/dashboard-layout"
+import * as React from "react";
+import DashboardLayout from "@/components/dashboard-layout";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import {
     AlertDialog,
@@ -16,11 +16,11 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 
-import { toast } from "sonner"
-import { me as apiMe } from "@/lib/authentication"
-import * as auth from "@/lib/authentication"
+import { toast } from "sonner";
+import { me as apiMe, type Role } from "@/lib/authentication";
+import * as auth from "@/lib/authentication";
 
 import {
     Loader2,
@@ -32,14 +32,12 @@ import {
     Trash2,
     Save,
     X,
-} from "lucide-react"
-
-type Role = "student" | "other" | "faculty" | "librarian" | "admin"
+} from "lucide-react";
 
 function fmtValue(v: unknown) {
-    if (v === null || v === undefined) return "—"
-    const s = String(v).trim()
-    return s ? s : "—"
+    if (v === null || v === undefined) return "—";
+    const s = String(v).trim();
+    return s ? s : "—";
 }
 
 function roleLabel(raw: string | undefined) {
@@ -49,56 +47,56 @@ function roleLabel(raw: string | undefined) {
         librarian: "Librarian",
         faculty: "Faculty",
         admin: "Admin",
-    }
-    if (!raw) return "—"
-    return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
+    };
+    if (!raw) return "—";
+    return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function initialsFromName(name: string) {
-    const s = String(name || "").trim()
-    if (!s) return "U"
-    const parts = s.split(/\s+/).filter(Boolean)
-    const a = parts[0]?.[0] ?? "U"
-    const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""
-    return (a + b).toUpperCase()
+    const s = String(name || "").trim();
+    if (!s) return "U";
+    const parts = s.split(/\s+/).filter(Boolean);
+    const a = parts[0]?.[0] ?? "U";
+    const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+    return (a + b).toUpperCase();
 }
 
 function isValidEmail(email: string) {
-    const s = String(email || "").trim()
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
+    const s = String(email || "").trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
 function extractVerifyToken(input: string) {
-    const s = String(input || "").trim()
-    if (!s) return null
+    const s = String(input || "").trim();
+    if (!s) return null;
 
     // If user pasted a full URL
     try {
-        const u = new URL(s)
-        const t = u.searchParams.get("token")
-        if (t) return t.trim()
+        const u = new URL(s);
+        const t = u.searchParams.get("token");
+        if (t) return t.trim();
     } catch {
         // ignore
     }
 
     // If user pasted something containing token=...
-    const m = s.match(/[?&]token=([a-f0-9]{16,})/i)
-    if (m?.[1]) return m[1].trim()
+    const m = s.match(/[?&]token=([a-f0-9]{16,})/i);
+    if (m?.[1]) return m[1].trim();
 
     // If user pasted raw token
-    if (/^[a-f0-9]{32,}$/i.test(s)) return s
+    if (/^[a-f0-9]{32,}$/i.test(s)) return s;
 
-    return null
+    return null;
 }
 
 async function tryChangePassword(currentPassword: string, newPassword: string) {
-    const anyAuth = auth as any
+    const anyAuth = auth as any;
 
     if (typeof anyAuth.changePassword === "function") {
-        return await anyAuth.changePassword(currentPassword, newPassword)
+        return await anyAuth.changePassword(currentPassword, newPassword);
     }
     if (typeof anyAuth.updatePassword === "function") {
-        return await anyAuth.updatePassword(currentPassword, newPassword)
+        return await anyAuth.updatePassword(currentPassword, newPassword);
     }
 
     const endpoints = [
@@ -106,9 +104,9 @@ async function tryChangePassword(currentPassword: string, newPassword: string) {
         "/api/auth/changePassword",
         "/api/auth/password/change",
         "/api/users/me/password",
-    ]
+    ];
 
-    let lastErr: string | null = null
+    let lastErr: string | null = null;
 
     for (const url of endpoints) {
         try {
@@ -117,19 +115,19 @@ async function tryChangePassword(currentPassword: string, newPassword: string) {
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ currentPassword, newPassword }),
-            })
+            });
 
             if (res.status === 404 || res.status === 405) {
-                lastErr = `Endpoint not found: ${url}`
-                continue
+                lastErr = `Endpoint not found: ${url}`;
+                continue;
             }
 
-            const text = await res.text()
-            let data: any = null
+            const text = await res.text();
+            let data: any = null;
             try {
-                data = text ? JSON.parse(text) : null
+                data = text ? JSON.parse(text) : null;
             } catch {
-                data = null
+                data = null;
             }
 
             if (!res.ok) {
@@ -137,28 +135,28 @@ async function tryChangePassword(currentPassword: string, newPassword: string) {
                     data?.message ||
                     data?.error ||
                     text ||
-                    "Failed to change password. Please try again."
-                throw new Error(msg)
+                    "Failed to change password. Please try again.";
+                throw new Error(msg);
             }
 
-            return data ?? { ok: true }
+            return data ?? { ok: true };
         } catch (e: any) {
-            lastErr = String(e?.message || e)
-            if (/endpoint not found/i.test(lastErr)) continue
-            throw e
+            lastErr = String(e?.message || e);
+            if (/endpoint not found/i.test(lastErr)) continue;
+            throw e;
         }
     }
 
     throw new Error(
         lastErr ||
         "Password change endpoint is not available. Please add an API endpoint or export changePassword() in lib/authentication."
-    )
+    );
 }
 
 async function tryUpdateProfile(payload: { fullName?: string; email?: string }) {
-    const anyAuth = auth as any
+    const anyAuth = auth as any;
     if (typeof anyAuth.updateMyProfile === "function") {
-        return await anyAuth.updateMyProfile(payload)
+        return await anyAuth.updateMyProfile(payload);
     }
 
     const res = await fetch("/api/users/me", {
@@ -166,78 +164,78 @@ async function tryUpdateProfile(payload: { fullName?: string; email?: string }) 
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-    })
+    });
 
-    const text = await res.text()
-    let data: any = null
+    const text = await res.text();
+    let data: any = null;
     try {
-        data = text ? JSON.parse(text) : null
+        data = text ? JSON.parse(text) : null;
     } catch {
-        data = null
+        data = null;
     }
 
-    if (!res.ok) throw new Error(data?.message || text || "Failed to update profile.")
-    return data
+    if (!res.ok) throw new Error(data?.message || text || "Failed to update profile.");
+    return data;
 }
 
 async function tryUploadAvatar(file: File) {
-    const anyAuth = auth as any
+    const anyAuth = auth as any;
     if (typeof anyAuth.uploadMyAvatar === "function") {
-        return await anyAuth.uploadMyAvatar(file)
+        return await anyAuth.uploadMyAvatar(file);
     }
 
-    const fd = new FormData()
-    fd.append("avatar", file)
+    const fd = new FormData();
+    fd.append("avatar", file);
 
     const res = await fetch("/api/users/me/avatar", {
         method: "POST",
         credentials: "include",
         body: fd,
-    })
+    });
 
-    const text = await res.text()
-    let data: any = null
+    const text = await res.text();
+    let data: any = null;
     try {
-        data = text ? JSON.parse(text) : null
+        data = text ? JSON.parse(text) : null;
     } catch {
-        data = null
+        data = null;
     }
 
-    if (!res.ok) throw new Error(data?.message || text || "Failed to upload avatar.")
-    return data
+    if (!res.ok) throw new Error(data?.message || text || "Failed to upload avatar.");
+    return data;
 }
 
 async function tryRemoveAvatar() {
-    const anyAuth = auth as any
+    const anyAuth = auth as any;
     if (typeof anyAuth.removeMyAvatar === "function") {
-        return await anyAuth.removeMyAvatar()
+        return await anyAuth.removeMyAvatar();
     }
 
     const res = await fetch("/api/users/me/avatar", {
         method: "DELETE",
         credentials: "include",
-    })
+    });
 
-    const text = await res.text()
-    let data: any = null
+    const text = await res.text();
+    let data: any = null;
     try {
-        data = text ? JSON.parse(text) : null
+        data = text ? JSON.parse(text) : null;
     } catch {
-        data = null
+        data = null;
     }
 
-    if (!res.ok) throw new Error(data?.message || text || "Failed to remove avatar.")
-    return data
+    if (!res.ok) throw new Error(data?.message || text || "Failed to remove avatar.");
+    return data;
 }
 
 async function tryResendVerifyEmail(email: string) {
-    const anyAuth = auth as any
+    const anyAuth = auth as any;
 
     if (typeof anyAuth.resendVerifyEmail === "function") {
-        return await anyAuth.resendVerifyEmail(email)
+        return await anyAuth.resendVerifyEmail(email);
     }
     if (typeof anyAuth.resendVerificationEmail === "function") {
-        return await anyAuth.resendVerificationEmail(email)
+        return await anyAuth.resendVerificationEmail(email);
     }
 
     const endpoints = [
@@ -245,7 +243,7 @@ async function tryResendVerifyEmail(email: string) {
         "/api/auth/resendVerifyEmail",
         "/api/auth/verify-email/resend",
         "/api/auth/verify-email",
-    ]
+    ];
 
     for (const url of endpoints) {
         try {
@@ -254,29 +252,29 @@ async function tryResendVerifyEmail(email: string) {
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email }),
-            })
+            });
 
-            if (res.status === 404 || res.status === 405) continue
-            if (!res.ok) continue
-            return { ok: true }
+            if (res.status === 404 || res.status === 405) continue;
+            if (!res.ok) continue;
+            return { ok: true };
         } catch {
-            continue
+            continue;
         }
     }
 
-    return { ok: false }
+    return { ok: false };
 }
 
 async function tryConfirmVerifyEmail(token: string) {
-    const anyAuth = auth as any
+    const anyAuth = auth as any;
 
     if (typeof anyAuth.confirmVerifyEmail === "function") {
-        return await anyAuth.confirmVerifyEmail(token)
+        return await anyAuth.confirmVerifyEmail(token);
     }
 
-    const endpoints = ["/api/auth/verify-email/confirm", "/api/auth/verifyEmail/confirm"]
+    const endpoints = ["/api/auth/verify-email/confirm", "/api/auth/verifyEmail/confirm"];
 
-    let lastErr: string | null = null
+    let lastErr: string | null = null;
 
     for (const url of endpoints) {
         try {
@@ -285,104 +283,111 @@ async function tryConfirmVerifyEmail(token: string) {
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ token }),
-            })
+            });
 
             if (res.status === 404 || res.status === 405) {
-                lastErr = `Endpoint not found: ${url}`
-                continue
+                lastErr = `Endpoint not found: ${url}`;
+                continue;
             }
 
-            const text = await res.text()
-            let data: any = null
+            const text = await res.text();
+            let data: any = null;
             try {
-                data = text ? JSON.parse(text) : null
+                data = text ? JSON.parse(text) : null;
             } catch {
-                data = null
+                data = null;
             }
 
             if (!res.ok) {
-                const msg = data?.message || data?.error || text || "Failed to verify email."
-                throw new Error(msg)
+                const msg = data?.message || data?.error || text || "Failed to verify email.";
+                throw new Error(msg);
             }
 
-            return data ?? { ok: true }
+            return data ?? { ok: true };
         } catch (e: any) {
-            lastErr = String(e?.message || e)
-            if (/endpoint not found/i.test(lastErr)) continue
-            throw e
+            lastErr = String(e?.message || e);
+            if (/endpoint not found/i.test(lastErr)) continue;
+            throw e;
         }
     }
 
-    throw new Error(lastErr || "Verify confirm endpoint is not available.")
+    throw new Error(lastErr || "Verify confirm endpoint is not available.");
 }
 
 export default function LibrarianSettingsPage() {
-    const [user, setUser] = React.useState<any | null | undefined>(undefined)
+    const [user, setUser] = React.useState<any | null | undefined>(undefined);
 
-    const [pwCurrent, setPwCurrent] = React.useState("")
-    const [pwNext, setPwNext] = React.useState("")
-    const [pwConfirm, setPwConfirm] = React.useState("")
-    const [pwBusy, setPwBusy] = React.useState(false)
+    const [pwCurrent, setPwCurrent] = React.useState("");
+    const [pwNext, setPwNext] = React.useState("");
+    const [pwConfirm, setPwConfirm] = React.useState("");
+    const [pwBusy, setPwBusy] = React.useState(false);
 
-    const [showCurrent, setShowCurrent] = React.useState(false)
-    const [showNext, setShowNext] = React.useState(false)
-    const [showConfirm, setShowConfirm] = React.useState(false)
+    const [showCurrent, setShowCurrent] = React.useState(false);
+    const [showNext, setShowNext] = React.useState(false);
+    const [showConfirm, setShowConfirm] = React.useState(false);
 
     // profile edit
-    const [editing, setEditing] = React.useState(false)
-    const [profileBusy, setProfileBusy] = React.useState(false)
+    const [editing, setEditing] = React.useState(false);
+    const [profileBusy, setProfileBusy] = React.useState(false);
 
-    const [fullNameInput, setFullNameInput] = React.useState("")
-    const [emailInput, setEmailInput] = React.useState("")
+    const [fullNameInput, setFullNameInput] = React.useState("");
+    const [emailInput, setEmailInput] = React.useState("");
 
     // avatar upload
-    const fileRef = React.useRef<HTMLInputElement | null>(null)
-    const [avatarBusy, setAvatarBusy] = React.useState(false)
-    const [avatarFile, setAvatarFile] = React.useState<File | null>(null)
-    const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null)
+    const fileRef = React.useRef<HTMLInputElement | null>(null);
+    const [avatarBusy, setAvatarBusy] = React.useState(false);
+    const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
+    const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
 
     // alert dialog state for remove
-    const [removeConfirmOpen, setRemoveConfirmOpen] = React.useState(false)
+    const [removeConfirmOpen, setRemoveConfirmOpen] = React.useState(false);
 
     // email verification UI state
-    const [resendBusy, setResendBusy] = React.useState(false)
-    const [resendCooldown, setResendCooldown] = React.useState(0)
-    const [verifyDialogOpen, setVerifyDialogOpen] = React.useState(false)
-    const [verifyTokenInput, setVerifyTokenInput] = React.useState("")
-    const [verifyBusy, setVerifyBusy] = React.useState(false)
-    const [refreshBusy, setRefreshBusy] = React.useState(false)
+    const [resendBusy, setResendBusy] = React.useState(false);
+    const [resendCooldown, setResendCooldown] = React.useState(0);
+    const [verifyDialogOpen, setVerifyDialogOpen] = React.useState(false);
+    const [verifyTokenInput, setVerifyTokenInput] = React.useState("");
+    const [verifyBusy, setVerifyBusy] = React.useState(false);
+    const [refreshBusy, setRefreshBusy] = React.useState(false);
 
     React.useEffect(() => {
-        let cancelled = false
+        let cancelled = false;
 
-            ; (async () => {
-                try {
-                    const u = await apiMe()
-                    if (!cancelled) setUser(u)
-                } catch {
-                    if (!cancelled) setUser(null)
-                }
-            })()
+        (async () => {
+            try {
+                const u = await apiMe();
+                if (!cancelled) setUser(u);
+            } catch {
+                if (!cancelled) setUser(null);
+            }
+        })();
 
         return () => {
-            cancelled = true
-        }
-    }, [])
+            cancelled = true;
+        };
+    }, []);
 
     React.useEffect(() => {
-        if (resendCooldown <= 0) return
+        if (resendCooldown <= 0) return;
         const t = window.setInterval(() => {
-            setResendCooldown((c) => Math.max(0, c - 1))
-        }, 1000)
-        return () => window.clearInterval(t)
-    }, [resendCooldown])
+            setResendCooldown((c) => Math.max(0, c - 1));
+        }, 1000);
+        return () => window.clearInterval(t);
+    }, [resendCooldown]);
 
-    const rawRole: Role | undefined =
-        (user?.accountType as Role | undefined) ??
+    /**
+     * ✅ Use `role` as the effective authorization role.
+     * `accountType` is informational only.
+     */
+    const effectiveRole: Role | undefined =
         (user?.role as Role | undefined) ??
-        undefined
+        (user?.accountType as Role | undefined) ??
+        undefined;
 
-    const isGuest = rawRole === "other"
+    const accountType: Role | undefined =
+        (user?.accountType as Role | undefined) ?? undefined;
+
+    const isGuest = effectiveRole === "other" || accountType === "other";
 
     const fullName =
         user?.fullName ||
@@ -390,9 +395,9 @@ export default function LibrarianSettingsPage() {
         user?.full_name ||
         user?.librarian_name ||
         user?.staff_name ||
-        "—"
+        "—";
 
-    const email = user?.email || "—"
+    const email = user?.email || "—";
 
     const isEmailVerified = Boolean(
         user?.isEmailVerified ??
@@ -400,318 +405,315 @@ export default function LibrarianSettingsPage() {
         user?.emailVerified ??
         user?.email_verified ??
         false
-    )
+    );
 
     const department =
-        user?.department ||
-        user?.dept ||
-        user?.office ||
-        user?.unit ||
-        user?.section ||
-        null
+        user?.department || user?.dept || user?.office || user?.unit || user?.section || null;
 
     const position =
-        user?.position ||
-        user?.jobTitle ||
-        user?.job_title ||
-        user?.title ||
-        null
+        user?.position || user?.jobTitle || user?.job_title || user?.title || null;
 
-    const avatarUrl = avatarPreview || user?.avatarUrl || user?.avatar_url || null
+    const avatarUrl = avatarPreview || user?.avatarUrl || user?.avatar_url || null;
 
     // populate inputs from user (avoid overriding while editing)
     React.useEffect(() => {
-        if (!user) return
-        if (editing) return
+        if (!user) return;
+        if (editing) return;
 
         const uFullName =
-            user?.fullName || user?.name || user?.full_name || user?.librarian_name || ""
+            user?.fullName || user?.name || user?.full_name || user?.librarian_name || "";
 
-        setFullNameInput(String(uFullName || ""))
-        setEmailInput(String(user?.email || ""))
-    }, [user, editing])
+        setFullNameInput(String(uFullName || ""));
+        setEmailInput(String(user?.email || ""));
+    }, [user, editing]);
 
     // cleanup avatar preview
     React.useEffect(() => {
-        if (!avatarPreview) return
+        if (!avatarPreview) return;
         return () => {
-            URL.revokeObjectURL(avatarPreview)
-        }
-    }, [avatarPreview])
+            URL.revokeObjectURL(avatarPreview);
+        };
+    }, [avatarPreview]);
 
-    const oldEmailTrim = String(email === "—" ? "" : email || "").trim()
-    const newEmailTrim = String(emailInput || "").trim()
+    const oldEmailTrim = String(email === "—" ? "" : email || "").trim();
+    const newEmailTrim = String(emailInput || "").trim();
     const emailChanged =
         !!oldEmailTrim &&
         !!newEmailTrim &&
-        oldEmailTrim.toLowerCase() !== newEmailTrim.toLowerCase()
+        oldEmailTrim.toLowerCase() !== newEmailTrim.toLowerCase();
 
     const profileDirty =
         String(fullNameInput || "").trim() !== String(fullName === "—" ? "" : fullName || "").trim() ||
-        String(emailInput || "").trim() !== oldEmailTrim
+        String(emailInput || "").trim() !== oldEmailTrim;
 
     function resetProfileForm() {
-        setFullNameInput(String(fullName === "—" ? "" : fullName || ""))
-        setEmailInput(String(oldEmailTrim || ""))
-        setEditing(false)
+        setFullNameInput(String(fullName === "—" ? "" : fullName || ""));
+        setEmailInput(String(oldEmailTrim || ""));
+        setEditing(false);
 
-        if (avatarPreview) URL.revokeObjectURL(avatarPreview)
-        setAvatarPreview(null)
-        setAvatarFile(null)
-        setRemoveConfirmOpen(false)
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+        setAvatarPreview(null);
+        setAvatarFile(null);
+        setRemoveConfirmOpen(false);
 
-        setVerifyDialogOpen(false)
-        setVerifyTokenInput("")
+        setVerifyDialogOpen(false);
+        setVerifyTokenInput("");
     }
 
     async function onSubmitPassword(e: React.FormEvent) {
-        e.preventDefault()
+        e.preventDefault();
 
         if (!pwCurrent.trim()) {
             toast.warning("Current password required", {
                 description: "Please enter your current password.",
-            })
-            return
+            });
+            return;
         }
         if (pwNext.length < 8) {
             toast.warning("Password too short", {
                 description: "New password must be at least 8 characters.",
-            })
-            return
+            });
+            return;
         }
         if (pwNext !== pwConfirm) {
             toast.warning("Passwords do not match", {
                 description: "Please confirm your new password correctly.",
-            })
-            return
+            });
+            return;
         }
 
-        setPwBusy(true)
+        setPwBusy(true);
         try {
-            await tryChangePassword(pwCurrent, pwNext)
+            await tryChangePassword(pwCurrent, pwNext);
 
             toast.success("Password updated", {
                 description: "Your password has been changed successfully.",
-            })
+            });
 
-            setPwCurrent("")
-            setPwNext("")
-            setPwConfirm("")
-            setShowCurrent(false)
-            setShowNext(false)
-            setShowConfirm(false)
+            setPwCurrent("");
+            setPwNext("");
+            setPwConfirm("");
+            setShowCurrent(false);
+            setShowNext(false);
+            setShowConfirm(false);
         } catch (err: any) {
-            const msg = String(err?.message || "Failed to change password.")
-            toast.error("Password change failed", { description: msg })
+            const msg = String(err?.message || "Failed to change password.");
+            toast.error("Password change failed", { description: msg });
         } finally {
-            setPwBusy(false)
+            setPwBusy(false);
         }
     }
 
     async function onSaveProfile() {
-        const name = String(fullNameInput || "").trim()
-        const nextEmail = String(emailInput || "").trim()
+        const name = String(fullNameInput || "").trim();
+        const nextEmail = String(emailInput || "").trim();
 
         if (!name) {
-            toast.warning("Full name required", { description: "Please enter your full name." })
-            return
+            toast.warning("Full name required", { description: "Please enter your full name." });
+            return;
         }
         if (!nextEmail) {
-            toast.warning("Email required", { description: "Please enter your email." })
-            return
+            toast.warning("Email required", { description: "Please enter your email." });
+            return;
         }
         if (!isValidEmail(nextEmail)) {
-            toast.warning("Invalid email", { description: "Please enter a valid email address." })
-            return
+            toast.warning("Invalid email", { description: "Please enter a valid email address." });
+            return;
         }
 
-        setProfileBusy(true)
+        setProfileBusy(true);
         try {
-            const payload: any = { fullName: name, email: nextEmail }
+            const payload: any = { fullName: name, email: nextEmail };
 
-            const r = await tryUpdateProfile(payload)
-            const updatedUser = r?.user ?? r
-            if (!updatedUser || typeof updatedUser !== "object") throw new Error("Invalid response from server.")
+            const r = await tryUpdateProfile(payload);
+            const updatedUser = r?.user ?? r;
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.");
+            }
 
-            setUser(updatedUser)
-            setEditing(false)
+            setUser(updatedUser);
+            setEditing(false);
 
             if (emailChanged) {
                 toast.success("Profile updated", {
                     description:
                         "Your email was changed and marked as unverified. A verification email should be sent to your new address. You can resend/verify from this Settings page.",
-                })
+                });
             } else {
                 toast.success("Profile updated", {
                     description: "Your personal information has been saved.",
-                })
+                });
             }
         } catch (err: any) {
             toast.error("Update failed", {
                 description: String(err?.message || err || "Failed to update profile."),
-            })
+            });
         } finally {
-            setProfileBusy(false)
+            setProfileBusy(false);
         }
     }
 
     async function onResendVerification() {
-        const targetEmail = String(user?.email || "").trim()
+        const targetEmail = String(user?.email || "").trim();
         if (!targetEmail || !isValidEmail(targetEmail)) {
             toast.warning("Valid email required", {
                 description: "Please make sure your email is saved and valid before sending verification.",
-            })
-            return
+            });
+            return;
         }
-        if (resendCooldown > 0) return
+        if (resendCooldown > 0) return;
 
-        setResendBusy(true)
+        setResendBusy(true);
         try {
-            const r = await tryResendVerifyEmail(targetEmail)
-            if (r?.ok === false) throw new Error("Resend endpoint is not available.")
+            const r = await tryResendVerifyEmail(targetEmail);
+            if (r?.ok === false) throw new Error("Resend endpoint is not available.");
 
             toast.success("Verification email sent", {
                 description: `We sent a verification email to ${targetEmail}.`,
-            })
-            setResendCooldown(60)
+            });
+            setResendCooldown(60);
         } catch (err: any) {
             toast.error("Failed to send verification", {
                 description: String(err?.message || err || "Could not send verification email."),
-            })
+            });
         } finally {
-            setResendBusy(false)
+            setResendBusy(false);
         }
     }
 
     async function onVerifyWithToken() {
-        const token = extractVerifyToken(verifyTokenInput)
+        const token = extractVerifyToken(verifyTokenInput);
         if (!token) {
             toast.warning("Token required", {
                 description: "Paste the verification link or token from your email.",
-            })
-            return
+            });
+            return;
         }
 
-        setVerifyBusy(true)
+        setVerifyBusy(true);
         try {
-            await tryConfirmVerifyEmail(token)
+            await tryConfirmVerifyEmail(token);
 
             toast.success("Email verified", {
                 description: "Your email has been verified successfully.",
-            })
+            });
 
-            setVerifyDialogOpen(false)
-            setVerifyTokenInput("")
+            setVerifyDialogOpen(false);
+            setVerifyTokenInput("");
 
-            const u = await apiMe()
-            setUser(u)
+            const u = await apiMe();
+            setUser(u);
         } catch (err: any) {
             toast.error("Verification failed", {
                 description: String(err?.message || err || "Could not verify email."),
-            })
+            });
         } finally {
-            setVerifyBusy(false)
+            setVerifyBusy(false);
         }
     }
 
     async function onRefreshVerificationStatus() {
-        setRefreshBusy(true)
+        setRefreshBusy(true);
         try {
-            const u = await apiMe()
-            setUser(u)
+            const u = await apiMe();
+            setUser(u);
             toast.success("Status refreshed", {
                 description: "Your email verification status was refreshed.",
-            })
+            });
         } catch {
             toast.error("Refresh failed", {
                 description: "Could not refresh your profile. Please try again.",
-            })
+            });
         } finally {
-            setRefreshBusy(false)
+            setRefreshBusy(false);
         }
     }
 
     function pickAvatar() {
-        fileRef.current?.click()
+        fileRef.current?.click();
     }
 
     function onAvatarSelected(e: React.ChangeEvent<HTMLInputElement>) {
-        const file = e.target.files?.[0] || null
-        if (!file) return
+        const file = e.target.files?.[0] || null;
+        if (!file) return;
 
         if (!file.type.startsWith("image/")) {
-            toast.error("Invalid file", { description: "Please select an image file." })
-            return
+            toast.error("Invalid file", { description: "Please select an image file." });
+            return;
         }
 
         if (file.size > 5 * 1024 * 1024) {
-            toast.error("File too large", { description: "Max avatar size is 5MB." })
-            return
+            toast.error("File too large", { description: "Max avatar size is 5MB." });
+            return;
         }
 
-        if (avatarPreview) URL.revokeObjectURL(avatarPreview)
-        const url = URL.createObjectURL(file)
-        setAvatarPreview(url)
-        setAvatarFile(file)
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+        const url = URL.createObjectURL(file);
+        setAvatarPreview(url);
+        setAvatarFile(file);
     }
 
     async function onUploadAvatar() {
         if (!avatarFile) {
-            toast.warning("No image selected", { description: "Choose an image first." })
-            return
+            toast.warning("No image selected", { description: "Choose an image first." });
+            return;
         }
 
-        setAvatarBusy(true)
+        setAvatarBusy(true);
         try {
-            const r = await tryUploadAvatar(avatarFile)
-            const updatedUser = r?.user ?? r
-            if (!updatedUser || typeof updatedUser !== "object") throw new Error("Invalid response from server.")
+            const r = await tryUploadAvatar(avatarFile);
+            const updatedUser = r?.user ?? r;
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.");
+            }
 
-            setUser(updatedUser)
+            setUser(updatedUser);
 
-            if (avatarPreview) URL.revokeObjectURL(avatarPreview)
-            setAvatarPreview(null)
-            setAvatarFile(null)
+            if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+            setAvatarPreview(null);
+            setAvatarFile(null);
 
             toast.success("Display picture updated", {
                 description: "Your avatar has been uploaded successfully.",
-            })
+            });
         } catch (err: any) {
             toast.error("Upload failed", {
                 description: String(err?.message || err || "Failed to upload avatar."),
-            })
+            });
         } finally {
-            setAvatarBusy(false)
+            setAvatarBusy(false);
         }
     }
 
     async function onRemoveAvatarConfirmed() {
-        setAvatarBusy(true)
+        setAvatarBusy(true);
         try {
-            const r = await tryRemoveAvatar()
-            const updatedUser = r?.user ?? r
-            if (!updatedUser || typeof updatedUser !== "object") throw new Error("Invalid response from server.")
+            const r = await tryRemoveAvatar();
+            const updatedUser = r?.user ?? r;
+            if (!updatedUser || typeof updatedUser !== "object") {
+                throw new Error("Invalid response from server.");
+            }
 
-            setUser(updatedUser)
+            setUser(updatedUser);
 
-            if (avatarPreview) URL.revokeObjectURL(avatarPreview)
-            setAvatarPreview(null)
-            setAvatarFile(null)
+            if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+            setAvatarPreview(null);
+            setAvatarFile(null);
 
             toast.success("Avatar removed", {
                 description: "Your display picture has been removed.",
-            })
-            setRemoveConfirmOpen(false)
+            });
+            setRemoveConfirmOpen(false);
         } catch (err: any) {
             toast.error("Remove failed", {
                 description: String(err?.message || err || "Failed to remove avatar."),
-            })
+            });
         } finally {
-            setAvatarBusy(false)
+            setAvatarBusy(false);
         }
     }
 
-    const hasAvatar = !!(user?.avatarUrl || user?.avatar_url)
+    const hasAvatar = !!(user?.avatarUrl || user?.avatar_url);
 
     return (
         <DashboardLayout title="Settings">
@@ -773,9 +775,9 @@ export default function LibrarianSettingsPage() {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {/* Avatar row */}
-                                <div className="flex items-center gap-4">
-                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center">
+                                {/* Avatar row (✅ responsive like admin/settings.tsx) */}
+                                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                                    <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center mx-auto md:mx-0">
                                         {avatarUrl ? (
                                             <img
                                                 src={avatarUrl}
@@ -789,10 +791,10 @@ export default function LibrarianSettingsPage() {
                                         )}
                                     </div>
 
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-2 w-full md:w-auto items-center md:items-start">
                                         <div className="text-sm text-white/80 font-medium">Display picture</div>
 
-                                        <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
                                             <Input
                                                 ref={fileRef}
                                                 type="file"
@@ -1039,9 +1041,21 @@ export default function LibrarianSettingsPage() {
                                         ) : null}
                                     </div>
 
+                                    {/* ✅ Role + Account type (accountType info only) */}
+                                    <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                        <div className="text-xs text-white/60">Role</div>
+                                        <div className="mt-0.5 font-medium">{roleLabel(effectiveRole)}</div>
+                                        <p className="mt-1 text-[11px] text-white/45">
+                                            Used for access control / routing.
+                                        </p>
+                                    </div>
+
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                         <div className="text-xs text-white/60">Account type</div>
-                                        <div className="mt-0.5 font-medium">{roleLabel(rawRole)}</div>
+                                        <div className="mt-0.5 font-medium">{roleLabel(accountType)}</div>
+                                        <p className="mt-1 text-[11px] text-white/45">
+                                            Informational only.
+                                        </p>
                                     </div>
 
                                     {department ? (
@@ -1080,7 +1094,9 @@ export default function LibrarianSettingsPage() {
                                             )}
                                         </Button>
 
-                                        {!profileDirty ? <span className="text-xs text-white/50">No changes to save.</span> : null}
+                                        {!profileDirty ? (
+                                            <span className="text-xs text-white/50">No changes to save.</span>
+                                        ) : null}
                                     </div>
                                 ) : null}
                             </div>
@@ -1169,7 +1185,11 @@ export default function LibrarianSettingsPage() {
                             </div>
 
                             <div className="pt-1">
-                                <Button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white" disabled={pwBusy}>
+                                <Button
+                                    type="submit"
+                                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                                    disabled={pwBusy}
+                                >
                                     {pwBusy ? (
                                         <span className="inline-flex items-center gap-2">
                                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1185,5 +1205,5 @@ export default function LibrarianSettingsPage() {
                 </Card>
             </div>
         </DashboardLayout>
-    )
+    );
 }

@@ -27,12 +27,31 @@ import {
 } from "lucide-react";
 import {
     type Role,
-    type UserListItemDTO,
-    listUsers,
     approveUserById,
     disapproveUserById,
     deleteUserById,
 } from "@/lib/authentication";
+import { ROUTES } from "@/api/auth/route";
+
+type UserRowDTO = {
+    id: string;
+    email: string;
+    fullName: string;
+
+    /**
+     * ✅ role is used for authorization/guards
+     */
+    role: Role;
+
+    /**
+     * accountType is informational only
+     */
+    accountType: Role;
+
+    isApproved: boolean;
+    approvedAt?: string | null;
+    createdAt?: string | null;
+};
 
 function roleBadgeClasses(role: Role) {
     switch (role) {
@@ -59,8 +78,83 @@ type BusyState =
     | { id: string; action: "approve" | "disapprove" | "delete" }
     | null;
 
+function normalizeRole(raw: unknown): Role {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (v === "student") return "student";
+    if (v === "librarian") return "librarian";
+    if (v === "faculty") return "faculty";
+    if (v === "admin") return "admin";
+    return "other";
+}
+
+async function requestJSON<T = unknown>(url: string, init: RequestInit): Promise<T> {
+    const res = await fetch(url, { credentials: "include", ...init });
+
+    const ct = res.headers.get("content-type")?.toLowerCase() || "";
+    const isJson = ct.includes("application/json");
+
+    if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+            if (isJson) {
+                const data: any = await res.json();
+                msg = data?.message || data?.error || msg;
+            } else {
+                const text = await res.text();
+                if (text) msg = text;
+            }
+        } catch {
+            // ignore
+        }
+        throw new Error(msg);
+    }
+
+    return (isJson ? (await res.json()) : (null as any)) as T;
+}
+
+function normalizeUserRow(u: any): UserRowDTO | null {
+    if (!u) return null;
+
+    const id = String(u.id ?? "").trim();
+    const email = String(u.email ?? "").trim();
+    if (!id || !email) return null;
+
+    const fullName = String(u.fullName ?? u.full_name ?? "").trim();
+
+    // ✅ accountType informational only
+    const accountType = normalizeRole(u.accountType ?? u.account_type ?? "student");
+
+    // ✅ role is authoritative (fallback to accountType if backend doesn’t send role)
+    const role = normalizeRole(u.role ?? u.userRole ?? u.user_role ?? accountType);
+
+    const isApproved = Boolean(u.isApproved ?? u.is_approved ?? false);
+    const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
+    const createdAt = (u.createdAt ?? u.created_at ?? null) as string | null;
+
+    return {
+        id,
+        email,
+        fullName,
+        role,
+        accountType,
+        isApproved,
+        approvedAt,
+        createdAt,
+    };
+}
+
+async function listUsersWithRole(): Promise<UserRowDTO[]> {
+    const data = await requestJSON<any>(ROUTES.users.list, { method: "GET" });
+    const arr: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.users)
+            ? data.users
+            : [];
+    return arr.map(normalizeUserRow).filter(Boolean) as UserRowDTO[];
+}
+
 export default function LibrarianUsersPage() {
-    const [users, setUsers] = React.useState<UserListItemDTO[]>([]);
+    const [users, setUsers] = React.useState<UserRowDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
@@ -71,7 +165,7 @@ export default function LibrarianUsersPage() {
         setError(null);
         setLoading(true);
         try {
-            const list = await listUsers();
+            const list = await listUsersWithRole();
             setUsers(list);
         } catch (err: any) {
             const msg =
@@ -105,6 +199,7 @@ export default function LibrarianUsersPage() {
                 u.id.toLowerCase().includes(q) ||
                 u.email.toLowerCase().includes(q) ||
                 (u.fullName || "").toLowerCase().includes(q) ||
+                u.role.toLowerCase().includes(q) ||
                 u.accountType.toLowerCase().includes(q) ||
                 (u.isApproved ? "approved" : "pending").includes(q)
             );
@@ -180,6 +275,7 @@ export default function LibrarianUsersPage() {
                         onClick={handleRefresh}
                         disabled={refreshing || loading}
                         aria-label="Refresh"
+                        title="Refresh"
                     >
                         {refreshing || loading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -195,12 +291,12 @@ export default function LibrarianUsersPage() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <CardTitle>Users</CardTitle>
 
-                        <div className="relative w-full md:w-72">
+                        <div className="relative w-full md:w-80">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                             <Input
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search by ID, email, name, role, approved…"
+                                placeholder="Search by ID, email, name, role, account type, approved…"
                                 className="pl-9 bg-slate-900/70 border-white/20 text-white"
                             />
                         </div>
@@ -248,13 +344,14 @@ export default function LibrarianUsersPage() {
                                     const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
                                     const anyBusyForRow = busy?.id === u.id;
 
-                                    // Match backend rules: actions only for non-exempt roles
-                                    const exempt = u.accountType === "admin" || u.accountType === "librarian";
+                                    /**
+                                     * ✅ Use ROLE for rules/guards.
+                                     * accountType is informational only.
+                                     */
+                                    const exempt = u.role === "admin" || u.role === "librarian";
 
                                     const canApprove = !u.isApproved && !exempt;
                                     const canDisapprove = u.isApproved && !exempt;
-
-                                    // keep delete restricted to pending/non-exempt (same as before)
                                     const canDelete = !u.isApproved && !exempt;
 
                                     return (
@@ -269,19 +366,28 @@ export default function LibrarianUsersPage() {
                                             <TableCell className="text-sm">
                                                 {u.fullName || <span className="opacity-50">—</span>}
                                             </TableCell>
+
                                             <TableCell>
-                                                <Badge variant="default" className={roleBadgeClasses(u.accountType)}>
-                                                    {u.accountType}
-                                                </Badge>
+                                                <div className="flex flex-col gap-1">
+                                                    <Badge variant="default" className={roleBadgeClasses(u.role)}>
+                                                        {u.role}
+                                                    </Badge>
+                                                    <div className="text-[11px] text-white/45">
+                                                        Account type (info):{" "}
+                                                        <span className="text-white/70">{u.accountType}</span>
+                                                    </div>
+                                                </div>
                                             </TableCell>
+
                                             <TableCell>
                                                 <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
                                                     {u.isApproved ? "approved" : "pending"}
                                                 </Badge>
                                             </TableCell>
+
                                             <TableCell className="text-right">
                                                 <div className="inline-flex items-center gap-2">
-                                                    {/* ✅ Approve (icon-only, Lucide) */}
+                                                    {/* Approve */}
                                                     <Button
                                                         type="button"
                                                         variant="outline"
@@ -289,7 +395,11 @@ export default function LibrarianUsersPage() {
                                                         className="border-white/20 text-white/90 hover:bg-white/10"
                                                         onClick={() => onApprove(u.id)}
                                                         disabled={!canApprove || anyBusyForRow}
-                                                        title={canApprove ? "Approve user" : "Cannot approve (already approved or exempt role)"}
+                                                        title={
+                                                            canApprove
+                                                                ? "Approve user"
+                                                                : "Cannot approve (already approved or exempt role)"
+                                                        }
                                                         aria-label="Approve user"
                                                     >
                                                         {isBusyApprove ? (
@@ -299,7 +409,7 @@ export default function LibrarianUsersPage() {
                                                         )}
                                                     </Button>
 
-                                                    {/* ✅ Disapprove (icon-only, Lucide) */}
+                                                    {/* Disapprove */}
                                                     <Button
                                                         type="button"
                                                         variant="outline"
@@ -307,7 +417,11 @@ export default function LibrarianUsersPage() {
                                                         className="border-white/20 text-white/90 hover:bg-white/10"
                                                         onClick={() => onDisapprove(u.id)}
                                                         disabled={!canDisapprove || anyBusyForRow}
-                                                        title={canDisapprove ? "Disapprove user" : "Cannot disapprove (pending or exempt role)"}
+                                                        title={
+                                                            canDisapprove
+                                                                ? "Disapprove user"
+                                                                : "Cannot disapprove (pending or exempt role)"
+                                                        }
                                                         aria-label="Disapprove user"
                                                     >
                                                         {isBusyDisapprove ? (
@@ -317,7 +431,7 @@ export default function LibrarianUsersPage() {
                                                         )}
                                                     </Button>
 
-                                                    {/* Delete (kept as-is behavior-wise) */}
+                                                    {/* Delete */}
                                                     <Button
                                                         type="button"
                                                         size="sm"
