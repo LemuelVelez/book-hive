@@ -1,4 +1,3 @@
-// src/pages/dashboard/admin/analytics.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import DashboardLayout from "@/components/dashboard-layout";

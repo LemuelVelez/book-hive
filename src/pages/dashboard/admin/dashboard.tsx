@@ -1,4 +1,3 @@
-// src/pages/dashboard/admin/dashboard.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import { Link } from "react-router-dom";

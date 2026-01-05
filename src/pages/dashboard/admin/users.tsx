@@ -50,14 +50,37 @@ import {
 import { useSession } from "@/hooks/use-session";
 import {
     type Role,
-    type UserListItemDTO,
-    listUsers,
     approveUserById,
     disapproveUserById,
     deleteUserById,
     createUser,
-    updateUserRoleById,
 } from "@/lib/authentication";
+import { ROUTES } from "@/api/auth/route";
+
+type UserRowDTO = {
+    id: string;
+    email: string;
+    fullName: string;
+
+    /**
+     * ✅ role is used for authorization, guards, and admin role management
+     */
+    role: Role;
+
+    /**
+     * accountType is informational only
+     */
+    accountType: Role;
+
+    // approval
+    isApproved: boolean;
+    approvedAt?: string | null;
+
+    // optional timestamps
+    createdAt?: string | null;
+
+    avatarUrl?: string | null;
+};
 
 function roleBadgeClasses(role: Role) {
     switch (role) {
@@ -91,11 +114,101 @@ type ConfirmState =
     | { type: "role"; id: string; from: Role; to: Role }
     | null;
 
+function normalizeRole(raw: unknown): Role {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (v === "student") return "student";
+    if (v === "librarian") return "librarian";
+    if (v === "faculty") return "faculty";
+    if (v === "admin") return "admin";
+    return "other";
+}
+
+async function requestJSON<T = unknown>(url: string, init: RequestInit): Promise<T> {
+    const res = await fetch(url, { credentials: "include", ...init });
+
+    const ct = res.headers.get("content-type")?.toLowerCase() || "";
+    const isJson = ct.includes("application/json");
+
+    if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+            if (isJson) {
+                const data: any = await res.json();
+                msg = data?.message || data?.error || msg;
+            } else {
+                const text = await res.text();
+                if (text) msg = text;
+            }
+        } catch {
+            // ignore
+        }
+        throw new Error(msg);
+    }
+
+    return (isJson ? (await res.json()) : (null as any)) as T;
+}
+
+function normalizeUserRow(u: any): UserRowDTO | null {
+    if (!u) return null;
+
+    const id = String(u.id ?? "").trim();
+    const email = String(u.email ?? "").trim();
+    if (!id || !email) return null;
+
+    const fullName = String(u.fullName ?? u.full_name ?? "").trim();
+
+    // ✅ accountType informational only
+    const accountType = normalizeRole(u.accountType ?? u.account_type ?? "student");
+
+    // ✅ role is authoritative (fallback to accountType if backend doesn’t send role)
+    const role = normalizeRole(u.role ?? u.userRole ?? u.user_role ?? accountType);
+
+    const isApproved = Boolean(u.isApproved ?? u.is_approved ?? false);
+    const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
+    const createdAt = (u.createdAt ?? u.created_at ?? null) as string | null;
+    const avatarUrl = (u.avatarUrl ?? u.avatar_url ?? null) as string | null;
+
+    return {
+        id,
+        email,
+        fullName,
+        role,
+        accountType,
+        avatarUrl,
+        isApproved,
+        approvedAt,
+        createdAt,
+    };
+}
+
+async function listUsersWithRole(): Promise<UserRowDTO[]> {
+    const data = await requestJSON<any>(ROUTES.users.list, { method: "GET" });
+    const arr: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.users)
+            ? data.users
+            : [];
+    return arr.map(normalizeUserRow).filter(Boolean) as UserRowDTO[];
+}
+
+/**
+ * ✅ Update role ONLY (do not change accountType).
+ * This bypasses lib/updateUserRoleById which may also send accountType.
+ */
+async function updateUserRoleRoleOnly(id: string, role: Role) {
+    const data = await requestJSON<any>(ROUTES.users.updateRole(id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+    });
+    return data;
+}
+
 export default function AdminUsersPage() {
     const { user: sessionUser } = useSession();
     const selfId = sessionUser?.id ? String(sessionUser.id) : "";
 
-    const [users, setUsers] = React.useState<UserListItemDTO[]>([]);
+    const [users, setUsers] = React.useState<UserRowDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
@@ -115,7 +228,10 @@ export default function AdminUsersPage() {
     const [cPassword, setCPassword] = React.useState("");
     const [cRole, setCRole] = React.useState<Role>("student");
 
-    // Optional student fields (only if cRole === "student")
+    // accountType is informational only — keep simple: student/other
+    const [cAccountType, setCAccountType] = React.useState<"student" | "other">("student");
+
+    // Optional student fields (only if cAccountType === "student")
     const [cStudentId, setCStudentId] = React.useState("");
     const [cCourse, setCCourse] = React.useState("");
     const [cYearLevel, setCYearLevel] = React.useState("");
@@ -125,11 +241,21 @@ export default function AdminUsersPage() {
     // Confirm dialog state (delete / role change)
     const [confirm, setConfirm] = React.useState<ConfirmState>(null);
 
+    React.useEffect(() => {
+        // keep accountType sensible by default when changing role
+        // - role=student => accountType=student
+        // - other roles => accountType=other
+        if (cRole === "student") setCAccountType("student");
+        else setCAccountType("other");
+
+    }, [cRole]);
+
     const resetCreateForm = () => {
         setCFullName("");
         setCEmail("");
         setCPassword("");
         setCRole("student");
+        setCAccountType("student");
         setCStudentId("");
         setCCourse("");
         setCYearLevel("");
@@ -140,11 +266,11 @@ export default function AdminUsersPage() {
         setError(null);
         setLoading(true);
         try {
-            const list = await listUsers();
+            const list = await listUsersWithRole();
             setUsers(list);
             setRoleDraft((prev) => {
                 const next: Record<string, Role> = { ...prev };
-                for (const u of list) next[u.id] = (next[u.id] ?? u.accountType) as Role;
+                for (const u of list) next[u.id] = (next[u.id] ?? u.role) as Role;
                 return next;
             });
         } catch (err: any) {
@@ -179,6 +305,7 @@ export default function AdminUsersPage() {
                 u.id.toLowerCase().includes(q) ||
                 u.email.toLowerCase().includes(q) ||
                 (u.fullName || "").toLowerCase().includes(q) ||
+                u.role.toLowerCase().includes(q) ||
                 u.accountType.toLowerCase().includes(q) ||
                 (u.isApproved ? "approved" : "pending").includes(q)
             );
@@ -198,7 +325,7 @@ export default function AdminUsersPage() {
             librarian: 0,
             admin: 0,
         };
-        for (const u of users) m[u.accountType] = (m[u.accountType] ?? 0) + 1;
+        for (const u of users) m[u.role] = (m[u.role] ?? 0) + 1;
         return m;
     }, [users]);
 
@@ -246,7 +373,7 @@ export default function AdminUsersPage() {
     const onUpdateRole = async (id: string, nextRole: Role) => {
         setBusy({ id, action: "role" });
         try {
-            await updateUserRoleById(id, nextRole);
+            await updateUserRoleRoleOnly(id, nextRole);
             toast.success("Role updated");
             await loadUsers();
         } catch (e: any) {
@@ -277,7 +404,8 @@ export default function AdminUsersPage() {
             return;
         }
 
-        if (cRole === "student") {
+        // Student fields depend on accountType (informational classification), not role
+        if (cAccountType === "student") {
             if (!cStudentId.trim()) {
                 toast.error("Validation error", { description: "Student ID is required." });
                 return;
@@ -298,12 +426,12 @@ export default function AdminUsersPage() {
                 fullName,
                 email,
                 password: cPassword,
-                role: cRole,
-                accountType: cRole,
+                role: cRole, // ✅ effective role
+                accountType: cAccountType, // ✅ informational only
                 isApproved: cApproveNow,
-                studentId: cRole === "student" ? cStudentId.trim() : undefined,
-                course: cRole === "student" ? cCourse.trim() : undefined,
-                yearLevel: cRole === "student" ? cYearLevel.trim() : undefined,
+                studentId: cAccountType === "student" ? cStudentId.trim() : undefined,
+                course: cAccountType === "student" ? cCourse.trim() : undefined,
+                yearLevel: cAccountType === "student" ? cYearLevel.trim() : undefined,
             });
 
             // If backend ignores isApproved on create, do best-effort approve after creation.
@@ -428,7 +556,7 @@ export default function AdminUsersPage() {
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Label>Role</Label>
+                                    <Label>Role (used for access control)</Label>
                                     <Select value={cRole} onValueChange={(v) => setCRole(v as Role)}>
                                         <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                                             <SelectValue placeholder="Select role" />
@@ -443,7 +571,26 @@ export default function AdminUsersPage() {
                                     </Select>
                                 </div>
 
-                                {cRole === "student" && (
+                                <div className="grid gap-2">
+                                    <Label>Account type (informational only)</Label>
+                                    <Select
+                                        value={cAccountType}
+                                        onValueChange={(v) => setCAccountType(v as "student" | "other")}
+                                    >
+                                        <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
+                                            <SelectValue placeholder="Select account type" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-white/10">
+                                            <SelectItem value="student">student</SelectItem>
+                                            <SelectItem value="other">other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-white/50">
+                                        This does not affect permissions — only the role does.
+                                    </p>
+                                </div>
+
+                                {cAccountType === "student" && (
                                     <div className="rounded-lg border border-white/10 bg-white/5 p-3">
                                         <div className="flex items-center gap-2 text-xs text-white/70 mb-3">
                                             <ShieldAlert className="h-4 w-4" />
@@ -563,7 +710,7 @@ export default function AdminUsersPage() {
                             <Input
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search by ID, email, name, role, approved…"
+                                placeholder="Search by ID, email, name, role, account type, approved…"
                                 className="pl-9 bg-slate-900/70 border-white/20 text-white"
                             />
                         </div>
@@ -614,8 +761,9 @@ export default function AdminUsersPage() {
                                     const isBusyRole = busy?.id === u.id && busy?.action === "role";
                                     const anyBusyForRow = busy?.id === u.id;
 
-                                    const draft = roleDraft[u.id] ?? u.accountType;
-                                    const roleChanged = draft !== u.accountType;
+                                    const currentRole = u.role;
+                                    const draft = roleDraft[u.id] ?? currentRole;
+                                    const roleChanged = draft !== currentRole;
 
                                     const isSelf = !!selfId && u.id === selfId;
 
@@ -640,29 +788,36 @@ export default function AdminUsersPage() {
                                             </TableCell>
 
                                             <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <Badge variant="default" className={roleBadgeClasses(u.accountType)}>
-                                                        {u.accountType}
-                                                    </Badge>
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="default" className={roleBadgeClasses(currentRole)}>
+                                                            {currentRole}
+                                                        </Badge>
 
-                                                    <Select
-                                                        value={draft}
-                                                        onValueChange={(v) =>
-                                                            setRoleDraft((p) => ({ ...p, [u.id]: v as Role }))
-                                                        }
-                                                        disabled={isSelf || anyBusyForRow}
-                                                    >
-                                                        <SelectTrigger className="h-8 w-[140px] bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                            {ROLE_OPTIONS.map((r) => (
-                                                                <SelectItem key={r} value={r}>
-                                                                    {r}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                        <Select
+                                                            value={draft}
+                                                            onValueChange={(v) =>
+                                                                setRoleDraft((p) => ({ ...p, [u.id]: v as Role }))
+                                                            }
+                                                            disabled={isSelf || anyBusyForRow}
+                                                        >
+                                                            <SelectTrigger className="h-8 w-[140px] bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-slate-900 text-white border-white/10">
+                                                                {ROLE_OPTIONS.map((r) => (
+                                                                    <SelectItem key={r} value={r}>
+                                                                        {r}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
+                                                    <div className="text-[11px] text-white/45">
+                                                        Account type (info):{" "}
+                                                        <span className="text-white/70">{u.accountType}</span>
+                                                    </div>
                                                 </div>
 
                                                 {isSelf ? (
@@ -688,7 +843,7 @@ export default function AdminUsersPage() {
                                                         className="border-white/20 text-white/90 hover:bg-white/10"
                                                         disabled={!roleChanged || anyBusyForRow || isSelf}
                                                         onClick={() => {
-                                                            const from = u.accountType;
+                                                            const from = currentRole;
                                                             const to = draft;
                                                             setConfirm({ type: "role", id: u.id, from, to });
                                                         }}

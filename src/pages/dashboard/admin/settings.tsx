@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 import { toast } from "sonner"
-import { me as apiMe } from "@/lib/authentication"
+import { me as apiMe, type Role } from "@/lib/authentication"
 import * as auth from "@/lib/authentication"
 
 import {
@@ -33,8 +33,6 @@ import {
     Save,
     X,
 } from "lucide-react"
-
-type Role = "student" | "other" | "faculty" | "librarian" | "admin"
 
 function fmtValue(v: unknown) {
     if (v === null || v === undefined) return "—"
@@ -377,10 +375,17 @@ export default function AdminSettingsPage() {
         return () => window.clearInterval(t)
     }, [resendCooldown])
 
-    const rawRole: Role | undefined =
-        (user?.accountType as Role | undefined) ??
+    /**
+     * ✅ Use `role` as the effective authorization role.
+     * `accountType` is informational only.
+     */
+    const effectiveRole: Role | undefined =
         (user?.role as Role | undefined) ??
+        (user?.accountType as Role | undefined) ??
         undefined
+
+    const accountType: Role | undefined =
+        (user?.accountType as Role | undefined) ?? undefined
 
     const fullName =
         user?.fullName ||
@@ -1032,8 +1037,19 @@ export default function AdminSettingsPage() {
                                     </div>
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                        <div className="text-xs text-white/60">Role</div>
+                                        <div className="mt-0.5 font-medium">{roleLabel(effectiveRole)}</div>
+                                        <p className="mt-1 text-[11px] text-white/45">
+                                            Used for access control / routing.
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                         <div className="text-xs text-white/60">Account type</div>
-                                        <div className="mt-0.5 font-medium">{roleLabel(rawRole)}</div>
+                                        <div className="mt-0.5 font-medium">{roleLabel(accountType)}</div>
+                                        <p className="mt-1 text-[11px] text-white/45">
+                                            Informational only.
+                                        </p>
                                     </div>
 
                                     {department ? (
