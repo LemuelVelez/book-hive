@@ -1,15 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# ===== Logging / errors =====
+log(){ printf "\n[%s] %s\n" "$(date '+%F %T')" "$*"; }
+err(){ printf "\n[ERROR] %s\n" "$*" >&2; }
+die(){ err "$*"; exit 1; }
+trap 'err "Line $LINENO failed: $BASH_COMMAND"' ERR
+
 # ===== Config (override via env vars if needed) =====
 REPO_DIR="${REPO_DIR:-$HOME/book-hive}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.frontend.yml}"
 ENV_LOADER="${ENV_LOADER:-scripts/load-external-env.sh}"
 CADDY_REPO_FILE="${CADDY_REPO_FILE:-infra/Caddyfile}"
 ACTIVE_MARKER="${ACTIVE_MARKER:-/opt/bookhive-env/bookhive.active}"
+
 DOMAIN="${DOMAIN:-bookhive.jrmsu-tc.cloud}"
 PUBLIC_CHECK_URL="${PUBLIC_CHECK_URL:-https://${DOMAIN}}"
-CADDY_CTN="${CADDY_CTN:-}"   # optional preferred Caddy container name
+
+# Optional preferred Caddy container name
+CADDY_CTN="${CADDY_CTN:-}"
 
 PUBLIC_CHECK_RETRIES="${PUBLIC_CHECK_RETRIES:-30}"
 PUBLIC_CHECK_SLEEP_SECS="${PUBLIC_CHECK_SLEEP_SECS:-2}"
@@ -18,8 +27,13 @@ UPSTREAM_PROBE_IMAGE="${UPSTREAM_PROBE_IMAGE:-curlimages/curl:8.11.1}"
 UPSTREAM_PROBE_RETRIES="${UPSTREAM_PROBE_RETRIES:-8}"
 UPSTREAM_PROBE_SLEEP_SECS="${UPSTREAM_PROBE_SLEEP_SECS:-2}"
 
-AUTO_REMEDY_502="${AUTO_REMEDY_502:-1}"                  # 1=try auto network fix + reload on 502
-AUTO_ROLLBACK_ON_VERIFY_FAIL="${AUTO_ROLLBACK_ON_VERIFY_FAIL:-0}"  # 1=rollback Caddy target if verify fails
+AUTO_REMEDY_502="${AUTO_REMEDY_502:-1}"                  # 1=try network fix + reload on 502
+AUTO_ROLLBACK_ON_VERIFY_FAIL="${AUTO_ROLLBACK_ON_VERIFY_FAIL:-0}"  # 1=rollback switch if verify fails
+
+# Reliability knobs
+LOCK_FILE="${LOCK_FILE:-/tmp/redeployment-bookhive.lock}"
+CADDY_RESTART_ON_RELOAD_FAIL="${CADDY_RESTART_ON_RELOAD_FAIL:-1}"
+CADDY_ENABLE_FMT="${CADDY_ENABLE_FMT:-0}"
 
 BLUE_SVC="bookhive-blue"
 GREEN_SVC="bookhive-green"
@@ -31,14 +45,27 @@ SERVICE_CADDY_ACTIVE="inactive" # active|inactive|failed|...
 CADDY_RUNTIME_MODE="none"       # host|container-mounted|container-internal|none
 CADDY_RUNTIME_FILE=""           # path to editable runtime Caddyfile (if available)
 CADDY_CONTAINER_NAME=""         # edge Caddy container (when EDGE_OWNER=docker)
+CADDY_TARGET_FILE=""            # exactly one file that this script edits
+SWITCH_MODE="unknown"           # service|port|unknown
 
-log(){ printf "\n[%s] %s\n" "$(date '+%F %T')" "$*"; }
-err(){ printf "\n[ERROR] %s\n" "$*" >&2; }
-die(){ err "$*"; exit 1; }
-
+# ===== Utilities =====
 require_file() {
   local f="$1"
   [[ -f "$f" ]] || die "Missing file: $f"
+}
+
+require_cmd() {
+  local c="$1"
+  command -v "$c" >/dev/null 2>&1 || die "Missing required command: $c"
+}
+
+acquire_lock() {
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCK_FILE"
+    if ! flock -n 9; then
+      die "Another deployment appears to be running (lock: $LOCK_FILE)."
+    fi
+  fi
 }
 
 is_http_2xx_or_3xx() {
@@ -59,25 +86,70 @@ probe_headers() {
   curl -ksSIL --connect-timeout 5 --max-time 12 "$@" "$url" 2>/dev/null || true
 }
 
+backup_file() {
+  local f="$1"
+  cp -a "$f" "${f}.bak.$(date +%F-%H%M%S-%N)"
+}
+
+upstream_for_slot() {
+  local color="$1" mode="$2"
+  case "$mode" in
+    service)
+      printf 'bookhive-%s:8080\n' "$color"
+      ;;
+    port)
+      case "$color" in
+        blue)  printf '127.0.0.1:%s\n' "$BLUE_PORT" ;;
+        green) printf '127.0.0.1:%s\n' "$GREEN_PORT" ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 # Return: blue|green|""
 get_active_from_caddy_file() {
   local file="$1"
   [[ -f "$file" ]] || return 1
 
-  if grep -Eqi 'reverse_proxy[[:space:]]+bookhive-blue:8080\b' "$file"; then
-    echo "blue"; return 0
-  fi
-  if grep -Eqi 'reverse_proxy[[:space:]]+bookhive-green:8080\b' "$file"; then
-    echo "green"; return 0
-  fi
-  if grep -Eqi 'reverse_proxy[[:space:]]+(127\.0\.0\.1|localhost):18081\b' "$file"; then
-    echo "blue"; return 0
-  fi
-  if grep -Eqi 'reverse_proxy[[:space:]]+(127\.0\.0\.1|localhost):18082\b' "$file"; then
-    echo "green"; return 0
-  fi
+  python3 - "$file" "$DOMAIN" <<'PY'
+import re, sys
+from pathlib import Path
 
-  return 1
+file_path, domain = sys.argv[1], sys.argv[2]
+text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+
+# First: try domain-specific blocks
+pat = re.compile(rf'(?ms)^\s*{re.escape(domain)}\s*\{{.*?^\s*\}}\s*', re.MULTILINE)
+blocks = list(pat.finditer(text))
+
+for m in reversed(blocks):
+    blk = m.group(0)
+    h = re.search(r'(?im)^\s*header\s+X-BookHive-Slot\s+(blue|green)\b', blk)
+    if h:
+        print(h.group(1).lower())
+        raise SystemExit(0)
+
+for m in reversed(blocks):
+    blk = m.group(0)
+    if re.search(r'(?i)reverse_proxy\s+bookhive-blue:8080\b', blk):
+        print("blue"); raise SystemExit(0)
+    if re.search(r'(?i)reverse_proxy\s+bookhive-green:8080\b', blk):
+        print("green"); raise SystemExit(0)
+    if re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18081\b', blk):
+        print("blue"); raise SystemExit(0)
+    if re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18082\b', blk):
+        print("green"); raise SystemExit(0)
+
+# Fallback: global (best effort)
+if re.search(r'(?i)reverse_proxy\s+bookhive-blue:8080\b', text) or re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18081\b', text):
+    print("blue"); raise SystemExit(0)
+if re.search(r'(?i)reverse_proxy\s+bookhive-green:8080\b', text) or re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18082\b', text):
+    print("green"); raise SystemExit(0)
+
+print("")
+PY
 }
 
 # Return: service|port|unknown
@@ -85,81 +157,121 @@ get_proxy_mode_from_file() {
   local file="$1"
   [[ -f "$file" ]] || { echo "unknown"; return 0; }
 
-  if grep -Eqi 'reverse_proxy[[:space:]]+bookhive-(blue|green):8080\b' "$file"; then
-    echo "service"
-    return 0
-  fi
-  if grep -Eqi 'reverse_proxy[[:space:]]+(127\.0\.0\.1|localhost):(18081|18082)\b' "$file"; then
-    echo "port"
-    return 0
-  fi
-  echo "unknown"
+  python3 - "$file" "$DOMAIN" <<'PY'
+import re, sys
+from pathlib import Path
+
+file_path, domain = sys.argv[1], sys.argv[2]
+text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+
+pat = re.compile(rf'(?ms)^\s*{re.escape(domain)}\s*\{{.*?^\s*\}}\s*', re.MULTILINE)
+blocks = [m.group(0) for m in pat.finditer(text)]
+scan = "\n".join(blocks) if blocks else text
+
+if re.search(r'(?i)reverse_proxy\s+bookhive-(blue|green):8080\b', scan):
+    print("service")
+elif re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):(18081|18082)\b', scan):
+    print("port")
+else:
+    print("unknown")
+PY
 }
 
-backup_file() {
-  local f="$1"
-  cp -a "$f" "${f}.bak.$(date +%F-%H%M%S)"
+# In-place switch (NO mv/rename):
+# - swaps BookHive upstream tokens globally (so api-bookhive can follow slot)
+# - removes duplicate DOMAIN blocks
+# - appends one canonical DOMAIN block
+switch_target_file_in_place() {
+  local file="$1" from_color="$2" to_color="$3" mode="$4"
+  local from_port to_port upstream_to
+
+  [[ -f "$file" ]] || return 1
+
+  case "$from_color" in
+    blue)  from_port="$BLUE_PORT" ;;
+    green) from_port="$GREEN_PORT" ;;
+    *) return 1 ;;
+  esac
+  case "$to_color" in
+    blue)  to_port="$BLUE_PORT" ;;
+    green) to_port="$GREEN_PORT" ;;
+    *) return 1 ;;
+  esac
+
+  upstream_to="$(upstream_for_slot "$to_color" "$mode")"
+
+  backup_file "$file"
+
+  python3 - "$file" "$DOMAIN" "$from_color" "$to_color" "$mode" "$from_port" "$to_port" "$upstream_to" <<'PY'
+import re, sys
+from pathlib import Path
+
+file_path, domain, from_color, to_color, mode, from_port, to_port, upstream_to = sys.argv[1:]
+text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+
+# 1) Swap BookHive upstream tokens globally but only on reverse_proxy lines
+if mode == "service":
+    text = re.sub(
+        rf'(?im)^(\s*reverse_proxy\s+)bookhive-{re.escape(from_color)}(:8080\b)',
+        rf'\1bookhive-{to_color}\2',
+        text,
+    )
+elif mode == "port":
+    text = re.sub(
+        rf'(?im)^(\s*reverse_proxy\s+(?:127\.0\.0\.1|localhost):){re.escape(from_port)}(\b)',
+        rf'\1{to_port}\2',
+        text,
+    )
+
+# 2) Remove all DOMAIN blocks using brace-depth parser (handles nested braces)
+lines = text.splitlines(keepends=True)
+out = []
+i = 0
+start_re = re.compile(rf'^\s*{re.escape(domain)}\s*\{{\s*$')
+
+while i < len(lines):
+    line = lines[i]
+    if start_re.match(line):
+        depth = line.count('{') - line.count('}')
+        i += 1
+        while i < len(lines) and depth > 0:
+            depth += lines[i].count('{') - lines[i].count('}')
+            i += 1
+        # skip trailing blank lines immediately after removed block
+        while i < len(lines) and lines[i].strip() == "":
+            i += 1
+        continue
+    out.append(line)
+    i += 1
+
+text = ''.join(out).rstrip() + "\n\n"
+
+# 3) Append one canonical DOMAIN block
+block = (
+    f"{domain} {{\n"
+    f"    encode zstd gzip\n"
+    f"    header X-BookHive-Slot {to_color}\n"
+    f"    reverse_proxy {upstream_to}\n"
+    f"}}\n"
+)
+text += block
+
+# In-place write (same inode)
+with open(file_path, 'r+', encoding='utf-8') as f:
+    f.seek(0)
+    f.write(text)
+    f.truncate()
+PY
 }
 
 caddy_points_to_slot() {
-  local file="$1" color="$2" mode expected_port
+  local file="$1" color="$2" mode="$3"
   [[ -f "$file" ]] || return 1
 
-  mode="$(get_proxy_mode_from_file "$file")"
-  case "$color" in
-    blue)  expected_port="$BLUE_PORT" ;;
-    green) expected_port="$GREEN_PORT" ;;
-    *) return 1 ;;
-  esac
+  local expected
+  expected="$(upstream_for_slot "$color" "$mode")" || return 1
 
-  if [[ "$mode" == "service" ]]; then
-    grep -Eqi "reverse_proxy[[:space:]]+bookhive-${color}:8080\\b" "$file"
-    return $?
-  fi
-
-  if [[ "$mode" == "port" ]]; then
-    grep -Eqi "reverse_proxy[[:space:]]+(127\\.0\\.0\\.1|localhost):${expected_port}\\b" "$file"
-    return $?
-  fi
-
-  return 1
-}
-
-# switch_target_file <file> <from_color> <to_color>
-switch_target_file() {
-  local file="$1" from_color="$2" to_color="$3"
-  local mode from_port to_port tmp
-  [[ -f "$file" ]] || return 1
-
-  mode="$(get_proxy_mode_from_file "$file")"
-  case "$from_color" in
-    blue)  from_port="$BLUE_PORT";  to_port="$GREEN_PORT" ;;
-    green) from_port="$GREEN_PORT"; to_port="$BLUE_PORT"  ;;
-    *) return 1 ;;
-  esac
-
-  tmp="${file}.tmp"
-  backup_file "$file"
-
-  if [[ "$mode" == "service" ]]; then
-    # Swap only BookHive service upstream targets.
-    sed -E "s#(reverse_proxy[[:space:]]+)bookhive-${from_color}(:8080\\b)#\\1bookhive-${to_color}\\2#g" "$file" > "$tmp"
-  elif [[ "$mode" == "port" ]]; then
-    # Swap localhost/127.0.0.1 upstream port targets.
-    sed -E "s#(reverse_proxy[[:space:]]+(127\\.0\\.0\\.1|localhost):)${from_port}(\\b)#\\1${to_port}\\3#g" "$file" > "$tmp"
-  else
-    # Self-heal: append a BookHive domain block using service-based upstream.
-    cat "$file" > "$tmp"
-    {
-      printf "\n%s {\n" "$DOMAIN"
-      printf "    header X-BookHive-Slot %s\n" "$to_color"
-      printf "    reverse_proxy bookhive-%s:8080\n" "$to_color"
-      printf "}\n"
-    } >> "$tmp"
-  fi
-
-  mv "$tmp" "$file"
-  return 0
+  grep -Eqi "reverse_proxy[[:space:]]+${expected//./\\.}\\b" "$file"
 }
 
 container_publishes_443() {
@@ -169,7 +281,7 @@ container_publishes_443() {
 }
 
 get_caddy_container_binding_443() {
-  # Returns the first running container that looks like Caddy and publishes host :443->443/tcp
+  # First running container that looks like Caddy and publishes host :443->443/tcp
   docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}' \
     | awk -F'\t' 'tolower($0) ~ /caddy/ && $3 ~ /:443->443\/tcp/ {print $1; exit}'
 }
@@ -180,7 +292,6 @@ get_caddy_container() {
     return 0
   fi
 
-  # Prefer the edge container actually publishing :443
   local edge
   edge="$(get_caddy_container_binding_443 || true)"
   if [[ -n "$edge" ]]; then
@@ -188,7 +299,6 @@ get_caddy_container() {
     return 0
   fi
 
-  # Last resort: first running container that looks like caddy
   docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /caddy/ {print $1; exit}'
 }
 
@@ -271,7 +381,7 @@ run_public_check_loop() {
       PUBLIC_SLOT="$(slot_from_headers <<< "$PUBLIC_HEADERS")"
 
       if is_http_2xx_or_3xx "$PUBLIC_CODE"; then
-        # If slot header is absent, still count as pass (some edge hosts won't expose it).
+        # If slot header is absent, still count as pass.
         if [[ -z "$PUBLIC_SLOT" || "$PUBLIC_SLOT" == "$IDLE_COLOR" ]]; then
           PUBLIC_OK=1
           break
@@ -290,23 +400,20 @@ write_active_marker() {
   chmod 600 "$ACTIVE_MARKER"
 }
 
-# Build a unique list of target files to edit (runtime first, then repo file).
-build_caddy_target_files() {
-  local runtime_file="$1"
-  local -n out_ref=$2
-  out_ref=()
+select_caddy_target_file() {
+  CADDY_TARGET_FILE=""
 
-  if [[ -n "$runtime_file" && -f "$runtime_file" ]]; then
-    out_ref+=("$runtime_file")
+  if [[ -n "$CADDY_RUNTIME_FILE" && -f "$CADDY_RUNTIME_FILE" ]]; then
+    CADDY_TARGET_FILE="$CADDY_RUNTIME_FILE"
+    return 0
   fi
 
   if [[ -f "$CADDY_REPO_FILE" ]]; then
-    local exists=0
-    for f in "${out_ref[@]}"; do
-      [[ "$f" == "$CADDY_REPO_FILE" ]] && exists=1 && break
-    done
-    [[ "$exists" -eq 0 ]] && out_ref+=("$CADDY_REPO_FILE")
+    CADDY_TARGET_FILE="$CADDY_REPO_FILE"
+    return 0
   fi
+
+  return 1
 }
 
 detect_edge_runtime() {
@@ -339,7 +446,6 @@ detect_edge_runtime() {
     EDGE_OWNER="docker"
     CADDY_CONTAINER_NAME="$edge_ctn"
     if [[ -z "$CADDY_CONTAINER_NAME" ]]; then
-      # Fallback to any running caddy-like container (for unusual setups)
       CADDY_CONTAINER_NAME="$(get_caddy_container || true)"
     fi
     [[ -n "$CADDY_CONTAINER_NAME" ]] || die "Detected Docker edge on :443 but could not identify Caddy container."
@@ -377,28 +483,55 @@ reload_caddy() {
   if [[ "$EDGE_OWNER" == "docker" ]]; then
     [[ -n "$CADDY_CONTAINER_NAME" ]] || die "EDGE_OWNER=docker but CADDY_CONTAINER_NAME is empty."
 
-    # If not bind-mounted, copy repo Caddyfile into container before validate/reload.
+    # If not bind-mounted, copy target Caddyfile into container before validate/reload.
     if [[ "$CADDY_RUNTIME_MODE" == "container-internal" || -z "$CADDY_RUNTIME_FILE" || ! -f "$CADDY_RUNTIME_FILE" ]]; then
-      [[ -f "$CADDY_REPO_FILE" ]] || die "No Caddyfile available to copy into container: $CADDY_REPO_FILE"
-      docker cp "$CADDY_REPO_FILE" "$CADDY_CONTAINER_NAME":/etc/caddy/Caddyfile
+      [[ -f "$CADDY_TARGET_FILE" ]] || die "No Caddyfile available to copy into container: $CADDY_TARGET_FILE"
+      docker cp "$CADDY_TARGET_FILE" "$CADDY_CONTAINER_NAME":/etc/caddy/Caddyfile
     fi
 
-    docker exec "$CADDY_CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-    docker exec "$CADDY_CONTAINER_NAME" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
-    return 0
+    if [[ "$CADDY_ENABLE_FMT" == "1" ]]; then
+      docker exec "$CADDY_CONTAINER_NAME" caddy fmt --overwrite /etc/caddy/Caddyfile >/dev/null 2>&1 || true
+    fi
+
+    if docker exec "$CADDY_CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
+      && docker exec "$CADDY_CONTAINER_NAME" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+      return 0
+    fi
+
+    if [[ "$CADDY_RESTART_ON_RELOAD_FAIL" == "1" ]]; then
+      err "Caddy reload failed; attempting container restart fallback."
+      docker restart "$CADDY_CONTAINER_NAME" >/dev/null
+      docker exec "$CADDY_CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      return $?
+    fi
+
+    return 1
   fi
 
   if [[ "$EDGE_OWNER" == "host" ]]; then
-    # Skip /etc/caddy checks when service is inactive (handled by EDGE_OWNER detection).
     if [[ "$SERVICE_CADDY_ACTIVE" != "active" ]]; then
       die "Host Caddy service is not active; refusing host reload."
+    fi
+
+    if [[ "$CADDY_ENABLE_FMT" == "1" ]] && command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]; then
+      caddy fmt --overwrite /etc/caddy/Caddyfile >/dev/null 2>&1 || true
     fi
 
     if [[ -f /etc/caddy/Caddyfile ]] && command -v caddy >/dev/null 2>&1; then
       caddy validate --config /etc/caddy/Caddyfile
     fi
-    systemctl reload caddy
-    return 0
+
+    if systemctl reload caddy; then
+      return 0
+    fi
+
+    if [[ "$CADDY_RESTART_ON_RELOAD_FAIL" == "1" ]]; then
+      err "Host Caddy reload failed; attempting systemctl restart caddy fallback."
+      systemctl restart caddy
+      return $?
+    fi
+
+    return 1
   fi
 
   return 1
@@ -426,7 +559,6 @@ wait_idle_ready() {
             return 0
           fi
         else
-          # No curl on host: best effort when container is running
           return 0
         fi
 
@@ -456,13 +588,9 @@ wait_idle_ready() {
 
 rollback_traffic_switch() {
   local from_color="$1" to_color="$2"
-  local target
 
   log "Rollback traffic in Caddy from $from_color -> $to_color"
-  for target in "${CADDY_TARGET_FILES[@]}"; do
-    echo "Reverting: $target"
-    switch_target_file "$target" "$from_color" "$to_color"
-  done
+  switch_target_file_in_place "$CADDY_TARGET_FILE" "$from_color" "$to_color" "$SWITCH_MODE"
 
   if reload_caddy; then
     write_active_marker "$to_color"
@@ -475,6 +603,11 @@ rollback_traffic_switch() {
 }
 
 # ===== Main =====
+require_cmd docker
+require_cmd git
+require_cmd python3
+acquire_lock
+
 cd "$REPO_DIR"
 require_file "$COMPOSE_FILE"
 require_file "$ENV_LOADER"
@@ -509,16 +642,29 @@ if [[ "$EDGE_OWNER" == "none" ]]; then
   die "Could not detect active Caddy edge on :443 (docker or host)."
 fi
 
+if ! select_caddy_target_file; then
+  die "No editable Caddyfile found (runtime or repo)."
+fi
+echo "Caddy target file (single source of truth for this run): $CADDY_TARGET_FILE"
+
+# Determine active color in safer priority:
+# 1) live public slot header, 2) marker, 3) target file, 4) repo file, 5) default blue
 ACTIVE_COLOR=""
-if [[ -f "$ACTIVE_MARKER" ]]; then
+BOOT_HEADERS="$(probe_headers "$PUBLIC_CHECK_URL")"
+BOOT_SLOT="$(slot_from_headers <<< "$BOOT_HEADERS")"
+if [[ "$BOOT_SLOT" == "blue" || "$BOOT_SLOT" == "green" ]]; then
+  ACTIVE_COLOR="$BOOT_SLOT"
+fi
+
+if [[ -z "$ACTIVE_COLOR" && -f "$ACTIVE_MARKER" ]]; then
   marker_val="$(tr -d '[:space:]' < "$ACTIVE_MARKER" || true)"
   if [[ "$marker_val" == "blue" || "$marker_val" == "green" ]]; then
     ACTIVE_COLOR="$marker_val"
   fi
 fi
 
-if [[ -z "$ACTIVE_COLOR" && -n "$CADDY_RUNTIME_FILE" ]]; then
-  ACTIVE_COLOR="$(get_active_from_caddy_file "$CADDY_RUNTIME_FILE" 2>/dev/null || true)"
+if [[ -z "$ACTIVE_COLOR" ]]; then
+  ACTIVE_COLOR="$(get_active_from_caddy_file "$CADDY_TARGET_FILE" 2>/dev/null || true)"
 fi
 if [[ -z "$ACTIVE_COLOR" ]]; then
   ACTIVE_COLOR="$(get_active_from_caddy_file "$CADDY_REPO_FILE" 2>/dev/null || true)"
@@ -546,22 +692,31 @@ docker compose -f "$COMPOSE_FILE" up -d --build --no-deps "$IDLE_SVC"
 log "4) Wait idle slot ready"
 wait_idle_ready "$IDLE_SVC" "$IDLE_PORT"
 
-# Determine switch mode from runtime file first, else repo file.
-SWITCH_MODE="unknown"
-if [[ -n "$CADDY_RUNTIME_FILE" ]]; then
-  SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_RUNTIME_FILE")"
-fi
+# Determine switch mode from target file first.
+SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_TARGET_FILE")"
 if [[ "$SWITCH_MODE" == "unknown" ]]; then
   SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_REPO_FILE")"
 fi
+
+# Safe defaults if unknown.
+if [[ "$SWITCH_MODE" == "unknown" ]]; then
+  if [[ "$EDGE_OWNER" == "docker" ]]; then
+    SWITCH_MODE="service"
+  else
+    SWITCH_MODE="port"
+  fi
+fi
+
+# Critical safety: host Caddy cannot resolve Docker service names.
+if [[ "$EDGE_OWNER" == "host" && "$SWITCH_MODE" == "service" ]]; then
+  err "Host Caddy + service-name upstream detected. Forcing port mode to avoid 502."
+  SWITCH_MODE="port"
+fi
+
 echo "Caddy switch mode: $SWITCH_MODE"
 
 log "5) Ensure Caddy can reach idle slot (service mode only)"
 if [[ "$SWITCH_MODE" == "service" ]]; then
-  if [[ "$EDGE_OWNER" == "host" ]]; then
-    die "Detected host Caddy + service upstream mode. This causes 502 because host Caddy can't resolve Docker service names. Use port mode upstream (127.0.0.1:18081/18082) for host Caddy."
-  fi
-
   if [[ "$EDGE_OWNER" == "docker" && -n "$CADDY_CONTAINER_NAME" ]]; then
     ensure_caddy_connected_to_service_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"
     if ! probe_service_from_caddy_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"; then
@@ -572,26 +727,19 @@ if [[ "$SWITCH_MODE" == "service" ]]; then
       echo "  docker inspect \$(docker compose -f '$COMPOSE_FILE' ps -q '$IDLE_SVC') --format '{{json .NetworkSettings.Networks}}' | jq"
       die "Aborting before traffic switch to avoid public 502."
     fi
+  else
+    die "Service mode requires Docker edge Caddy container, but detection did not find one."
   fi
 fi
 
-log "6) Switch traffic in Caddy from $ACTIVE_COLOR -> $IDLE_COLOR"
-CADDY_TARGET_FILES=()
-build_caddy_target_files "$CADDY_RUNTIME_FILE" CADDY_TARGET_FILES
-
-if [[ "${#CADDY_TARGET_FILES[@]}" -eq 0 ]]; then
-  die "No Caddyfile target found (runtime or repo)."
-fi
-
-for target in "${CADDY_TARGET_FILES[@]}"; do
-  echo "Updating: $target"
-  switch_target_file "$target" "$ACTIVE_COLOR" "$IDLE_COLOR"
-done
+log "6) Switch traffic in Caddy from $ACTIVE_COLOR -> $IDLE_COLOR (in-place, single target file)"
+echo "Updating: $CADDY_TARGET_FILE"
+switch_target_file_in_place "$CADDY_TARGET_FILE" "$ACTIVE_COLOR" "$IDLE_COLOR" "$SWITCH_MODE"
 
 if reload_caddy; then
   echo "Traffic switched to $IDLE_COLOR slot."
 else
-  die "Could not reload edge Caddy. Backups were kept as .bak.<timestamp>."
+  die "Could not reload edge Caddy. Backups kept as .bak.<timestamp>."
 fi
 
 log "7) Verify status"
@@ -607,14 +755,11 @@ else
   err "curl not found; local slot check skipped"
 fi
 
-# 7b) Runtime Caddy target check
+# 7b) Caddy target file check
 CADDY_TARGET_OK=0
-for target in "${CADDY_TARGET_FILES[@]}"; do
-  if caddy_points_to_slot "$target" "$IDLE_COLOR"; then
-    CADDY_TARGET_OK=1
-    break
-  fi
-done
+if caddy_points_to_slot "$CADDY_TARGET_FILE" "$IDLE_COLOR" "$SWITCH_MODE"; then
+  CADDY_TARGET_OK=1
+fi
 
 # 7c) Public HTTPS check (required)
 run_public_check_loop
@@ -645,7 +790,7 @@ if [[ "$LOCAL_IDLE_OK" -eq 1 && "$PUBLIC_OK" -eq 1 ]]; then
   echo "Deployment verified: local slot and public HTTPS are both healthy."
 else
   err "Deployment switch done, but verification failed."
-  [[ -n "$PUBLIC_HEADERS" ]] && { echo "--- Public headers ---"; echo "$PUBLIC_HEADERS" | sed -n '1,30p'; }
+  [[ -n "${PUBLIC_HEADERS:-}" ]] && { echo "--- Public headers ---"; echo "$PUBLIC_HEADERS" | sed -n '1,30p'; }
 
   echo "Diagnostics (copy/paste):"
   echo "  curl -sS -o /dev/null -w 'idle slot HTTP %{http_code}\n' http://127.0.0.1:${IDLE_PORT}/"
