@@ -8,7 +8,8 @@ ENV_LOADER="${ENV_LOADER:-scripts/load-external-env.sh}"
 CADDY_REPO_FILE="${CADDY_REPO_FILE:-infra/Caddyfile}"
 ACTIVE_MARKER="${ACTIVE_MARKER:-/opt/bookhive-env/bookhive.active}"
 DOMAIN="${DOMAIN:-bookhive.jrmsu-tc.cloud}"
-CADDY_CTN="${CADDY_CTN:-}"   # optional: force container name (e.g. workloadhub_caddy_1002)
+PUBLIC_CHECK_URL="${PUBLIC_CHECK_URL:-https://workloadhub.jrmsu-tc.cloud}"
+CADDY_CTN="${CADDY_CTN:-}"   # optional preferred Caddy container name
 
 PUBLIC_CHECK_RETRIES="${PUBLIC_CHECK_RETRIES:-30}"
 PUBLIC_CHECK_SLEEP_SECS="${PUBLIC_CHECK_SLEEP_SECS:-2}"
@@ -24,6 +25,12 @@ BLUE_SVC="bookhive-blue"
 GREEN_SVC="bookhive-green"
 BLUE_PORT="18081"
 GREEN_PORT="18082"
+
+EDGE_OWNER="none"               # docker|host|none
+SERVICE_CADDY_ACTIVE="inactive" # active|inactive|failed|...
+CADDY_RUNTIME_MODE="none"       # host|container-mounted|container-internal|none
+CADDY_RUNTIME_FILE=""           # path to editable runtime Caddyfile (if available)
+CADDY_CONTAINER_NAME=""         # edge Caddy container (when EDGE_OWNER=docker)
 
 log(){ printf "\n[%s] %s\n" "$(date '+%F %T')" "$*"; }
 err(){ printf "\n[ERROR] %s\n" "$*" >&2; }
@@ -155,16 +162,42 @@ switch_target_file() {
   return 0
 }
 
+container_publishes_443() {
+  local ctn="$1"
+  docker ps --format '{{.Names}}\t{{.Ports}}' \
+    | awk -F'\t' -v n="$ctn" '$1==n && $2 ~ /:443->443\/tcp/ {ok=1} END{exit ok?0:1}'
+}
+
+get_caddy_container_binding_443() {
+  # Returns the first running container that looks like Caddy and publishes host :443->443/tcp
+  docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}' \
+    | awk -F'\t' 'tolower($0) ~ /caddy/ && $3 ~ /:443->443\/tcp/ {print $1; exit}'
+}
+
 get_caddy_container() {
-  if [[ -n "$CADDY_CTN" ]]; then
-    if docker ps --format '{{.Names}}' | grep -Fxq "$CADDY_CTN"; then
-      echo "$CADDY_CTN"
-      return 0
-    fi
-    return 1
+  if [[ -n "$CADDY_CTN" ]] && docker ps --format '{{.Names}}' | grep -Fxq "$CADDY_CTN"; then
+    echo "$CADDY_CTN"
+    return 0
   fi
 
-  docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($2) ~ /caddy/ {print $1; exit}'
+  # Prefer the edge container actually publishing :443
+  local edge
+  edge="$(get_caddy_container_binding_443 || true)"
+  if [[ -n "$edge" ]]; then
+    echo "$edge"
+    return 0
+  fi
+
+  # Last resort: first running container that looks like caddy
+  docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /caddy/ {print $1; exit}'
+}
+
+host_443_owned_by_docker_proxy() {
+  ss -ltnp 2>/dev/null | awk '/:443[[:space:]]/ && /docker-proxy/ {found=1} END{exit found?0:1}'
+}
+
+host_443_owned_by_caddy_process() {
+  ss -ltnp 2>/dev/null | awk '/:443[[:space:]]/ && /caddy/ {found=1} END{exit found?0:1}'
 }
 
 # If Caddy is containerized and Caddyfile is bind-mounted, print host source path.
@@ -231,13 +264,14 @@ run_public_check_loop() {
   PUBLIC_SLOT=""
   PUBLIC_HEADERS=""
 
-  if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
+  if command -v curl >/dev/null 2>&1 && [[ -n "$PUBLIC_CHECK_URL" ]]; then
     for _ in $(seq 1 "$PUBLIC_CHECK_RETRIES"); do
-      PUBLIC_HEADERS="$(probe_headers "https://${DOMAIN}/")"
+      PUBLIC_HEADERS="$(probe_headers "$PUBLIC_CHECK_URL")"
       PUBLIC_CODE="$(http_code_from_headers <<< "$PUBLIC_HEADERS")"
       PUBLIC_SLOT="$(slot_from_headers <<< "$PUBLIC_HEADERS")"
 
       if is_http_2xx_or_3xx "$PUBLIC_CODE"; then
+        # If slot header is absent, still count as pass (some edge hosts won't expose it).
         if [[ -z "$PUBLIC_SLOT" || "$PUBLIC_SLOT" == "$IDLE_COLOR" ]]; then
           PUBLIC_OK=1
           break
@@ -275,30 +309,95 @@ build_caddy_target_files() {
   fi
 }
 
-reload_caddy() {
-  local runtime_file="$1"
-  local ctn
+detect_edge_runtime() {
+  EDGE_OWNER="none"
+  CADDY_RUNTIME_MODE="none"
+  CADDY_RUNTIME_FILE=""
+  CADDY_CONTAINER_NAME=""
 
-  # Host Caddy service first
-  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy; then
+  if command -v systemctl >/dev/null 2>&1; then
+    SERVICE_CADDY_ACTIVE="$(systemctl is-active caddy 2>/dev/null || true)"
+    [[ -z "$SERVICE_CADDY_ACTIVE" ]] && SERVICE_CADDY_ACTIVE="inactive"
+  else
+    SERVICE_CADDY_ACTIVE="inactive"
+  fi
+
+  local forced=""
+  if [[ -n "$CADDY_CTN" ]] && docker ps --format '{{.Names}}' | grep -Fxq "$CADDY_CTN"; then
+    forced="$CADDY_CTN"
+  fi
+
+  local edge_ctn=""
+  if [[ -n "$forced" ]] && container_publishes_443 "$forced"; then
+    edge_ctn="$forced"
+  else
+    edge_ctn="$(get_caddy_container_binding_443 || true)"
+  fi
+
+  # Primary detection: if :443 is docker-proxy OR a Caddy container publishes :443, edge is Docker.
+  if host_443_owned_by_docker_proxy || [[ -n "$edge_ctn" ]]; then
+    EDGE_OWNER="docker"
+    CADDY_CONTAINER_NAME="$edge_ctn"
+    if [[ -z "$CADDY_CONTAINER_NAME" ]]; then
+      # Fallback to any running caddy-like container (for unusual setups)
+      CADDY_CONTAINER_NAME="$(get_caddy_container || true)"
+    fi
+    [[ -n "$CADDY_CONTAINER_NAME" ]] || die "Detected Docker edge on :443 but could not identify Caddy container."
+
+    local src
+    src="$(get_container_caddyfile_source "$CADDY_CONTAINER_NAME")"
+    if [[ -n "$src" && -f "$src" ]]; then
+      CADDY_RUNTIME_MODE="container-mounted"
+      CADDY_RUNTIME_FILE="$src"
+    else
+      CADDY_RUNTIME_MODE="container-internal"
+    fi
+    return 0
+  fi
+
+  # Host edge only if service is active and host process owns :443.
+  if [[ "$SERVICE_CADDY_ACTIVE" == "active" ]] && host_443_owned_by_caddy_process; then
+    EDGE_OWNER="host"
+    CADDY_RUNTIME_MODE="host"
+    if [[ -f /etc/caddy/Caddyfile ]]; then
+      CADDY_RUNTIME_FILE="/etc/caddy/Caddyfile"
+    fi
+    return 0
+  fi
+
+  EDGE_OWNER="none"
+  CADDY_RUNTIME_MODE="none"
+  CADDY_RUNTIME_FILE=""
+  CADDY_CONTAINER_NAME=""
+  return 0
+}
+
+reload_caddy() {
+  # IMPORTANT: use the Caddy that actually owns :443.
+  if [[ "$EDGE_OWNER" == "docker" ]]; then
+    [[ -n "$CADDY_CONTAINER_NAME" ]] || die "EDGE_OWNER=docker but CADDY_CONTAINER_NAME is empty."
+
+    # If not bind-mounted, copy repo Caddyfile into container before validate/reload.
+    if [[ "$CADDY_RUNTIME_MODE" == "container-internal" || -z "$CADDY_RUNTIME_FILE" || ! -f "$CADDY_RUNTIME_FILE" ]]; then
+      [[ -f "$CADDY_REPO_FILE" ]] || die "No Caddyfile available to copy into container: $CADDY_REPO_FILE"
+      docker cp "$CADDY_REPO_FILE" "$CADDY_CONTAINER_NAME":/etc/caddy/Caddyfile
+    fi
+
+    docker exec "$CADDY_CONTAINER_NAME" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+    docker exec "$CADDY_CONTAINER_NAME" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+    return 0
+  fi
+
+  if [[ "$EDGE_OWNER" == "host" ]]; then
+    # Skip /etc/caddy checks when service is inactive (handled by EDGE_OWNER detection).
+    if [[ "$SERVICE_CADDY_ACTIVE" != "active" ]]; then
+      die "Host Caddy service is not active; refusing host reload."
+    fi
+
     if [[ -f /etc/caddy/Caddyfile ]] && command -v caddy >/dev/null 2>&1; then
       caddy validate --config /etc/caddy/Caddyfile
     fi
     systemctl reload caddy
-    return 0
-  fi
-
-  # Container Caddy fallback
-  ctn="$(get_caddy_container || true)"
-  if [[ -n "$ctn" ]]; then
-    # If not bind-mounted, push repo file into container before reload.
-    if [[ -z "$runtime_file" || ! -f "$runtime_file" ]]; then
-      [[ -f "$CADDY_REPO_FILE" ]] || die "No Caddyfile to copy into container."
-      docker cp "$CADDY_REPO_FILE" "$ctn":/etc/caddy/Caddyfile
-    fi
-
-    docker exec "$ctn" caddy validate --config /etc/caddy/Caddyfile
-    docker exec "$ctn" caddy reload --config /etc/caddy/Caddyfile
     return 0
   fi
 
@@ -334,7 +433,7 @@ wait_idle_ready() {
         # Fallback: internal service check over compose network
         net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$cid" | head -n1)"
         if [[ -n "$net" ]]; then
-          if docker run --rm --network "$net" curlimages/curl:8.11.1 -fsS --max-time 2 "http://${svc}:8080/" >/dev/null 2>&1; then
+          if docker run --rm --network "$net" "$UPSTREAM_PROBE_IMAGE" -fsS --max-time 2 "http://${svc}:8080/" >/dev/null 2>&1; then
             return 0
           fi
         fi
@@ -365,7 +464,7 @@ rollback_traffic_switch() {
     switch_target_file "$target" "$from_color" "$to_color"
   done
 
-  if reload_caddy "$CADDY_RUNTIME_FILE"; then
+  if reload_caddy; then
     write_active_marker "$to_color"
     echo "Rollback completed. Active slot restored to: $to_color"
     return 0
@@ -398,30 +497,17 @@ log "2) Load external frontend env"
 : "${EXTERNAL_ENV_1:?EXTERNAL_ENV_1 missing in .env bridge}"
 echo "Loaded EXTERNAL_ENV_1=$EXTERNAL_ENV_1"
 
-# Detect runtime Caddy context (host service or container)
-CADDY_RUNTIME_FILE=""
-CADDY_RUNTIME_MODE="none"  # host|container-mounted|container-internal|none
-CADDY_CONTAINER_NAME=""
-
-if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy && [[ -f /etc/caddy/Caddyfile ]]; then
-  CADDY_RUNTIME_MODE="host"
-  CADDY_RUNTIME_FILE="/etc/caddy/Caddyfile"
-else
-  CADDY_CONTAINER_NAME="$(get_caddy_container || true)"
-  if [[ -n "$CADDY_CONTAINER_NAME" ]]; then
-    src="$(get_container_caddyfile_source "$CADDY_CONTAINER_NAME")"
-    if [[ -n "$src" && -f "$src" ]]; then
-      CADDY_RUNTIME_MODE="container-mounted"
-      CADDY_RUNTIME_FILE="$src"
-    else
-      CADDY_RUNTIME_MODE="container-internal"
-    fi
-  fi
-fi
-
+detect_edge_runtime
+echo "Caddy edge owner: $EDGE_OWNER"
+echo "Systemd caddy state: $SERVICE_CADDY_ACTIVE"
 echo "Caddy mode: $CADDY_RUNTIME_MODE"
 [[ -n "$CADDY_CONTAINER_NAME" ]] && echo "Caddy container: $CADDY_CONTAINER_NAME"
 [[ -n "$CADDY_RUNTIME_FILE" ]] && echo "Caddy runtime file: $CADDY_RUNTIME_FILE"
+echo "Public check URL: $PUBLIC_CHECK_URL"
+
+if [[ "$EDGE_OWNER" == "none" ]]; then
+  die "Could not detect active Caddy edge on :443 (docker or host)."
+fi
 
 ACTIVE_COLOR=""
 if [[ -f "$ACTIVE_MARKER" ]]; then
@@ -472,11 +558,11 @@ echo "Caddy switch mode: $SWITCH_MODE"
 
 log "5) Ensure Caddy can reach idle slot (service mode only)"
 if [[ "$SWITCH_MODE" == "service" ]]; then
-  if [[ "$CADDY_RUNTIME_MODE" == "host" ]]; then
-    die "Detected host Caddy + service upstream mode. This usually causes 502 (host Caddy can't resolve Docker service names). Use port mode in Caddyfile for host Caddy."
+  if [[ "$EDGE_OWNER" == "host" ]]; then
+    die "Detected host Caddy + service upstream mode. This causes 502 because host Caddy can't resolve Docker service names. Use port mode upstream (127.0.0.1:18081/18082) for host Caddy."
   fi
 
-  if [[ -n "$CADDY_CONTAINER_NAME" ]]; then
+  if [[ "$EDGE_OWNER" == "docker" && -n "$CADDY_CONTAINER_NAME" ]]; then
     ensure_caddy_connected_to_service_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"
     if ! probe_service_from_caddy_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"; then
       err "Caddy network probe failed: cannot reach http://${IDLE_SVC}:8080 from shared Docker networks."
@@ -502,20 +588,23 @@ for target in "${CADDY_TARGET_FILES[@]}"; do
   switch_target_file "$target" "$ACTIVE_COLOR" "$IDLE_COLOR"
 done
 
-if reload_caddy "$CADDY_RUNTIME_FILE"; then
+if reload_caddy; then
   echo "Traffic switched to $IDLE_COLOR slot."
 else
-  die "Could not reload Caddy. Your Caddyfile backups were kept with .bak.<timestamp>."
+  die "Could not reload edge Caddy. Backups were kept as .bak.<timestamp>."
 fi
 
-log "7) Verify public + runtime status"
+log "7) Verify status"
 
-# 7a) Local direct slot check (idle target)
+# 7a) Local direct slot check (required)
 LOCAL_IDLE_OK=0
 if command -v curl >/dev/null 2>&1; then
-  if curl -fsS --max-time 4 "http://127.0.0.1:${IDLE_PORT}/" >/dev/null 2>&1; then
+  local_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 "http://127.0.0.1:${IDLE_PORT}/" || true)"
+  if is_http_2xx_or_3xx "$local_code"; then
     LOCAL_IDLE_OK=1
   fi
+else
+  err "curl not found; local slot check skipped"
 fi
 
 # 7b) Runtime Caddy target check
@@ -527,35 +616,15 @@ for target in "${CADDY_TARGET_FILES[@]}"; do
   fi
 done
 
-# 7c) Public DNS path check
+# 7c) Public HTTPS check (required)
 run_public_check_loop
 
-# 7d) Local ingress check via forced host mapping (bypasses external DNS path)
-LOCAL_INGRESS_TESTED=0
-LOCAL_INGRESS_OK=0
-LOCAL_INGRESS_CODE=""
-LOCAL_INGRESS_SLOT=""
-LOCAL_INGRESS_HEADERS=""
-
-if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
-  LOCAL_INGRESS_TESTED=1
-  LOCAL_INGRESS_HEADERS="$(probe_headers "https://${DOMAIN}/" --resolve "${DOMAIN}:443:127.0.0.1")"
-  LOCAL_INGRESS_CODE="$(http_code_from_headers <<< "$LOCAL_INGRESS_HEADERS")"
-  LOCAL_INGRESS_SLOT="$(slot_from_headers <<< "$LOCAL_INGRESS_HEADERS")"
-
-  if is_http_2xx_or_3xx "$LOCAL_INGRESS_CODE"; then
-    if [[ -z "$LOCAL_INGRESS_SLOT" || "$LOCAL_INGRESS_SLOT" == "$IDLE_COLOR" ]]; then
-      LOCAL_INGRESS_OK=1
-    fi
-  fi
-fi
-
-# 7e) Auto-remedy for common 502 case in containerized Caddy service-mode
-if [[ "$PUBLIC_OK" -ne 1 && "$AUTO_REMEDY_502" == "1" && "$SWITCH_MODE" == "service" && -n "$CADDY_CONTAINER_NAME" && "$PUBLIC_CODE" == "502" ]]; then
-  log "7e) Auto-remedy: reconnect Caddy to idle service network(s), reload, and re-check public endpoint"
+# 7d) Auto-remedy for common 502 case in containerized Caddy service-mode
+if [[ "$PUBLIC_OK" -ne 1 && "$AUTO_REMEDY_502" == "1" && "$SWITCH_MODE" == "service" && "$EDGE_OWNER" == "docker" && -n "$CADDY_CONTAINER_NAME" && "$PUBLIC_CODE" == "502" ]]; then
+  log "7d) Auto-remedy: reconnect Caddy to idle service network(s), reload, and re-check public endpoint"
   ensure_caddy_connected_to_service_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME" || true
   if probe_service_from_caddy_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"; then
-    reload_caddy "$CADDY_RUNTIME_FILE" || true
+    reload_caddy || true
     run_public_check_loop
   else
     err "Auto-remedy probe failed: ${IDLE_SVC}:8080 still unreachable from Caddy network context."
@@ -564,36 +633,24 @@ fi
 
 echo ""
 echo "Verification summary:"
-printf "  - Idle slot local     : %s (%s:%s)\n" "$( [[ "$LOCAL_IDLE_OK" -eq 1 ]] && echo PASS || echo FAIL )" "$IDLE_SVC" "$IDLE_PORT"
-printf "  - Caddy target file   : %s (expects %s)\n" "$( [[ "$CADDY_TARGET_OK" -eq 1 ]] && echo PASS || echo FAIL )" "$IDLE_COLOR"
-printf "  - Public HTTPS        : %s (code=%s slot=%s)\n" "$( [[ "$PUBLIC_OK" -eq 1 ]] && echo PASS || echo FAIL )" "${PUBLIC_CODE:-n/a}" "${PUBLIC_SLOT:-none}"
-if [[ "$LOCAL_INGRESS_TESTED" -eq 1 ]]; then
-  printf "  - Local ingress(443)  : %s (code=%s slot=%s)\n" "$( [[ "$LOCAL_INGRESS_OK" -eq 1 ]] && echo PASS || echo FAIL )" "${LOCAL_INGRESS_CODE:-n/a}" "${LOCAL_INGRESS_SLOT:-none}"
-else
-  printf "  - Local ingress(443)  : SKIP\n"
-fi
+printf "  - Idle slot local (127.0.0.1:%s): %s\n" "$IDLE_PORT" "$( [[ "$LOCAL_IDLE_OK" -eq 1 ]] && echo PASS || echo FAIL )"
+printf "  - Caddy target file              : %s (expects %s)\n" "$( [[ "$CADDY_TARGET_OK" -eq 1 ]] && echo PASS || echo FAIL )" "$IDLE_COLOR"
+printf "  - Public HTTPS (%s)  : %s (code=%s slot=%s)\n" "$PUBLIC_CHECK_URL" "$( [[ "$PUBLIC_OK" -eq 1 ]] && echo PASS || echo FAIL )" "${PUBLIC_CODE:-n/a}" "${PUBLIC_SLOT:-none}"
 
 # Decide marker + rollback behavior
 FINAL_ACTIVE_COLOR="$IDLE_COLOR"
 FINAL_PREV_COLOR="$ACTIVE_COLOR"
 
-if [[ "$PUBLIC_OK" -eq 1 ]]; then
-  echo "Public live status confirmed for https://${DOMAIN}"
-elif [[ "$LOCAL_IDLE_OK" -eq 1 && "$CADDY_TARGET_OK" -eq 1 && ( "$LOCAL_INGRESS_TESTED" -eq 0 || "$LOCAL_INGRESS_OK" -eq 1 ) ]]; then
-  err "Public DNS/edge path not confirmed yet, but switch is confirmed internally."
-  echo "Diagnostics (copy/paste):"
-  echo "  curl -ksSI https://${DOMAIN} | sed -n '1,30p'"
-  echo "  curl -ksS -o /dev/null -w 'HTTP %{http_code}\n' https://${DOMAIN}"
-  echo "  curl -sSI http://127.0.0.1:${IDLE_PORT} | sed -n '1,10p'"
-  if [[ -n "$CADDY_RUNTIME_FILE" ]]; then
-    echo "  grep -nE 'bookhive.jrmsu-tc.cloud|reverse_proxy|18081|18082|bookhive-blue|bookhive-green' '$CADDY_RUNTIME_FILE'"
-  else
-    echo "  grep -nE 'bookhive.jrmsu-tc.cloud|reverse_proxy|18081|18082|bookhive-blue|bookhive-green' '$CADDY_REPO_FILE'"
-  fi
+if [[ "$LOCAL_IDLE_OK" -eq 1 && "$PUBLIC_OK" -eq 1 ]]; then
+  echo "Deployment verified: local slot and public HTTPS are both healthy."
 else
   err "Deployment switch done, but verification failed."
   [[ -n "$PUBLIC_HEADERS" ]] && { echo "--- Public headers ---"; echo "$PUBLIC_HEADERS" | sed -n '1,30p'; }
-  [[ -n "$LOCAL_INGRESS_HEADERS" ]] && { echo "--- Local ingress headers ---"; echo "$LOCAL_INGRESS_HEADERS" | sed -n '1,30p'; }
+
+  echo "Diagnostics (copy/paste):"
+  echo "  curl -sS -o /dev/null -w 'idle slot HTTP %{http_code}\n' http://127.0.0.1:${IDLE_PORT}/"
+  echo "  curl -ksSI '${PUBLIC_CHECK_URL}' | sed -n '1,30p'"
+  [[ -n "$CADDY_CONTAINER_NAME" ]] && echo "  docker logs --tail=120 '$CADDY_CONTAINER_NAME'"
 
   if [[ "$AUTO_ROLLBACK_ON_VERIFY_FAIL" == "1" ]]; then
     err "AUTO_ROLLBACK_ON_VERIFY_FAIL=1 -> reverting traffic to $ACTIVE_COLOR"
