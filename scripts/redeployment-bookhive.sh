@@ -8,7 +8,7 @@ ENV_LOADER="${ENV_LOADER:-scripts/load-external-env.sh}"
 CADDY_REPO_FILE="${CADDY_REPO_FILE:-infra/Caddyfile}"
 ACTIVE_MARKER="${ACTIVE_MARKER:-/opt/bookhive-env/bookhive.active}"
 DOMAIN="${DOMAIN:-bookhive.jrmsu-tc.cloud}"
-PUBLIC_CHECK_URL="${PUBLIC_CHECK_URL:-https://workloadhub.jrmsu-tc.cloud}"
+PUBLIC_CHECK_URL="${PUBLIC_CHECK_URL:-https://${DOMAIN}}"
 CADDY_CTN="${CADDY_CTN:-}"   # optional preferred Caddy container name
 
 PUBLIC_CHECK_RETRIES="${PUBLIC_CHECK_RETRIES:-30}"
