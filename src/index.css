@@ -62,20 +62,20 @@
   --radius: 0.625rem;
 
   /* page/text */
-  --background: oklch(0.145 0 0);          /* ~ slate-950 */
-  --foreground: oklch(0.985 0 0);          /* white */
+  --background: oklch(0.145 0 0); /* ~ slate-950 */
+  --foreground: oklch(0.985 0 0); /* white */
 
   /* surfaces */
-  --card: oklch(0.205 0 0 / 60%);          /* ~ bg-slate-800/60 */
+  --card: oklch(0.205 0 0 / 60%); /* ~ bg-slate-800/60 */
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0 / 60%);       /* translucent like cards */
+  --popover: oklch(0.205 0 0 / 60%); /* translucent like cards */
   --popover-foreground: oklch(0.985 0 0);
 
   /* brand/utility */
-  --primary: oklch(0.922 0 0);             /* white-ish for buttons on dark */
-  --primary-foreground: oklch(0.205 0 0);  /* dark text when primary is light */
+  --primary: oklch(0.922 0 0); /* white-ish for buttons on dark */
+  --primary-foreground: oklch(0.205 0 0); /* dark text when primary is light */
 
-  --secondary: oklch(0.269 0 0);           /* ~ slate-800 */
+  --secondary: oklch(0.269 0 0); /* ~ slate-800 */
   --secondary-foreground: oklch(0.985 0 0);
 
   --muted: oklch(0.269 0 0);
@@ -87,7 +87,7 @@
   --destructive: oklch(0.704 0.191 22.216);
 
   /* borders/inputs/rings */
-  --border: oklch(1 0 0 / 10%);            /* ~ border-white/10 */
+  --border: oklch(1 0 0 / 10%); /* ~ border-white/10 */
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
 
@@ -99,13 +99,13 @@
   --chart-5: oklch(0.645 0.246 16.439);
 
   /* sidebar */
-  --sidebar: oklch(0.205 0 0);             /* ~ slate-800/900 */
+  --sidebar: oklch(0.205 0 0); /* ~ slate-800/900 */
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);    /* border-white/10 */
+  --sidebar-border: oklch(1 0 0 / 10%); /* border-white/10 */
   --sidebar-ring: oklch(0.556 0 0);
 }
 
@@ -165,21 +165,30 @@
   }
 }
 
-/* ---------- Global scrollbar styles for .support-scroll ---------- */
+/* ---------- Global scrollbar styles (thin, dark, rounded) ---------- */
 /* Firefox */
-.support-scroll {
-  scrollbar-color: rgba(148, 163, 184, 0.55) rgb(15, 23, 42);
+* {
   scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.55) rgb(15, 23, 42); /* thumb | track */
 }
-/* WebKit */
-.support-scroll::-webkit-scrollbar {
-  width: 10px;
+
+/* WebKit (Chrome, Edge, Safari) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-.support-scroll::-webkit-scrollbar-track {
-  background: rgb(15 23 42); /* slate-900 */
-}
-.support-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.55); /* slate-400/500 mix for contrast */
+
+*::-webkit-scrollbar-track {
+  background: rgb(15, 23, 42); /* slate-900 */
   border-radius: 9999px;
-  border: 2px solid rgb(15 23 42); /* merge into slate-900 track */
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.55); /* dark-contrast thumb */
+  border-radius: 9999px;
+  border: 2px solid rgb(15, 23, 42); /* keeps thumb integrated with dark track */
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.75);
 }

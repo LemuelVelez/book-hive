@@ -65,6 +65,8 @@ import {
 
 type StatusFilter = "all" | "borrowed" | "returned";
 
+const FIXED_EXTENSION_DAYS = 1;
+
 /**
  * Format date as YYYY-MM-DD in *local* timezone
  * to avoid off-by-one issues from UTC conversions.
@@ -143,9 +145,6 @@ export default function StudentCirculationPage() {
   const [returnBusyId, setReturnBusyId] = React.useState<string | null>(null);
 
   const [extendBusyId, setExtendBusyId] = React.useState<string | null>(null);
-  const [extendDaysById, setExtendDaysById] = React.useState<
-    Record<string, string>
-  >({});
   const [extendReasonById, setExtendReasonById] = React.useState<
     Record<string, string>
   >({});
@@ -312,16 +311,8 @@ export default function StudentCirculationPage() {
       return;
     }
 
-    const rawDays = (extendDaysById[record.id] ?? "").trim();
-    const days = Math.floor(Number(rawDays));
-
-    if (!Number.isFinite(days) || days <= 0) {
-      toast.error("Invalid extension days", {
-        description: "Please enter a positive number of days.",
-      });
-      return;
-    }
-
+    // Fixed extension policy: exactly 1 day (not user-editable)
+    const days = FIXED_EXTENSION_DAYS;
     const reason = (extendReasonById[record.id] ?? "").trim();
 
     setExtendBusyId(record.id);
@@ -356,14 +347,10 @@ export default function StudentCirculationPage() {
     }
   }
 
-  const cellScrollbarClasses =
-    "overflow-x-auto whitespace-nowrap " +
-    "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
-    "[&::-webkit-scrollbar]:h-1.5 " +
-    "[&::-webkit-scrollbar-track]:bg-transparent " +
-    "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
-    "[&::-webkit-scrollbar-thumb]:rounded-full " +
-    "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
+  const wrapCellClasses = "whitespace-normal break-words";
+  const badgeWrapClasses = "max-w-full whitespace-normal break-words leading-tight text-right";
+  const actionButtonBaseClasses =
+    "w-full min-h-9 h-auto py-2 whitespace-normal break-words leading-tight text-center";
 
   return (
     <DashboardLayout title="My Circulation">
@@ -450,7 +437,6 @@ export default function StudentCirculationPage() {
             </div>
           </div>
 
-          {/* Keep only short, relevant tips (no "speech") */}
           <p className="mt-2 text-[11px] text-white/60">
             Return requests and extension requests apply to{" "}
             <span className="font-semibold text-amber-200">Borrowed</span>{" "}
@@ -568,10 +554,10 @@ export default function StudentCirculationPage() {
                               <TableHead className="text-xs font-semibold text-white/70">
                                 Status
                               </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70">
+                              <TableHead className="w-44 text-xs font-semibold text-white/70 text-right">
                                 ₱Fine
                               </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70 text-right">
+                              <TableHead className="w-56 text-xs font-semibold text-white/70 text-right">
                                 Action
                               </TableHead>
                             </TableRow>
@@ -726,24 +712,34 @@ export default function StudentCirculationPage() {
 
                                   <TableCell
                                     className={
-                                      "text-right align-top w-[100px] max-w-[100px] " +
-                                      cellScrollbarClasses
+                                      "text-right align-top w-44 max-w-44 " +
+                                      wrapCellClasses
                                     }
                                   >
-                                    <div className="flex flex-col items-start gap-0.5">
+                                    <div className="flex w-full flex-col items-end gap-1">
                                       <span>{peso(finalFineAmount)}</span>
 
                                       {isActiveBorrow &&
                                         isOverdue &&
                                         finalFineAmount > 0 && (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
+                                          <span
+                                            className={
+                                              "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40 " +
+                                              badgeWrapClasses
+                                            }
+                                          >
                                             <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
                                             Accruing overdue fine ({peso(finalFineAmount)})
                                           </span>
                                         )}
 
                                       {linkedFine && linkedFineStatus === "active" && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
+                                        <span
+                                          className={
+                                            "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40 " +
+                                            badgeWrapClasses
+                                          }
+                                        >
                                           <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
                                           Active fine (unpaid)
                                         </span>
@@ -751,14 +747,24 @@ export default function StudentCirculationPage() {
 
                                       {linkedFine &&
                                         linkedFineStatus === "pending_verification" && (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
+                                          <span
+                                            className={
+                                              "inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40 " +
+                                              badgeWrapClasses
+                                            }
+                                          >
                                             <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
                                             Awaiting librarian update
                                           </span>
                                         )}
 
                                       {linkedFine && linkedFineStatus === "paid" && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40">
+                                        <span
+                                          className={
+                                            "inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40 " +
+                                            badgeWrapClasses
+                                          }
+                                        >
                                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                                           Fine paid
                                         </span>
@@ -766,7 +772,12 @@ export default function StudentCirculationPage() {
 
                                       {linkedFine &&
                                         linkedFineStatus === "cancelled" && (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40">
+                                          <span
+                                            className={
+                                              "inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40 " +
+                                              badgeWrapClasses
+                                            }
+                                          >
                                             <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
                                             Fine cancelled
                                           </span>
@@ -776,18 +787,21 @@ export default function StudentCirculationPage() {
 
                                   <TableCell
                                     className={
-                                      "text-right align-top w-[180px] max-w-[180px] " +
-                                      cellScrollbarClasses
+                                      "text-right align-top w-56 max-w-56 " +
+                                      wrapCellClasses
                                     }
                                   >
                                     {isBorrowed ? (
-                                      <div className="flex flex-col gap-2 items-stretch">
+                                      <div className="flex w-full flex-col gap-2 items-stretch">
                                         <AlertDialog>
                                           <AlertDialogTrigger asChild>
                                             <Button
                                               type="button"
                                               size="sm"
-                                              className="bg-purple-600 hover:bg-purple-700 text-white w-full"
+                                              className={
+                                                "bg-purple-600 hover:bg-purple-700 text-white " +
+                                                actionButtonBaseClasses
+                                              }
                                               disabled={returnBusyId === record.id}
                                             >
                                               {returnBusyId === record.id ? (
@@ -875,13 +889,12 @@ export default function StudentCirculationPage() {
                                               type="button"
                                               size="sm"
                                               variant="outline"
-                                              className="border-sky-300/40 text-sky-200 hover:bg-sky-500/10 w-full"
+                                              className={
+                                                "border-sky-300/40 text-sky-200 hover:bg-sky-500/10 " +
+                                                actionButtonBaseClasses
+                                              }
                                               disabled={extendBusyId === record.id || extensionPending}
                                               onClick={() => {
-                                                setExtendDaysById((prev) => ({
-                                                  ...prev,
-                                                  [record.id]: prev[record.id] ?? "7",
-                                                }));
                                                 setExtendReasonById((prev) => ({
                                                   ...prev,
                                                   [record.id]: prev[record.id] ?? "",
@@ -907,7 +920,11 @@ export default function StudentCirculationPage() {
                                                 Request due date extension
                                               </AlertDialogTitle>
                                               <AlertDialogDescription className="text-white/70">
-                                                Pick the number of days to request.
+                                                Extension is fixed to{" "}
+                                                <span className="font-semibold text-sky-200">
+                                                  +1 day
+                                                </span>{" "}
+                                                and cannot be changed.
                                               </AlertDialogDescription>
                                             </AlertDialogHeader>
 
@@ -941,23 +958,12 @@ export default function StudentCirculationPage() {
                                                 )}
                                               </div>
 
-                                              <div className="grid grid-cols-1 gap-2">
-                                                <label className="text-xs text-white/70">
-                                                  Extension (days)
-                                                </label>
-                                                <Input
-                                                  inputMode="numeric"
-                                                  value={extendDaysById[record.id] ?? "7"}
-                                                  onChange={(e) =>
-                                                    setExtendDaysById((prev) => ({
-                                                      ...prev,
-                                                      [record.id]: e.target.value,
-                                                    }))
-                                                  }
-                                                  placeholder="e.g. 7"
-                                                  className="bg-slate-950/60 border-white/20 text-white"
-                                                  disabled={extendBusyId === record.id || extensionPending}
-                                                />
+                                              <div className="rounded-md border border-sky-300/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+                                                Extension days:{" "}
+                                                <span className="font-semibold">
+                                                  {FIXED_EXTENSION_DAYS} day
+                                                </span>{" "}
+                                                (fixed)
                                               </div>
 
                                               <div className="grid grid-cols-1 gap-2">
@@ -1012,7 +1018,10 @@ export default function StudentCirculationPage() {
                                         size="sm"
                                         variant="outline"
                                         disabled
-                                        className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
+                                        className={
+                                          "border-amber-400/50 text-amber-200/80 " +
+                                          actionButtonBaseClasses
+                                        }
                                       >
                                         Pending return
                                       </Button>
@@ -1022,7 +1031,10 @@ export default function StudentCirculationPage() {
                                         size="sm"
                                         variant="outline"
                                         disabled
-                                        className="border-amber-400/50 text-amber-200/80 w-full md:w-auto"
+                                        className={
+                                          "border-amber-400/50 text-amber-200/80 " +
+                                          actionButtonBaseClasses
+                                        }
                                       >
                                         Pending pickup
                                       </Button>
@@ -1032,7 +1044,9 @@ export default function StudentCirculationPage() {
                                         size="sm"
                                         variant="outline"
                                         disabled
-                                        className="border-white/20 text-white/60 w-full md:w-auto mx-1"
+                                        className={
+                                          "border-white/20 text-white/60 " + actionButtonBaseClasses
+                                        }
                                       >
                                         Already returned
                                       </Button>

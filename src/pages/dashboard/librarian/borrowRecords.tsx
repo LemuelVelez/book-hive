@@ -69,6 +69,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 
 const FINE_PER_DAY = 5;
+const FIXED_EXTENSION_DAYS = 1;
 
 function peso(n: number) {
   if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00";
@@ -357,7 +358,9 @@ export default function LibrarianBorrowRecordsPage() {
       setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
       toast.success("Extension approved", {
-        description: `New due date: ${fmtDate(updated.dueDate)}.`,
+        description: `Extension Added (+${FIXED_EXTENSION_DAYS} day). New due date: ${fmtDate(
+          updated.dueDate
+        )}.`,
       });
 
       closeDueDialog();
@@ -520,15 +523,25 @@ export default function LibrarianBorrowRecordsPage() {
                     and set the final fine (if any).
                   </li>
                   <li>
-                    Payment status is handled in the{" "}
-                    <span className="font-semibold text-white">Fines</span> page.
+                    Extension requests are processed as{" "}
+                    <span className="font-semibold text-white">Pending</span> →{" "}
+                    <span className="font-semibold text-white">Approved/Disapproved</span>.
+                    Approval adds{" "}
+                    <span className="font-semibold text-sky-200">
+                      +{FIXED_EXTENSION_DAYS} day
+                    </span>{" "}
+                    per request.
                   </li>
                   <li>
-                    Due date edits are available after an{" "}
+                    Renew only when there is{" "}
                     <span className="font-semibold text-white">
-                      extension request
-                    </span>
-                    .
+                      no next borrower
+                    </span>{" "}
+                    and the book is still available.
+                  </li>
+                  <li>
+                    Payment status is handled in the{" "}
+                    <span className="font-semibold text-white">Fines</span> page.
                   </li>
                 </ul>
               </div>
@@ -867,7 +880,7 @@ export default function LibrarianBorrowRecordsPage() {
                                             title={
                                               canEditDueDate
                                                 ? extensionPending
-                                                  ? "Review extension request / Edit due date"
+                                                  ? `Review extension request (+${FIXED_EXTENSION_DAYS} day) / Edit due date`
                                                   : "Edit due date"
                                                 : "Disabled until the borrower requests an extension."
                                             }
@@ -883,7 +896,7 @@ export default function LibrarianBorrowRecordsPage() {
                                             </span>
                                           ) : extensionPending ? (
                                             <span className="text-[10px] text-amber-200/80">
-                                              Extension pending
+                                              Extension pending (+{FIXED_EXTENSION_DAYS}d)
                                             </span>
                                           ) : null}
                                         </div>
@@ -1087,9 +1100,9 @@ export default function LibrarianBorrowRecordsPage() {
             </div>
 
             <div className="mt-4 space-y-2">
-              <label className="text-xs font-medium text-white/80">
+              <p className="text-xs font-medium text-white/80">
                 Final fine amount (editable)
-              </label>
+              </p>
               <div className="flex items-center gap-2">
                 <div className="relative w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
@@ -1229,7 +1242,7 @@ export default function LibrarianBorrowRecordsPage() {
                       <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
                         <span className="inline-flex items-center gap-1">
                           <CheckCircle2 className="h-3 w-3" />
-                          Approved
+                          Extension Added
                         </span>
                       </Badge>
                     );
@@ -1268,19 +1281,15 @@ export default function LibrarianBorrowRecordsPage() {
                 const reqDays =
                   typeof dueRecord.extensionRequestedDays === "number"
                     ? dueRecord.extensionRequestedDays
-                    : null;
+                    : FIXED_EXTENSION_DAYS;
 
                 return (
                   <div className="space-y-1 text-[11px] text-white/70">
                     <p>
                       <span className="text-white/60">Requested:</span>{" "}
-                      {reqDays !== null ? (
-                        <span className="font-semibold text-amber-200">
-                          +{reqDays} day{reqDays === 1 ? "" : "s"}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
+                      <span className="font-semibold text-amber-200">
+                        +{reqDays} day{reqDays === 1 ? "" : "s"}
+                      </span>
                     </p>
                     <p>
                       <span className="text-white/60">Requested at:</span>{" "}
@@ -1308,13 +1317,21 @@ export default function LibrarianBorrowRecordsPage() {
                 );
               })()}
 
+              <p className="text-[11px] text-white/60">
+                Policy: extension is{" "}
+                <span className="font-semibold text-sky-200">
+                  +{FIXED_EXTENSION_DAYS} day
+                </span>{" "}
+                per approved request. Renew only if no next borrower and book remains available.
+              </p>
+
               {((dueRecord.extensionRequestStatus ?? "none")
                 .toLowerCase()
                 .trim() === "pending") && (
                   <div className="pt-2 space-y-2">
-                    <label className="text-xs font-medium text-white/80">
+                    <p className="text-xs font-medium text-white/80">
                       Decision note (optional)
-                    </label>
+                    </p>
                     <Input
                       value={decisionNoteInput}
                       onChange={(e) => setDecisionNoteInput(e.target.value)}
@@ -1358,7 +1375,7 @@ export default function LibrarianBorrowRecordsPage() {
                         ) : (
                           <span className="inline-flex items-center gap-2">
                             <Check className="h-4 w-4" />
-                            Approve
+                            Approve (+{FIXED_EXTENSION_DAYS} day)
                           </span>
                         )}
                       </Button>
@@ -1367,55 +1384,77 @@ export default function LibrarianBorrowRecordsPage() {
                 )}
             </div>
 
-            <div className="mt-4 space-y-2">
-              <label className="text-xs font-medium text-white/80">
-                New due date
-              </label>
-              <div className="flex flex-col gap-2">
-                <Calendar
-                  mode="single"
-                  selected={dueDateInput}
-                  onSelect={setDueDateInput}
-                  captionLayout="dropdown"
-                  className="rounded-md border border-white/10 bg-slate-900/70"
-                  autoFocus
-                />
-                <p className="text-[11px] text-white/60">
-                  Selected date:{" "}
-                  <span className="font-semibold">
-                    {dueDateInput
-                      ? dueDateInput.toLocaleDateString("en-CA")
-                      : "—"}
-                  </span>
+            {((dueRecord.extensionRequestStatus ?? "none")
+              .toLowerCase()
+              .trim() !== "pending") && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium text-white/80">
+                    New due date
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <Calendar
+                      mode="single"
+                      selected={dueDateInput}
+                      onSelect={setDueDateInput}
+                      captionLayout="dropdown"
+                      className="rounded-md border border-white/10 bg-slate-900/70"
+                      autoFocus
+                    />
+                    <p className="text-[11px] text-white/60">
+                      Selected date:{" "}
+                      <span className="font-semibold">
+                        {dueDateInput
+                          ? dueDateInput.toLocaleDateString("en-CA")
+                          : "—"}
+                      </span>
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-white/60">
+                    Extending the due date can reduce (or remove) overdue fines while
+                    this record is still active.
+                  </p>
+                </div>
+              )}
+
+            {((dueRecord.extensionRequestStatus ?? "none")
+              .toLowerCase()
+              .trim() === "pending") && (
+                <p className="mt-4 text-[11px] text-white/60">
+                  Manual due date editing is disabled while an extension request is pending.
+                  Decide using Approve/Disapprove above.
                 </p>
-              </div>
-              <p className="text-[11px] text-white/60">
-                Extending the due date can reduce (or remove) overdue fines while
-                this record is still active.
-              </p>
-            </div>
+              )}
 
             <AlertDialogFooter>
               <AlertDialogCancel
                 className="border-white/20 text-white hover:bg-black/20"
                 disabled={submittingDue || submittingDecision !== null}
               >
-                Cancel
+                {((dueRecord.extensionRequestStatus ?? "none")
+                  .toLowerCase()
+                  .trim() === "pending")
+                  ? "Close"
+                  : "Cancel"}
               </AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-purple-600 hover:bg-purple-700 text-white"
-                disabled={submittingDue || submittingDecision !== null}
-                onClick={handleSaveDueDate}
-              >
-                {submittingDue ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving…
-                  </span>
-                ) : (
-                  "Save due date"
+
+              {((dueRecord.extensionRequestStatus ?? "none")
+                .toLowerCase()
+                .trim() !== "pending") && (
+                  <AlertDialogAction
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                    disabled={submittingDue || submittingDecision !== null}
+                    onClick={handleSaveDueDate}
+                  >
+                    {submittingDue ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving…
+                      </span>
+                    ) : (
+                      "Save due date"
+                    )}
+                  </AlertDialogAction>
                 )}
-              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         )}

@@ -42,7 +42,7 @@ export default function DashboardLayout({
                 {/* Slim rail to toggle (desktop) */}
                 <SidebarRail className="border-white/10" />
 
-                <SidebarInset className="bg-transparent">
+                <SidebarInset className="bg-transparent min-w-0">
                     <DashboardHeader title={title} />
                     <div className="p-4 md:p-6">{children}</div>
                 </SidebarInset>
