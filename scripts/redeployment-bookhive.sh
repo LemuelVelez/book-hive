@@ -9,6 +9,8 @@ CADDY_REPO_FILE="${CADDY_REPO_FILE:-infra/Caddyfile}"
 ACTIVE_MARKER="${ACTIVE_MARKER:-/opt/bookhive-env/bookhive.active}"
 DOMAIN="${DOMAIN:-bookhive.jrmsu-tc.cloud}"
 CADDY_CTN="${CADDY_CTN:-}"   # optional: force container name (e.g. workloadhub_caddy_1002)
+PUBLIC_CHECK_RETRIES="${PUBLIC_CHECK_RETRIES:-30}"
+PUBLIC_CHECK_SLEEP_SECS="${PUBLIC_CHECK_SLEEP_SECS:-2}"
 
 BLUE_SVC="bookhive-blue"
 GREEN_SVC="bookhive-green"
@@ -22,6 +24,24 @@ die(){ err "$*"; exit 1; }
 require_file() {
   local f="$1"
   [[ -f "$f" ]] || die "Missing file: $f"
+}
+
+is_http_2xx_or_3xx() {
+  [[ "${1:-}" =~ ^[23][0-9][0-9]$ ]]
+}
+
+http_code_from_headers() {
+  awk 'toupper($1) ~ /^HTTP\// {code=$2} END{print code}'
+}
+
+slot_from_headers() {
+  awk -F': ' 'tolower($1)=="x-bookhive-slot"{gsub("\r","",$2); slot=tolower($2)} END{print slot}'
+}
+
+probe_headers() {
+  # Usage: probe_headers "https://example.com/" [extra curl args...]
+  local url="$1"; shift || true
+  curl -ksSIL --connect-timeout 5 --max-time 12 "$@" "$url" 2>/dev/null || true
 }
 
 # Return: blue|green|""
@@ -64,6 +84,30 @@ get_proxy_mode_from_file() {
 backup_file() {
   local f="$1"
   cp -a "$f" "${f}.bak.$(date +%F-%H%M%S)"
+}
+
+caddy_points_to_slot() {
+  local file="$1" color="$2" mode expected_port
+  [[ -f "$file" ]] || return 1
+
+  mode="$(get_proxy_mode_from_file "$file")"
+  case "$color" in
+    blue)  expected_port="$BLUE_PORT" ;;
+    green) expected_port="$GREEN_PORT" ;;
+    *) return 1 ;;
+  esac
+
+  if [[ "$mode" == "service" ]]; then
+    grep -Eqi "reverse_proxy[[:space:]]+bookhive-${color}:8080\\b" "$file"
+    return $?
+  fi
+
+  if [[ "$mode" == "port" ]]; then
+    grep -Eqi "reverse_proxy[[:space:]]+(127\\.0\\.0\\.1|localhost):${expected_port}\\b" "$file"
+    return $?
+  fi
+
+  return 1
 }
 
 # switch_target_file <file> <from_color> <to_color>
@@ -130,6 +174,7 @@ build_caddy_target_files() {
   if [[ -n "$runtime_file" && -f "$runtime_file" ]]; then
     out_ref+=("$runtime_file")
   fi
+
   if [[ -f "$CADDY_REPO_FILE" ]]; then
     local exists=0
     for f in "${out_ref[@]}"; do
@@ -145,10 +190,8 @@ reload_caddy() {
 
   # Host Caddy service first
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy; then
-    if [[ -f /etc/caddy/Caddyfile ]]; then
-      if command -v caddy >/dev/null 2>&1; then
-        caddy validate --config /etc/caddy/Caddyfile
-      fi
+    if [[ -f /etc/caddy/Caddyfile ]] && command -v caddy >/dev/null 2>&1; then
+      caddy validate --config /etc/caddy/Caddyfile
     fi
     systemctl reload caddy
     return 0
@@ -361,32 +404,96 @@ install -d -m 700 "$(dirname "$ACTIVE_MARKER")"
 printf "%s\n" "$IDLE_COLOR" > "$ACTIVE_MARKER"
 chmod 600 "$ACTIVE_MARKER"
 
-log "7) Verify public endpoint"
-if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
-  ok=0
-  for _ in $(seq 1 15); do
-    OUT="$(curl -ksSI "https://${DOMAIN}" || true)"
-    CODE="$(echo "$OUT" | awk 'toupper($1) ~ /^HTTP\// {print $2; exit}')"
-    SLOT="$(echo "$OUT" | awk -F': ' 'tolower($1)=="x-bookhive-slot"{gsub("\r","",$2); print tolower($2); exit}')"
+log "7) Verify public + runtime status"
 
-    if [[ "$CODE" =~ ^2|3 ]]; then
-      ok=1
-      # If slot header exists, make sure it matches idle color.
-      if [[ -n "$SLOT" && "$SLOT" != "$IDLE_COLOR" ]]; then
-        ok=0
+# 7a) Local direct slot check (idle target)
+LOCAL_IDLE_OK=0
+if command -v curl >/dev/null 2>&1; then
+  if curl -fsS --max-time 4 "http://127.0.0.1:${IDLE_PORT}/" >/dev/null 2>&1; then
+    LOCAL_IDLE_OK=1
+  fi
+fi
+
+# 7b) Runtime Caddy target check
+CADDY_TARGET_OK=0
+for target in "${CADDY_TARGET_FILES[@]}"; do
+  if caddy_points_to_slot "$target" "$IDLE_COLOR"; then
+    CADDY_TARGET_OK=1
+    break
+  fi
+done
+
+# 7c) Public DNS path check
+PUBLIC_OK=0
+PUBLIC_CODE=""
+PUBLIC_SLOT=""
+PUBLIC_HEADERS=""
+
+if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
+  for _ in $(seq 1 "$PUBLIC_CHECK_RETRIES"); do
+    PUBLIC_HEADERS="$(probe_headers "https://${DOMAIN}/")"
+    PUBLIC_CODE="$(http_code_from_headers <<< "$PUBLIC_HEADERS")"
+    PUBLIC_SLOT="$(slot_from_headers <<< "$PUBLIC_HEADERS")"
+
+    if is_http_2xx_or_3xx "$PUBLIC_CODE"; then
+      if [[ -z "$PUBLIC_SLOT" || "$PUBLIC_SLOT" == "$IDLE_COLOR" ]]; then
+        PUBLIC_OK=1
+        break
       fi
     fi
 
-    [[ "$ok" -eq 1 ]] && break
-    sleep 2
+    sleep "$PUBLIC_CHECK_SLEEP_SECS"
   done
+fi
 
-  if [[ "$ok" -eq 1 ]]; then
-    echo "Public check OK: https://${DOMAIN}"
-  else
-    err "Public check not confirmed yet."
-    echo "Run: curl -ksSI https://${DOMAIN} | sed -n '1,30p'"
+# 7d) Local ingress check via forced host mapping (bypasses external DNS path)
+LOCAL_INGRESS_TESTED=0
+LOCAL_INGRESS_OK=0
+LOCAL_INGRESS_CODE=""
+LOCAL_INGRESS_SLOT=""
+LOCAL_INGRESS_HEADERS=""
+
+if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
+  LOCAL_INGRESS_TESTED=1
+  LOCAL_INGRESS_HEADERS="$(probe_headers "https://${DOMAIN}/" --resolve "${DOMAIN}:443:127.0.0.1")"
+  LOCAL_INGRESS_CODE="$(http_code_from_headers <<< "$LOCAL_INGRESS_HEADERS")"
+  LOCAL_INGRESS_SLOT="$(slot_from_headers <<< "$LOCAL_INGRESS_HEADERS")"
+
+  if is_http_2xx_or_3xx "$LOCAL_INGRESS_CODE"; then
+    if [[ -z "$LOCAL_INGRESS_SLOT" || "$LOCAL_INGRESS_SLOT" == "$IDLE_COLOR" ]]; then
+      LOCAL_INGRESS_OK=1
+    fi
   fi
+fi
+
+echo ""
+echo "Verification summary:"
+printf "  - Idle slot local     : %s (%s:%s)\n" "$( [[ "$LOCAL_IDLE_OK" -eq 1 ]] && echo PASS || echo FAIL )" "$IDLE_SVC" "$IDLE_PORT"
+printf "  - Caddy target file   : %s (expects %s)\n" "$( [[ "$CADDY_TARGET_OK" -eq 1 ]] && echo PASS || echo FAIL )" "$IDLE_COLOR"
+printf "  - Public HTTPS        : %s (code=%s slot=%s)\n" "$( [[ "$PUBLIC_OK" -eq 1 ]] && echo PASS || echo FAIL )" "${PUBLIC_CODE:-n/a}" "${PUBLIC_SLOT:-none}"
+if [[ "$LOCAL_INGRESS_TESTED" -eq 1 ]]; then
+  printf "  - Local ingress(443)  : %s (code=%s slot=%s)\n" "$( [[ "$LOCAL_INGRESS_OK" -eq 1 ]] && echo PASS || echo FAIL )" "${LOCAL_INGRESS_CODE:-n/a}" "${LOCAL_INGRESS_SLOT:-none}"
+else
+  printf "  - Local ingress(443)  : SKIP\n"
+fi
+
+if [[ "$PUBLIC_OK" -eq 1 ]]; then
+  echo "Public live status confirmed for https://${DOMAIN}"
+elif [[ "$LOCAL_IDLE_OK" -eq 1 && "$CADDY_TARGET_OK" -eq 1 && ( "$LOCAL_INGRESS_TESTED" -eq 0 || "$LOCAL_INGRESS_OK" -eq 1 ) ]]; then
+  err "Public DNS/edge path not confirmed yet, but switch is confirmed internally."
+  echo "Diagnostics (copy/paste):"
+  echo "  curl -ksSI https://${DOMAIN} | sed -n '1,30p'"
+  echo "  curl -ksS -o /dev/null -w 'HTTP %{http_code}\n' https://${DOMAIN}"
+  echo "  curl -sSI http://127.0.0.1:${IDLE_PORT} | sed -n '1,10p'"
+  if [[ -n "$CADDY_RUNTIME_FILE" ]]; then
+    echo "  grep -nE 'bookhive.jrmsu-tc.cloud|reverse_proxy|18081|18082|bookhive-blue|bookhive-green' '$CADDY_RUNTIME_FILE'"
+  else
+    echo "  grep -nE 'bookhive.jrmsu-tc.cloud|reverse_proxy|18081|18082|bookhive-blue|bookhive-green' '$CADDY_REPO_FILE'"
+  fi
+else
+  err "Deployment switch done, but verification failed. Review diagnostics below."
+  [[ -n "$PUBLIC_HEADERS" ]] && { echo "--- Public headers ---"; echo "$PUBLIC_HEADERS" | sed -n '1,30p'; }
+  [[ -n "$LOCAL_INGRESS_HEADERS" ]] && { echo "--- Local ingress headers ---"; echo "$LOCAL_INGRESS_HEADERS" | sed -n '1,30p'; }
 fi
 
 log "8) Final status"
