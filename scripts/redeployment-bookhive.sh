@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# ===== Config (override via env vars if needed) =====
 REPO_DIR="${REPO_DIR:-$HOME/book-hive}"
-COMPOSE_FILE="docker-compose.frontend.yml"
-ENV_LOADER="scripts/load-external-env.sh"
-CADDY_REPO_FILE="infra/Caddyfile"
-ACTIVE_MARKER="/opt/bookhive-env/bookhive.active"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.frontend.yml}"
+ENV_LOADER="${ENV_LOADER:-scripts/load-external-env.sh}"
+CADDY_REPO_FILE="${CADDY_REPO_FILE:-infra/Caddyfile}"
+ACTIVE_MARKER="${ACTIVE_MARKER:-/opt/bookhive-env/bookhive.active}"
+DOMAIN="${DOMAIN:-bookhive.jrmsu-tc.cloud}"
+CADDY_CTN="${CADDY_CTN:-}"   # optional: force container name (e.g. workloadhub_caddy_1002)
 
 BLUE_SVC="bookhive-blue"
 GREEN_SVC="bookhive-green"
@@ -14,14 +17,230 @@ GREEN_PORT="18082"
 
 log(){ printf "\n[%s] %s\n" "$(date '+%F %T')" "$*"; }
 err(){ printf "\n[ERROR] %s\n" "$*" >&2; }
+die(){ err "$*"; exit 1; }
 
 require_file() {
   local f="$1"
-  [[ -f "$f" ]] || { err "Missing file: $f"; exit 1; }
+  [[ -f "$f" ]] || die "Missing file: $f"
 }
 
-cd "$REPO_DIR"
+# Return: blue|green|""
+get_active_from_caddy_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
 
+  if grep -Eqi 'reverse_proxy[[:space:]]+bookhive-blue:8080\b' "$file"; then
+    echo "blue"; return 0
+  fi
+  if grep -Eqi 'reverse_proxy[[:space:]]+bookhive-green:8080\b' "$file"; then
+    echo "green"; return 0
+  fi
+  if grep -Eqi 'reverse_proxy[[:space:]]+(127\.0\.0\.1|localhost):18081\b' "$file"; then
+    echo "blue"; return 0
+  fi
+  if grep -Eqi 'reverse_proxy[[:space:]]+(127\.0\.0\.1|localhost):18082\b' "$file"; then
+    echo "green"; return 0
+  fi
+
+  return 1
+}
+
+# Return: service|port|unknown
+get_proxy_mode_from_file() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "unknown"; return 0; }
+
+  if grep -Eqi 'reverse_proxy[[:space:]]+bookhive-(blue|green):8080\b' "$file"; then
+    echo "service"
+    return 0
+  fi
+  if grep -Eqi 'reverse_proxy[[:space:]]+(127\.0\.0\.1|localhost):(18081|18082)\b' "$file"; then
+    echo "port"
+    return 0
+  fi
+  echo "unknown"
+}
+
+backup_file() {
+  local f="$1"
+  cp -a "$f" "${f}.bak.$(date +%F-%H%M%S)"
+}
+
+# switch_target_file <file> <from_color> <to_color>
+switch_target_file() {
+  local file="$1" from_color="$2" to_color="$3"
+  local mode from_port to_port tmp
+  [[ -f "$file" ]] || return 1
+
+  mode="$(get_proxy_mode_from_file "$file")"
+  case "$from_color" in
+    blue)  from_port="$BLUE_PORT";  to_port="$GREEN_PORT" ;;
+    green) from_port="$GREEN_PORT"; to_port="$BLUE_PORT"  ;;
+    *) return 1 ;;
+  esac
+
+  tmp="${file}.tmp"
+  backup_file "$file"
+
+  if [[ "$mode" == "service" ]]; then
+    # Swap only BookHive service upstream targets.
+    sed -E "s#(reverse_proxy[[:space:]]+)bookhive-${from_color}(:8080\\b)#\\1bookhive-${to_color}\\2#g" "$file" > "$tmp"
+  elif [[ "$mode" == "port" ]]; then
+    # Swap localhost/127.0.0.1 upstream port targets.
+    sed -E "s#(reverse_proxy[[:space:]]+(127\\.0\\.0\\.1|localhost):)${from_port}(\\b)#\\1${to_port}\\3#g" "$file" > "$tmp"
+  else
+    # Self-heal: append a BookHive domain block using service-based upstream.
+    cat "$file" > "$tmp"
+    {
+      printf "\n%s {\n" "$DOMAIN"
+      printf "    header X-BookHive-Slot %s\n" "$to_color"
+      printf "    reverse_proxy bookhive-%s:8080\n" "$to_color"
+      printf "}\n"
+    } >> "$tmp"
+  fi
+
+  mv "$tmp" "$file"
+  return 0
+}
+
+get_caddy_container() {
+  if [[ -n "$CADDY_CTN" ]]; then
+    if docker ps --format '{{.Names}}' | grep -Fxq "$CADDY_CTN"; then
+      echo "$CADDY_CTN"
+      return 0
+    fi
+    return 1
+  fi
+
+  docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($2) ~ /caddy/ {print $1; exit}'
+}
+
+# If Caddy is containerized and Caddyfile is bind-mounted, print host source path.
+get_container_caddyfile_source() {
+  local ctn="$1"
+  docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' "$ctn" 2>/dev/null || true
+}
+
+# Build a unique list of target files to edit (runtime first, then repo file).
+build_caddy_target_files() {
+  local runtime_file="$1"
+  local -n out_ref=$2
+  out_ref=()
+
+  if [[ -n "$runtime_file" && -f "$runtime_file" ]]; then
+    out_ref+=("$runtime_file")
+  fi
+  if [[ -f "$CADDY_REPO_FILE" ]]; then
+    local exists=0
+    for f in "${out_ref[@]}"; do
+      [[ "$f" == "$CADDY_REPO_FILE" ]] && exists=1 && break
+    done
+    [[ "$exists" -eq 0 ]] && out_ref+=("$CADDY_REPO_FILE")
+  fi
+}
+
+reload_caddy() {
+  local runtime_file="$1"
+  local ctn
+
+  # Host Caddy service first
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy; then
+    if [[ -f /etc/caddy/Caddyfile ]]; then
+      if command -v caddy >/dev/null 2>&1; then
+        caddy validate --config /etc/caddy/Caddyfile
+      fi
+    fi
+    systemctl reload caddy
+    return 0
+  fi
+
+  # Container Caddy fallback
+  ctn="$(get_caddy_container || true)"
+  if [[ -n "$ctn" ]]; then
+    # If not bind-mounted, push repo file into container before reload.
+    if [[ -z "$runtime_file" || ! -f "$runtime_file" ]]; then
+      [[ -f "$CADDY_REPO_FILE" ]] || die "No Caddyfile to copy into container."
+      docker cp "$CADDY_REPO_FILE" "$ctn":/etc/caddy/Caddyfile
+    fi
+
+    docker exec "$ctn" caddy validate --config /etc/caddy/Caddyfile
+    docker exec "$ctn" caddy reload --config /etc/caddy/Caddyfile
+    return 0
+  fi
+
+  return 1
+}
+
+wait_idle_ready() {
+  local svc="$1" host_port="$2" timeout_sec=240
+  local start_ts now_ts cid health running net
+
+  start_ts="$(date +%s)"
+  while true; do
+    cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
+    if [[ -n "$cid" ]]; then
+      running="$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)"
+      health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
+
+      if [[ "$running" == "true" && "$health" == "healthy" ]]; then
+        return 0
+      fi
+
+      if [[ "$running" == "true" && "$health" == "none" ]]; then
+        # Try host-port readiness first
+        if command -v curl >/dev/null 2>&1; then
+          if curl -fsS --max-time 2 "http://127.0.0.1:${host_port}/" >/dev/null 2>&1; then
+            return 0
+          fi
+        else
+          # No curl on host: best effort when container is running
+          return 0
+        fi
+
+        # Fallback: internal service check over compose network
+        net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$cid" | head -n1)"
+        if [[ -n "$net" ]]; then
+          if docker run --rm --network "$net" curlimages/curl:8.11.1 -fsS --max-time 2 "http://${svc}:8080/" >/dev/null 2>&1; then
+            return 0
+          fi
+        fi
+      fi
+
+      if [[ "$health" == "unhealthy" ]]; then
+        err "$svc is unhealthy"
+        return 1
+      fi
+    fi
+
+    now_ts="$(date +%s)"
+    if (( now_ts - start_ts >= timeout_sec )); then
+      err "Timeout waiting for $svc readiness"
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+ensure_caddy_on_idle_network_if_needed() {
+  local idle_svc="$1"
+  local ctn="$2"
+  local mode="$3"
+  local cid net
+
+  [[ "$mode" == "service" || "$mode" == "unknown" ]] || return 0
+  [[ -n "$ctn" ]] || return 0
+
+  cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$idle_svc" || true)"
+  [[ -n "$cid" ]] || return 0
+
+  net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$cid" | head -n1)"
+  [[ -n "$net" ]] || return 0
+
+  docker network connect "$net" "$ctn" 2>/dev/null || true
+}
+
+# ===== Main =====
+cd "$REPO_DIR"
 require_file "$COMPOSE_FILE"
 require_file "$ENV_LOADER"
 require_file "$CADDY_REPO_FILE"
@@ -43,16 +262,30 @@ log "2) Load external frontend env"
 : "${EXTERNAL_ENV_1:?EXTERNAL_ENV_1 missing in .env bridge}"
 echo "Loaded EXTERNAL_ENV_1=$EXTERNAL_ENV_1"
 
-get_active_from_caddy_file() {
-  local file="$1"
-  [[ -f "$file" ]] || return 1
-  if grep -Eq '(127\.0\.0\.1|localhost):18081' "$file"; then
-    echo "blue"; return 0
-  elif grep -Eq '(127\.0\.0\.1|localhost):18082' "$file"; then
-    echo "green"; return 0
+# Detect runtime Caddy context (host service or container)
+CADDY_RUNTIME_FILE=""
+CADDY_RUNTIME_MODE="none"  # host|container-mounted|container-internal|none
+CADDY_CONTAINER_NAME=""
+
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy && [[ -f /etc/caddy/Caddyfile ]]; then
+  CADDY_RUNTIME_MODE="host"
+  CADDY_RUNTIME_FILE="/etc/caddy/Caddyfile"
+else
+  CADDY_CONTAINER_NAME="$(get_caddy_container || true)"
+  if [[ -n "$CADDY_CONTAINER_NAME" ]]; then
+    src="$(get_container_caddyfile_source "$CADDY_CONTAINER_NAME")"
+    if [[ -n "$src" && -f "$src" ]]; then
+      CADDY_RUNTIME_MODE="container-mounted"
+      CADDY_RUNTIME_FILE="$src"
+    else
+      CADDY_RUNTIME_MODE="container-internal"
+    fi
   fi
-  return 1
-}
+fi
+
+echo "Caddy mode: $CADDY_RUNTIME_MODE"
+[[ -n "$CADDY_CONTAINER_NAME" ]] && echo "Caddy container: $CADDY_CONTAINER_NAME"
+[[ -n "$CADDY_RUNTIME_FILE" ]] && echo "Caddy runtime file: $CADDY_RUNTIME_FILE"
 
 ACTIVE_COLOR=""
 if [[ -f "$ACTIVE_MARKER" ]]; then
@@ -62,8 +295,8 @@ if [[ -f "$ACTIVE_MARKER" ]]; then
   fi
 fi
 
-if [[ -z "$ACTIVE_COLOR" ]]; then
-  ACTIVE_COLOR="$(get_active_from_caddy_file /etc/caddy/Caddyfile 2>/dev/null || true)"
+if [[ -z "$ACTIVE_COLOR" && -n "$CADDY_RUNTIME_FILE" ]]; then
+  ACTIVE_COLOR="$(get_active_from_caddy_file "$CADDY_RUNTIME_FILE" 2>/dev/null || true)"
 fi
 if [[ -z "$ACTIVE_COLOR" ]]; then
   ACTIVE_COLOR="$(get_active_from_caddy_file "$CADDY_REPO_FILE" 2>/dev/null || true)"
@@ -74,16 +307,12 @@ fi
 
 if [[ "$ACTIVE_COLOR" == "blue" ]]; then
   IDLE_COLOR="green"
-  ACTIVE_PORT="$BLUE_PORT"
-  IDLE_PORT="$GREEN_PORT"
-  ACTIVE_SVC="$BLUE_SVC"
-  IDLE_SVC="$GREEN_SVC"
+  ACTIVE_SVC="$BLUE_SVC";  IDLE_SVC="$GREEN_SVC"
+  ACTIVE_PORT="$BLUE_PORT"; IDLE_PORT="$GREEN_PORT"
 else
   IDLE_COLOR="blue"
-  ACTIVE_PORT="$GREEN_PORT"
-  IDLE_PORT="$BLUE_PORT"
-  ACTIVE_SVC="$GREEN_SVC"
-  IDLE_SVC="$BLUE_SVC"
+  ACTIVE_SVC="$GREEN_SVC"; IDLE_SVC="$BLUE_SVC"
+  ACTIVE_PORT="$GREEN_PORT"; IDLE_PORT="$BLUE_PORT"
 fi
 
 echo "Active slot: $ACTIVE_COLOR ($ACTIVE_SVC:$ACTIVE_PORT)"
@@ -92,106 +321,75 @@ echo "Deploy slot: $IDLE_COLOR ($IDLE_SVC:$IDLE_PORT)"
 log "3) Build + start idle slot only"
 docker compose -f "$COMPOSE_FILE" up -d --build --no-deps "$IDLE_SVC"
 
-wait_idle_ready() {
-  local svc="$1" port="$2" timeout_sec=180
-  local start_ts now_ts cid health running
-
-  start_ts="$(date +%s)"
-  while true; do
-    cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
-    if [[ -n "$cid" ]]; then
-      running="$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)"
-      health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
-
-      if [[ "$running" == "true" ]]; then
-        if [[ "$health" == "healthy" ]]; then
-          return 0
-        fi
-        if [[ "$health" == "none" ]]; then
-          if command -v curl >/dev/null 2>&1; then
-            if curl -fsS --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1; then
-              return 0
-            fi
-          else
-            return 0
-          fi
-        fi
-        if [[ "$health" == "unhealthy" ]]; then
-          err "$svc is unhealthy"
-          return 1
-        fi
-      fi
-    fi
-
-    now_ts="$(date +%s)"
-    if (( now_ts - start_ts >= timeout_sec )); then
-      err "Timeout waiting for $svc readiness"
-      return 1
-    fi
-    sleep 2
-  done
-}
-
 log "4) Wait idle slot ready"
 wait_idle_ready "$IDLE_SVC" "$IDLE_PORT"
 
-switch_port_in_file() {
-  local file="$1" from_port="$2" to_port="$3"
-  [[ -f "$file" ]] || return 1
+# Determine switch mode from runtime file first, else repo file.
+SWITCH_MODE="unknown"
+if [[ -n "$CADDY_RUNTIME_FILE" ]]; then
+  SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_RUNTIME_FILE")"
+fi
+if [[ "$SWITCH_MODE" == "unknown" ]]; then
+  SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_REPO_FILE")"
+fi
 
-  if grep -Eq "(127\.0\.0\.1|localhost):${from_port}" "$file"; then
-    cp -a "$file" "${file}.bak.$(date +%F-%H%M%S)"
-    sed -E "s#(127\.0\.0\.1|localhost):${from_port}#\1:${to_port}#g" "$file" > "${file}.tmp"
-    mv "${file}.tmp" "$file"
-    return 0
-  fi
-  return 1
-}
+echo "Caddy switch mode: $SWITCH_MODE"
 
-reload_caddy() {
-  # Host caddy service
-  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet caddy; then
-    if [[ -f /etc/caddy/Caddyfile ]]; then
-      install -m 644 "$CADDY_REPO_FILE" /etc/caddy/Caddyfile
-      if command -v caddy >/dev/null 2>&1; then
-        caddy validate --config /etc/caddy/Caddyfile
-      fi
-    fi
-    systemctl reload caddy
-    return 0
-  fi
+log "5) Ensure Caddy can reach idle slot (service mode only)"
+ensure_caddy_on_idle_network_if_needed "$IDLE_SVC" "$CADDY_CONTAINER_NAME" "$SWITCH_MODE"
 
-  # Caddy container fallback
-  local caddy_container
-  caddy_container="$(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($2) ~ /caddy/ {print $1; exit}')"
-  if [[ -n "$caddy_container" ]]; then
-    docker cp "$CADDY_REPO_FILE" "$caddy_container":/etc/caddy/Caddyfile
-    docker exec "$caddy_container" caddy validate --config /etc/caddy/Caddyfile
-    docker exec "$caddy_container" caddy reload --config /etc/caddy/Caddyfile
-    return 0
-  fi
+log "6) Switch traffic in Caddy from $ACTIVE_COLOR -> $IDLE_COLOR"
+CADDY_TARGET_FILES=()
+build_caddy_target_files "$CADDY_RUNTIME_FILE" CADDY_TARGET_FILES
 
-  return 1
-}
+if [[ "${#CADDY_TARGET_FILES[@]}" -eq 0 ]]; then
+  die "No Caddyfile target found (runtime or repo)."
+fi
 
-log "5) Switch traffic in Caddy from $ACTIVE_PORT -> $IDLE_PORT"
-if switch_port_in_file "$CADDY_REPO_FILE" "$ACTIVE_PORT" "$IDLE_PORT"; then
-  if reload_caddy; then
-    echo "Traffic switched to $IDLE_COLOR slot."
-  else
-    err "Caddy reload was not detected. $CADDY_REPO_FILE updated; reload Caddy manually."
-    exit 1
-  fi
+for target in "${CADDY_TARGET_FILES[@]}"; do
+  echo "Updating: $target"
+  switch_target_file "$target" "$ACTIVE_COLOR" "$IDLE_COLOR"
+done
+
+if reload_caddy "$CADDY_RUNTIME_FILE"; then
+  echo "Traffic switched to $IDLE_COLOR slot."
 else
-  err "Could not find active upstream port $ACTIVE_PORT in $CADDY_REPO_FILE"
-  exit 1
+  die "Could not reload Caddy. Your Caddyfile backups were kept with .bak.<timestamp>."
 fi
 
 install -d -m 700 "$(dirname "$ACTIVE_MARKER")"
-echo "$IDLE_COLOR" > "$ACTIVE_MARKER"
+printf "%s\n" "$IDLE_COLOR" > "$ACTIVE_MARKER"
 chmod 600 "$ACTIVE_MARKER"
 
-log "6) Final status"
+log "7) Verify public endpoint"
+if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
+  ok=0
+  for _ in $(seq 1 15); do
+    OUT="$(curl -ksSI "https://${DOMAIN}" || true)"
+    CODE="$(echo "$OUT" | awk 'toupper($1) ~ /^HTTP\// {print $2; exit}')"
+    SLOT="$(echo "$OUT" | awk -F': ' 'tolower($1)=="x-bookhive-slot"{gsub("\r","",$2); print tolower($2); exit}')"
+
+    if [[ "$CODE" =~ ^2|3 ]]; then
+      ok=1
+      # If slot header exists, make sure it matches idle color.
+      if [[ -n "$SLOT" && "$SLOT" != "$IDLE_COLOR" ]]; then
+        ok=0
+      fi
+    fi
+
+    [[ "$ok" -eq 1 ]] && break
+    sleep 2
+  done
+
+  if [[ "$ok" -eq 1 ]]; then
+    echo "Public check OK: https://${DOMAIN}"
+  else
+    err "Public check not confirmed yet."
+    echo "Run: curl -ksSI https://${DOMAIN} | sed -n '1,30p'"
+  fi
+fi
+
+log "8) Final status"
 docker compose -f "$COMPOSE_FILE" ps
 echo "Active slot is now: $IDLE_COLOR"
 echo "Previous slot kept running for rollback: $ACTIVE_COLOR"
