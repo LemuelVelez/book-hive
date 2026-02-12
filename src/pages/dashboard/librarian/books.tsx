@@ -15,30 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-    Table,
-    TableBody,
-    TableCaption,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import {
-    Plus,
-    RefreshCcw,
-    Loader2,
-    Trash2,
-    CheckCircle2,
-    CircleOff,
-    BookOpen,
-    Search,
-    Edit,
-} from "lucide-react";
+import { Plus, RefreshCcw, Loader2, BookOpen, Search } from "lucide-react";
 import {
     fetchBooks,
     createBook,
@@ -47,90 +27,20 @@ import {
     type BookDTO,
     type LibraryArea,
 } from "@/lib/books";
+
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-
-const LIBRARY_AREA_OPTIONS: LibraryArea[] = [
-    "filipiniana",
-    "general_circulation",
-    "maritime",
-    "periodicals",
-    "thesis_dissertations",
-    "rizaliana",
-    "special_collection",
-    "fil_gen_reference",
-    "general_reference",
-    "fiction",
-];
-
-const LIBRARY_AREA_OTHER_VALUE = "others";
-
-function isKnownLibraryArea(value: string): value is LibraryArea {
-    return LIBRARY_AREA_OPTIONS.includes(value as LibraryArea);
-}
-
-function formatLibraryAreaLabel(value: string) {
-    return value
-        .replaceAll("_", " ")
-        .split(" ")
-        .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-        .join(" ");
-}
-
-function normalizeOtherLibraryArea(raw: string) {
-    return raw.trim().toLowerCase().replace(/\s+/g, "_");
-}
-
-function getErrorMessage(err: unknown) {
-    if (err instanceof Error) return err.message;
-    if (typeof err === "string") return err;
-    return "Something went wrong. Please try again later.";
-}
-
-/**
- * ✅ Inventory semantics (per BookDTO docs):
- * - numberOfCopies = REMAINING/AVAILABLE copies (deducts as users borrow)
- * - totalCopies = total inventory copies
- * - borrowedCopies = active borrows (not returned)
- */
-function getInventory(book: BookDTO) {
-    const remaining =
-        typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)
-            ? Math.max(0, Math.floor(book.numberOfCopies))
-            : null;
-
-    const total =
-        typeof book.totalCopies === "number" && Number.isFinite(book.totalCopies)
-            ? Math.max(0, Math.floor(book.totalCopies))
-            : typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)
-                ? Math.max(0, Math.floor(book.numberOfCopies))
-                : null;
-
-    const borrowed =
-        typeof book.borrowedCopies === "number" && Number.isFinite(book.borrowedCopies)
-            ? Math.max(0, Math.floor(book.borrowedCopies))
-            : total !== null && remaining !== null
-                ? Math.max(0, total - remaining)
-                : null;
-
-    return { remaining, total, borrowed };
-}
-
-function isBorrowableByCopies(book: BookDTO) {
-    const inv = getInventory(book);
-    // If remaining is unknown, fall back to server availability flag.
-    if (inv.remaining === null) return Boolean(book.available);
-    return inv.remaining > 0 && Boolean(book.available);
-}
+    LIBRARY_AREA_OPTIONS,
+    LIBRARY_AREA_OTHER_VALUE,
+    isKnownLibraryArea,
+    formatLibraryAreaLabel,
+    normalizeOtherLibraryArea,
+    getErrorMessage,
+    getInventory,
+    parsePositiveIntOrNull,
+    parseYearOrNull,
+} from "@/components/librarian-books/books-constants";
+import { BooksCatalogTable } from "@/components/librarian-books/books-catalog-table";
+import { BooksExcelPreviewDialog } from "@/components/librarian-books/books-excel-preview-dialog";
 
 export default function LibrarianBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
@@ -173,7 +83,7 @@ export default function LibrarianBooksPage() {
     const [copyNumber, setCopyNumber] = React.useState("");
     const [volumeNumber, setVolumeNumber] = React.useState("");
 
-    // ✅ Total inventory copies to create
+    // Total inventory copies to create
     const [numberOfCopies, setNumberOfCopies] = React.useState("1");
 
     const [libraryAreaOption, setLibraryAreaOption] = React.useState<string>("");
@@ -221,12 +131,12 @@ export default function LibrarianBooksPage() {
     const [editCopyNumber, setEditCopyNumber] = React.useState("");
     const [editVolumeNumber, setEditVolumeNumber] = React.useState("");
 
-    // ✅ Inventory adjustment UX (Total vs Add)
+    // Inventory adjustment UX (Total vs Add)
     const [editCopiesMode, setEditCopiesMode] = React.useState<"set" | "add">("set");
     const [editNumberOfCopies, setEditNumberOfCopies] = React.useState("1"); // total inventory
     const [editCopiesToAdd, setEditCopiesToAdd] = React.useState("");
 
-    // ✅ Keep the current inventory snapshot for validation/hints
+    // Keep the current inventory snapshot for validation/hints
     const [editCurrentTotal, setEditCurrentTotal] = React.useState<number | null>(null);
     const [editCurrentBorrowed, setEditCurrentBorrowed] = React.useState<number | null>(null);
     const [editCurrentRemaining, setEditCurrentRemaining] = React.useState<number | null>(null);
@@ -357,22 +267,6 @@ export default function LibrarianBooksPage() {
         }
     };
 
-    const parseYearOrNull = (raw: string): number | null => {
-        const v = raw.trim();
-        if (!v) return null;
-        const n = Number(v);
-        if (!Number.isFinite(n) || n < 1000 || n > 9999) return null;
-        return n;
-    };
-
-    const parsePositiveIntOrNull = (raw: string): number | null => {
-        const v = raw.trim();
-        if (!v) return null;
-        const n = Math.floor(Number(v));
-        if (!Number.isFinite(n) || n <= 0) return null;
-        return n;
-    };
-
     const handleCreateBook = async () => {
         setFormError("");
 
@@ -492,7 +386,7 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        // ✅ Total inventory copies
+        // Total inventory copies
         const copiesTotal = parsePositiveIntOrNull(numberOfCopies);
         if (copiesTotal === null) {
             const msg = "Total copies must be a positive number.";
@@ -535,10 +429,10 @@ export default function LibrarianBooksPage() {
                 volumeNumber: volumeNumber.trim(),
                 libraryArea: resolvedLibraryArea as unknown as LibraryArea,
 
-                // ✅ This is TOTAL inventory input (backend computes remaining/available)
+                // This is TOTAL inventory input (backend computes remaining/available)
                 numberOfCopies: copiesTotal,
 
-                // Keep for backward compat (backend may compute availability anyway)
+                // Keep for backward compat
                 available,
                 borrowDurationDays: borrowDaysInt,
             });
@@ -604,7 +498,7 @@ export default function LibrarianBooksPage() {
         );
         setEditVolumeNumber(book.volumeNumber || "");
 
-        // ✅ Inventory snapshot + correct "total copies" field usage
+        // Inventory snapshot + correct "total copies" field usage
         const inv = getInventory(book);
         setEditCurrentTotal(inv.total);
         setEditCurrentBorrowed(inv.borrowed);
@@ -762,7 +656,7 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        // ✅ Copies payload: either SET TOTAL inventory or ADD inventory
+        // Copies payload: either SET TOTAL inventory or ADD inventory
         let copiesPayload: { numberOfCopies?: number; copiesToAdd?: number } = {};
 
         if (editCopiesMode === "set") {
@@ -911,7 +805,7 @@ export default function LibrarianBooksPage() {
         });
     }, [books, search]);
 
-    // Reusable scrollbar styling for dark, thin horizontal scrollbars (same as student pages)
+    // Reusable scrollbar styling for dark, thin horizontal scrollbars
     const cellScrollbarClasses =
         "overflow-x-auto whitespace-nowrap " +
         "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
@@ -931,7 +825,8 @@ export default function LibrarianBooksPage() {
                             Catalog &amp; inventory
                         </h2>
                         <p className="text-xs text-white/70">
-                            Add new titles, manage inventory copies, and monitor remaining/borrowed counts.
+                            Add new titles, manage inventory copies, and monitor
+                            remaining/borrowed counts.
                         </p>
                     </div>
                 </div>
@@ -972,13 +867,13 @@ export default function LibrarianBooksPage() {
 
                         <DialogContent
                             className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10
-                         max-h-[85vh] overflow-y-auto
-                         [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
-                         [&::-webkit-scrollbar]:w-1.5
-                         [&::-webkit-scrollbar-track]:bg-slate-900/70
-                         [&::-webkit-scrollbar-thumb]:bg-slate-700
-                         [&::-webkit-scrollbar-thumb]:rounded-full
-                         [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+              max-h-[85vh] overflow-y-auto
+              [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+              [&::-webkit-scrollbar]:w-1.5
+              [&::-webkit-scrollbar-track]:bg-slate-900/70
+              [&::-webkit-scrollbar-thumb]:bg-slate-700
+              [&::-webkit-scrollbar-thumb]:rounded-full
+              [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
                         >
                             <DialogHeader>
                                 <DialogTitle>Add a new book</DialogTitle>
@@ -1307,7 +1202,8 @@ export default function LibrarianBooksPage() {
                                             />
                                         </FieldContent>
                                         <p className="mt-1 text-[11px] text-white/60">
-                                            Total physical inventory copies. Remaining/available copies are computed as users borrow.
+                                            Total physical inventory copies. Remaining/available copies
+                                            are computed as users borrow.
                                         </p>
                                     </Field>
 
@@ -1371,8 +1267,7 @@ export default function LibrarianBooksPage() {
                                                 value={libraryAreaOption}
                                                 onValueChange={(v) => {
                                                     setLibraryAreaOption(v);
-                                                    if (v !== LIBRARY_AREA_OTHER_VALUE)
-                                                        setLibraryAreaOther("");
+                                                    if (v !== LIBRARY_AREA_OTHER_VALUE) setLibraryAreaOther("");
                                                 }}
                                                 className="space-y-2"
                                             >
@@ -1439,7 +1334,8 @@ export default function LibrarianBooksPage() {
                                             />
                                         </FieldContent>
                                         <p className="mt-1 text-[11px] text-white/60">
-                                            This controls how many days a student can initially borrow this book.
+                                            This controls how many days a student can initially borrow this
+                                            book.
                                         </p>
                                     </Field>
 
@@ -1450,7 +1346,8 @@ export default function LibrarianBooksPage() {
                                             onCheckedChange={(v) => setAvailable(v === true)}
                                         />
                                         <Label htmlFor="available" className="text-sm text-white/80">
-                                            Mark as available in the catalog (may be computed by remaining copies)
+                                            Mark as available in the catalog (may be computed by remaining
+                                            copies)
                                         </Label>
                                     </div>
 
@@ -1501,13 +1398,13 @@ export default function LibrarianBooksPage() {
             >
                 <DialogContent
                     className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10
-                     max-h-[85vh] overflow-y-auto
-                     [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
-                     [&::-webkit-scrollbar]:w-1.5
-                     [&::-webkit-scrollbar-track]:bg-slate-900/70
-                     [&::-webkit-scrollbar-thumb]:bg-slate-700
-                     [&::-webkit-scrollbar-thumb]:rounded-full
-                     [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+          max-h-[85vh] overflow-y-auto
+          [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+          [&::-webkit-scrollbar]:w-1.5
+          [&::-webkit-scrollbar-track]:bg-slate-900/70
+          [&::-webkit-scrollbar-thumb]:bg-slate-700
+          [&::-webkit-scrollbar-thumb]:rounded-full
+          [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
                 >
                     <DialogHeader>
                         <DialogTitle>Edit book</DialogTitle>
@@ -1817,7 +1714,6 @@ export default function LibrarianBooksPage() {
                                 Copy & circulation
                             </div>
 
-                            {/* ✅ Inventory info */}
                             <div className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 text-xs text-white/70">
                                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                                     <span>
@@ -1829,19 +1725,22 @@ export default function LibrarianBooksPage() {
                                     <span>
                                         <span className="text-white/50">Borrowed:</span>{" "}
                                         <span className="font-semibold text-white/80">
-                                            {typeof editCurrentBorrowed === "number" ? editCurrentBorrowed : "—"}
+                                            {typeof editCurrentBorrowed === "number"
+                                                ? editCurrentBorrowed
+                                                : "—"}
                                         </span>
                                     </span>
                                     <span>
                                         <span className="text-white/50">Remaining:</span>{" "}
                                         <span className="font-semibold text-white/80">
-                                            {typeof editCurrentRemaining === "number" ? editCurrentRemaining : "—"}
+                                            {typeof editCurrentRemaining === "number"
+                                                ? editCurrentRemaining
+                                                : "—"}
                                         </span>
                                     </span>
                                 </div>
                             </div>
 
-                            {/* ✅ Adjust copies (TOTAL inventory) */}
                             <Field>
                                 <FieldLabel className="text-white">Copies</FieldLabel>
                                 <FieldContent>
@@ -1899,7 +1798,10 @@ export default function LibrarianBooksPage() {
                                                 />
                                                 <p className="mt-1 text-[11px] text-white/60">
                                                     Adds to current total{" "}
-                                                    {typeof editCurrentTotal === "number" ? `(${editCurrentTotal})` : ""}.
+                                                    {typeof editCurrentTotal === "number"
+                                                        ? `(${editCurrentTotal})`
+                                                        : ""}
+                                                    .
                                                 </p>
                                             </div>
                                         )}
@@ -2034,7 +1936,8 @@ export default function LibrarianBooksPage() {
                                     />
                                 </FieldContent>
                                 <p className="mt-1 text-[11px] text-white/60">
-                                    This controls how many days a student can initially borrow this book.
+                                    This controls how many days a student can initially borrow this
+                                    book.
                                 </p>
                             </Field>
 
@@ -2045,7 +1948,8 @@ export default function LibrarianBooksPage() {
                                     onCheckedChange={(v) => setEditAvailable(v === true)}
                                 />
                                 <Label htmlFor="edit-available" className="text-sm text-white/80">
-                                    Mark as available in the catalog (may be computed by remaining copies)
+                                    Mark as available in the catalog (may be computed by remaining
+                                    copies)
                                 </Label>
                             </div>
 
@@ -2090,14 +1994,18 @@ export default function LibrarianBooksPage() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <CardTitle>Books catalog</CardTitle>
 
-                        <div className="relative w-full md:w-72">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
-                            <Input
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search title, author, accession, barcode, call no., inventory, area…"
-                                className="pl-9 bg-slate-900/70 border-white/20 text-white"
-                            />
+                        <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+                            <BooksExcelPreviewDialog books={filteredBooks} />
+
+                            <div className="relative w-full md:w-72">
+                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
+                                <Input
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search title, author, accession, barcode, call no., inventory, area…"
+                                    className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                                />
+                            </div>
                         </div>
                     </div>
                 </CardHeader>
@@ -2120,271 +2028,12 @@ export default function LibrarianBooksPage() {
                             </span>
                         </div>
                     ) : (
-                        <Table>
-                            <TableCaption className="text-xs text-white/60">
-                                Showing {filteredBooks.length}{" "}
-                                {filteredBooks.length === 1 ? "book" : "books"}.
-                            </TableCaption>
-
-                            <TableHeader>
-                                <TableRow className="border-white/10">
-                                    <TableHead className="w-[70px] text-xs font-semibold text-white/70">
-                                        ID
-                                    </TableHead>
-
-                                    <TableHead className="w-[200px] text-xs font-semibold text-white/70">
-                                        Title
-                                    </TableHead>
-                                    <TableHead className="w-[150px] text-xs font-semibold text-white/70">
-                                        Author
-                                    </TableHead>
-                                    <TableHead className="w-[120px] text-xs font-semibold text-white/70">
-                                        Accession #
-                                    </TableHead>
-                                    <TableHead className="w-[120px] text-xs font-semibold text-white/70">
-                                        Barcode
-                                    </TableHead>
-                                    <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                                        Call no.
-                                    </TableHead>
-                                    <TableHead className="w-[140px] text-xs font-semibold text-white/70">
-                                        Library area
-                                    </TableHead>
-
-                                    {/* ✅ RELEVANT: Remaining / Total + Borrowed */}
-                                    <TableHead className="w-[140px] text-xs font-semibold text-white/70">
-                                        Inventory
-                                    </TableHead>
-
-                                    <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                                        ISBN
-                                    </TableHead>
-                                    <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                                        Genre
-                                    </TableHead>
-
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Pub. year
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Loan days
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">
-                                        Available
-                                    </TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70 text-right">
-                                        Actions
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-
-                            <TableBody>
-                                {filteredBooks.map((book) => {
-                                    const inv = getInventory(book);
-                                    const area = book.libraryArea ? String(book.libraryArea) : "";
-                                    const areaLabel = area ? formatLibraryAreaLabel(area) : "—";
-                                    const borrowable = isBorrowableByCopies(book);
-
-                                    return (
-                                        <TableRow
-                                            key={book.id}
-                                            className="border-white/5 hover:bg-white/5 transition-colors"
-                                        >
-                                            <TableCell className="text-xs opacity-80">{book.id}</TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm font-medium align-top w-[90px] max-w-[90px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {book.title}
-                                            </TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm opacity-90 align-top w-[90px] max-w-[90px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {book.author}
-                                            </TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {book.accessionNumber ? (
-                                                    book.accessionNumber
-                                                ) : (
-                                                    <span className="opacity-50">—</span>
-                                                )}
-                                            </TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {book.barcode ? (
-                                                    book.barcode
-                                                ) : (
-                                                    <span className="opacity-50">—</span>
-                                                )}
-                                            </TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm opacity-80 align-top w-[70px] max-w-[70px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {book.callNumber ? (
-                                                    book.callNumber
-                                                ) : (
-                                                    <span className="opacity-50">—</span>
-                                                )}
-                                            </TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm opacity-80 align-top w-[85px] max-w-[85px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {area ? areaLabel : <span className="opacity-50">—</span>}
-                                            </TableCell>
-
-                                            <TableCell className="text-sm opacity-90">
-                                                {inv.remaining === null && inv.total === null ? (
-                                                    <span className="opacity-50">—</span>
-                                                ) : (
-                                                    <div className="leading-tight">
-                                                        <div className="font-medium">
-                                                            {inv.remaining ?? "—"} / {inv.total ?? "—"}
-                                                        </div>
-                                                        <div className="text-[11px] text-white/60">
-                                                            Borrowed: {inv.borrowed ?? "—"}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm opacity-80 align-top w-[60px] max-w-[60px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {book.isbn || <span className="opacity-50">—</span>}
-                                            </TableCell>
-
-                                            <TableCell
-                                                className={
-                                                    "text-sm opacity-80 align-top w-[50px] max-w-[50px] " +
-                                                    cellScrollbarClasses
-                                                }
-                                            >
-                                                {book.genre || <span className="opacity-50">—</span>}
-                                            </TableCell>
-
-                                            <TableCell className="text-sm opacity-80">
-                                                {book.publicationYear || <span className="opacity-50">—</span>}
-                                            </TableCell>
-
-                                            <TableCell className="text-sm opacity-80">
-                                                {typeof book.borrowDurationDays === "number" &&
-                                                    book.borrowDurationDays > 0 ? (
-                                                    <>
-                                                        {book.borrowDurationDays} day
-                                                        {book.borrowDurationDays === 1 ? "" : "s"}
-                                                    </>
-                                                ) : (
-                                                    <span className="opacity-50">—</span>
-                                                )}
-                                            </TableCell>
-
-                                            <TableCell>
-                                                <Badge
-                                                    variant={borrowable ? "default" : "outline"}
-                                                    className={
-                                                        borrowable
-                                                            ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                            : "border-red-400/70 text-red-200 hover:bg-red-500/10"
-                                                    }
-                                                >
-                                                    {borrowable ? (
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <CheckCircle2 className="h-3 w-3" />
-                                                            Available
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1">
-                                                            <CircleOff className="h-3 w-3" />
-                                                            Unavailable
-                                                        </span>
-                                                    )}
-                                                </Badge>
-                                            </TableCell>
-
-                                            <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <Button
-                                                        type="button"
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        className="text-sky-300 hover:text-sky-100 hover:bg-sky-500/15"
-                                                        onClick={() => openEditDialog(book)}
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                        <span className="sr-only">Edit</span>
-                                                    </Button>
-
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button
-                                                                type="button"
-                                                                size="icon"
-                                                                variant="ghost"
-                                                                className="text-red-300 hover:text-red-100 hover:bg-red-500/15"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                                <span className="sr-only">Delete</span>
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>
-                                                                    Delete “{book.title}”?
-                                                                </AlertDialogTitle>
-                                                                <AlertDialogDescription className="text-white/70">
-                                                                    This action cannot be undone. This will permanently
-                                                                    remove the book from the catalog.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel className="border-white/20 text-white hover:bg-black/20">
-                                                                    Cancel
-                                                                </AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    className="bg-red-600 hover:bg-red-700 text-white"
-                                                                    onClick={() => handleDelete(book)}
-                                                                >
-                                                                    Delete book
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
+                        <BooksCatalogTable
+                            books={filteredBooks}
+                            onEdit={openEditDialog}
+                            onDelete={handleDelete}
+                            cellScrollbarClasses={cellScrollbarClasses}
+                        />
                     )}
                 </CardContent>
             </Card>
