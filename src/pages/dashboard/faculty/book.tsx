@@ -116,21 +116,13 @@ function computeOverdueDays(d?: string | null) {
     return rawDays > 0 ? rawDays : 0
 }
 
-function fmtLibraryArea(area?: BookDTO["libraryArea"] | null) {
-    if (!area) return "—"
-    const map: Record<string, string> = {
-        filipiniana: "Filipiniana",
-        general_circulation: "General Circulation",
-        maritime: "Maritime",
-        periodicals: "Periodicals",
-        thesis_dissertations: "Thesis & Dissertations",
-        rizaliana: "Rizaliana",
-        special_collection: "Special Collection",
-        fil_gen_reference: "Fil/Gen Reference",
-        general_reference: "General Reference",
-        fiction: "Fiction",
-    }
-    return map[String(area)] ?? String(area)
+function getSubjects(book: BookDTO) {
+    const s =
+        (typeof book.subjects === "string" && book.subjects.trim()) ||
+        (typeof book.genre === "string" && book.genre.trim()) ||
+        (typeof book.category === "string" && book.category.trim()) ||
+        ""
+    return s || "—"
 }
 
 function fmtDurationDays(days?: number | null) {
@@ -298,18 +290,17 @@ export default function FacultyBooksPage() {
                     b.title,
                     b.subtitle,
                     b.author,
-                    b.statementOfResponsibility,
                     b.edition,
                     b.isbn,
                     b.issn,
                     b.publisher,
                     b.placeOfPublication,
+                    b.subjects,
                     b.genre,
                     b.category,
                     b.series,
                     b.callNumber,
                     b.barcode,
-                    b.libraryArea ? fmtLibraryArea(b.libraryArea) : "",
                     b.volumeNumber,
                     String(getRemainingCopies(b)),
                     String(typeof b.totalCopies === "number" ? b.totalCopies : ""),
@@ -468,7 +459,7 @@ export default function FacultyBooksPage() {
                                         type="search"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search by title, author, ISBN…"
+                                        placeholder="Search by title, author, subjects, ISBN…"
                                         autoComplete="off"
                                         aria-label="Search books"
                                         className="pl-9 bg-slate-900/70 border-white/20 text-white"
@@ -555,7 +546,7 @@ export default function FacultyBooksPage() {
                                                 <TableHead className="w-[120px] text-xs font-semibold text-white/70">
                                                     Accession #
                                                 </TableHead>
-                                                <TableHead className="w-[200px] text-xs font-semibold text-white/70">
+                                                <TableHead className="w-[220px] text-xs font-semibold text-white/70">
                                                     Title
                                                 </TableHead>
                                                 <TableHead className="w-[150px] text-xs font-semibold text-white/70">
@@ -567,13 +558,9 @@ export default function FacultyBooksPage() {
                                                 <TableHead className="w-[140px] text-xs font-semibold text-white/70">
                                                     Call no.
                                                 </TableHead>
-                                                <TableHead className="w-[140px] text-xs font-semibold text-white/70">
-                                                    Area
+                                                <TableHead className="w-[170px] text-xs font-semibold text-white/70">
+                                                    Subjects
                                                 </TableHead>
-                                                <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                                                    Genre
-                                                </TableHead>
-
                                                 <TableHead className="text-xs font-semibold text-white/70">
                                                     Pub. year
                                                 </TableHead>
@@ -658,7 +645,7 @@ export default function FacultyBooksPage() {
 
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                "text-sm opacity-80 align-top w-[120px] max-w-[120px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -669,7 +656,7 @@ export default function FacultyBooksPage() {
 
                                                         <TableCell
                                                             className={
-                                                                "text-sm font-medium align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                "text-sm font-medium align-top w-[180px] max-w-[180px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -685,7 +672,7 @@ export default function FacultyBooksPage() {
 
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-90 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                "text-sm opacity-90 align-top w-[140px] max-w-[140px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -694,7 +681,7 @@ export default function FacultyBooksPage() {
 
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-80 align-top w-[100px] max-w-[100px] pr-1 " +
+                                                                "text-sm opacity-80 align-top w-[120px] max-w-[120px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -703,7 +690,7 @@ export default function FacultyBooksPage() {
 
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-80 align-top w-[70px] max-w-[70px] pr-1 " +
+                                                                "text-sm opacity-80 align-top w-[120px] max-w-[120px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -714,24 +701,11 @@ export default function FacultyBooksPage() {
 
                                                         <TableCell
                                                             className={
-                                                                "text-sm opacity-80 align-top w-[90px] max-w-[90px] pr-1 " +
+                                                                "text-sm opacity-80 align-top w-[150px] max-w-[150px] pr-1 " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
-                                                            {book.libraryArea ? (
-                                                                fmtLibraryArea(book.libraryArea)
-                                                            ) : (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell
-                                                            className={
-                                                                "text-sm opacity-80 align-top w-[70px] max-w-[70px] pr-1 " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
-                                                            {book.genre || <span className="opacity-50">—</span>}
+                                                            {getSubjects(book)}
                                                         </TableCell>
 
                                                         <TableCell className="text-sm opacity-80">
@@ -743,7 +717,7 @@ export default function FacultyBooksPage() {
                                                         {/* Availability */}
                                                         <TableCell
                                                             className={
-                                                                "align-top w-[90px] max-w-[90px] pr-1 text-xs " +
+                                                                "align-top w-[110px] max-w-[110px] pr-1 text-xs " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -782,7 +756,7 @@ export default function FacultyBooksPage() {
                                                         {/* My status */}
                                                         <TableCell
                                                             className={
-                                                                "align-top w-[90px] max-w-[90px] pr-1 text-xs " +
+                                                                "align-top w-[260px] max-w-[260px] pr-1 text-xs " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -865,7 +839,7 @@ export default function FacultyBooksPage() {
                                                         {/* Action */}
                                                         <TableCell
                                                             className={
-                                                                "text-right align-top w-[100px] max-w-[100px] " +
+                                                                "text-right align-top w-[230px] max-w-[230px] " +
                                                                 cellScrollbarClasses
                                                             }
                                                         >
@@ -918,10 +892,6 @@ export default function FacultyBooksPage() {
                                                                                 {book.callNumber || "—"}
                                                                             </p>
                                                                             <p>
-                                                                                <span className="text-white/60">Library area:</span>{" "}
-                                                                                {fmtLibraryArea(book.libraryArea)}
-                                                                            </p>
-                                                                            <p>
                                                                                 <span className="text-white/60">ISBN:</span>{" "}
                                                                                 {book.isbn || "—"}
                                                                             </p>
@@ -934,8 +904,8 @@ export default function FacultyBooksPage() {
                                                                                 {book.publisher || "—"}
                                                                             </p>
                                                                             <p>
-                                                                                <span className="text-white/60">Genre:</span>{" "}
-                                                                                {book.genre || "—"}
+                                                                                <span className="text-white/60">Subjects:</span>{" "}
+                                                                                {getSubjects(book)}
                                                                             </p>
                                                                             <p>
                                                                                 <span className="text-white/60">Publication year:</span>{" "}
@@ -1276,7 +1246,7 @@ export default function FacultyBooksPage() {
 
                                                 {/* Row-level horizontal scroll with details */}
                                                 <div className="overflow-x-auto">
-                                                    <div className="flex gap-4 min-w-[820px] text-[11px] text-white/70 pt-1">
+                                                    <div className="flex gap-4 min-w-[760px] text-[11px] text-white/70 pt-1">
                                                         <div className="min-w-20">
                                                             <div className="text-[10px] uppercase text-white/40">ID</div>
                                                             <div className="font-mono text-xs">{book.id}</div>
@@ -1303,16 +1273,9 @@ export default function FacultyBooksPage() {
                                                             </div>
                                                         </div>
 
-                                                        <div className="min-w-40">
-                                                            <div className="text-[10px] uppercase text-white/40">Area</div>
-                                                            <div className="text-xs">{fmtLibraryArea(book.libraryArea)}</div>
-                                                        </div>
-
-                                                        <div className="min-w-[120px]">
-                                                            <div className="text-[10px] uppercase text-white/40">Genre</div>
-                                                            <div className="text-xs">
-                                                                {book.genre || <span className="opacity-50">—</span>}
-                                                            </div>
+                                                        <div className="min-w-[150px]">
+                                                            <div className="text-[10px] uppercase text-white/40">Subjects</div>
+                                                            <div className="text-xs">{getSubjects(book)}</div>
                                                         </div>
 
                                                         <div className="min-w-[90px]">
@@ -1383,15 +1346,19 @@ export default function FacultyBooksPage() {
                                                                         {book.callNumber || "—"}
                                                                     </p>
                                                                     <p>
-                                                                        <span className="text-white/60">Library area:</span>{" "}
-                                                                        {fmtLibraryArea(book.libraryArea)}
-                                                                    </p>
-                                                                    <p>
                                                                         <span className="text-white/60">ISBN:</span> {book.isbn || "—"}
                                                                     </p>
                                                                     <p>
                                                                         <span className="text-white/60">Edition:</span>{" "}
                                                                         {book.edition || "—"}
+                                                                    </p>
+                                                                    <p>
+                                                                        <span className="text-white/60">Publisher:</span>{" "}
+                                                                        {book.publisher || "—"}
+                                                                    </p>
+                                                                    <p>
+                                                                        <span className="text-white/60">Subjects:</span>{" "}
+                                                                        {getSubjects(book)}
                                                                     </p>
                                                                     <p>
                                                                         <span className="text-white/60">Publication year:</span>{" "}

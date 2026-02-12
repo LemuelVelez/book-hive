@@ -122,10 +122,13 @@ function computeOverdueDays(d?: string | null) {
 
 function fmtLibraryArea(area?: BookDTO["libraryArea"] | null) {
     if (!area) return "—";
+
+    // Removed "maritime" display per request
+    if (String(area) === "maritime") return "—";
+
     const map: Record<string, string> = {
         filipiniana: "Filipiniana",
         general_circulation: "General Circulation",
-        maritime: "Maritime",
         periodicals: "Periodicals",
         thesis_dissertations: "Thesis & Dissertations",
         rizaliana: "Rizaliana",
@@ -134,7 +137,7 @@ function fmtLibraryArea(area?: BookDTO["libraryArea"] | null) {
         general_reference: "General Reference",
         fiction: "Fiction",
     };
-    return map[String(area)] ?? String(area);
+    return map[String(area)] ?? "—";
 }
 
 function fmtDurationDays(days?: number | null) {
@@ -147,6 +150,15 @@ function clampInt(n: number, min: number, max: number) {
     const v = Math.floor(Number(n));
     if (!Number.isFinite(v)) return min;
     return Math.min(max, Math.max(min, v));
+}
+
+function getSubjects(book: Pick<BookDTO, "subjects" | "genre" | "category">) {
+    const v =
+        (typeof book.subjects === "string" && book.subjects.trim()) ||
+        (typeof book.genre === "string" && book.genre.trim()) ||
+        (typeof book.category === "string" && book.category.trim()) ||
+        "";
+    return v || "—";
 }
 
 /**
@@ -302,12 +314,12 @@ export default function StudentBooksPage() {
                     b.title,
                     b.subtitle,
                     b.author,
-                    b.statementOfResponsibility,
                     b.edition,
                     b.isbn,
                     b.issn,
                     b.publisher,
                     b.placeOfPublication,
+                    b.subjects,
                     b.genre,
                     b.category,
                     b.series,
@@ -576,7 +588,7 @@ export default function StudentBooksPage() {
                                                     Area
                                                 </TableHead>
                                                 <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                                                    Genre
+                                                    Subjects
                                                 </TableHead>
 
                                                 <TableHead className="text-xs font-semibold text-white/70">
@@ -738,9 +750,7 @@ export default function StudentBooksPage() {
                                                                 cellScrollbarClasses
                                                             }
                                                         >
-                                                            {book.genre || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
+                                                            {getSubjects(book)}
                                                         </TableCell>
 
                                                         <TableCell className="text-sm opacity-80">
@@ -750,10 +760,12 @@ export default function StudentBooksPage() {
                                                         </TableCell>
 
                                                         {/* Availability */}
-                                                        <TableCell className={
+                                                        <TableCell
+                                                            className={
                                                                 "align-top w-[90px] max-w-[90px] pr-1 text-xs " +
                                                                 cellScrollbarClasses
-                                                            }>
+                                                            }
+                                                        >
                                                             <Badge
                                                                 variant={borrowableNow ? "default" : "outline"}
                                                                 className={
@@ -980,9 +992,9 @@ export default function StudentBooksPage() {
                                                                             </p>
                                                                             <p>
                                                                                 <span className="text-white/60">
-                                                                                    Genre:
+                                                                                    Subjects:
                                                                                 </span>{" "}
-                                                                                {book.genre || "—"}
+                                                                                {getSubjects(book)}
                                                                             </p>
                                                                             <p>
                                                                                 <span className="text-white/60">
@@ -1404,12 +1416,10 @@ export default function StudentBooksPage() {
 
                                                         <div className="min-w-[120px]">
                                                             <div className="text-[10px] uppercase text-white/40">
-                                                                Genre
+                                                                Subjects
                                                             </div>
                                                             <div className="text-xs">
-                                                                {book.genre || (
-                                                                    <span className="opacity-50">—</span>
-                                                                )}
+                                                                {getSubjects(book)}
                                                             </div>
                                                         </div>
 
@@ -1517,6 +1527,12 @@ export default function StudentBooksPage() {
                                                                     <p>
                                                                         <span className="text-white/60">Edition:</span>{" "}
                                                                         {book.edition || "—"}
+                                                                    </p>
+                                                                    <p>
+                                                                        <span className="text-white/60">
+                                                                            Subjects:
+                                                                        </span>{" "}
+                                                                        {getSubjects(book)}
                                                                     </p>
                                                                     <p>
                                                                         <span className="text-white/60">
