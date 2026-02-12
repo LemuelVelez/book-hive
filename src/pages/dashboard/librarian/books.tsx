@@ -55,18 +55,15 @@ export default function LibrarianBooksPage() {
 
     const [title, setTitle] = React.useState("");
     const [author, setAuthor] = React.useState("");
-    const [statementOfResponsibility, setStatementOfResponsibility] =
-        React.useState("");
 
     const [isbn, setIsbn] = React.useState("");
     const [issn, setIssn] = React.useState("");
     const [accessionNumber, setAccessionNumber] = React.useState("");
-    const [genre, setGenre] = React.useState("");
+    const [subjects, setSubjects] = React.useState("");
 
     const [subtitle, setSubtitle] = React.useState("");
     const [edition, setEdition] = React.useState("");
     const [pubYear, setPubYear] = React.useState("");
-    const [copyrightYear, setCopyrightYear] = React.useState("");
     const [placeOfPublication, setPlaceOfPublication] = React.useState("");
     const [publisher, setPublisher] = React.useState("");
 
@@ -75,7 +72,6 @@ export default function LibrarianBooksPage() {
     const [dimensions, setDimensions] = React.useState("");
     const [notes, setNotes] = React.useState("");
     const [series, setSeries] = React.useState("");
-    const [category, setCategory] = React.useState("");
     const [addedEntries, setAddedEntries] = React.useState("");
 
     const [barcode, setBarcode] = React.useState("");
@@ -91,7 +87,7 @@ export default function LibrarianBooksPage() {
 
     const [borrowDuration, setBorrowDuration] = React.useState("7");
 
-    // Keep this for backward compatibility; backend may ignore and compute availability from remaining copies.
+    // Backward compatibility (server may still compute)
     const [available, setAvailable] = React.useState(true);
 
     const [formError, setFormError] = React.useState<string>("");
@@ -102,20 +98,16 @@ export default function LibrarianBooksPage() {
 
     const [editTitle, setEditTitle] = React.useState("");
     const [editAuthor, setEditAuthor] = React.useState("");
-    const [editStatementOfResponsibility, setEditStatementOfResponsibility] =
-        React.useState("");
 
     const [editIsbn, setEditIsbn] = React.useState("");
     const [editIssn, setEditIssn] = React.useState("");
     const [editAccessionNumber, setEditAccessionNumber] = React.useState("");
-    const [editGenre, setEditGenre] = React.useState("");
+    const [editSubjects, setEditSubjects] = React.useState("");
 
     const [editSubtitle, setEditSubtitle] = React.useState("");
     const [editEdition, setEditEdition] = React.useState("");
     const [editPubYear, setEditPubYear] = React.useState("");
-    const [editCopyrightYear, setEditCopyrightYear] = React.useState("");
-    const [editPlaceOfPublication, setEditPlaceOfPublication] =
-        React.useState("");
+    const [editPlaceOfPublication, setEditPlaceOfPublication] = React.useState("");
     const [editPublisher, setEditPublisher] = React.useState("");
 
     const [editPages, setEditPages] = React.useState("");
@@ -123,7 +115,6 @@ export default function LibrarianBooksPage() {
     const [editDimensions, setEditDimensions] = React.useState("");
     const [editNotes, setEditNotes] = React.useState("");
     const [editSeries, setEditSeries] = React.useState("");
-    const [editCategory, setEditCategory] = React.useState("");
     const [editAddedEntries, setEditAddedEntries] = React.useState("");
 
     const [editBarcode, setEditBarcode] = React.useState("");
@@ -136,13 +127,12 @@ export default function LibrarianBooksPage() {
     const [editNumberOfCopies, setEditNumberOfCopies] = React.useState("1"); // total inventory
     const [editCopiesToAdd, setEditCopiesToAdd] = React.useState("");
 
-    // Keep the current inventory snapshot for validation/hints
+    // Keep current inventory snapshot for validation/hints
     const [editCurrentTotal, setEditCurrentTotal] = React.useState<number | null>(null);
     const [editCurrentBorrowed, setEditCurrentBorrowed] = React.useState<number | null>(null);
     const [editCurrentRemaining, setEditCurrentRemaining] = React.useState<number | null>(null);
 
-    const [editLibraryAreaOption, setEditLibraryAreaOption] =
-        React.useState<string>("");
+    const [editLibraryAreaOption, setEditLibraryAreaOption] = React.useState<string>("");
     const [editLibraryAreaOther, setEditLibraryAreaOther] = React.useState("");
 
     const [editBorrowDuration, setEditBorrowDuration] = React.useState("");
@@ -152,17 +142,15 @@ export default function LibrarianBooksPage() {
     const resetForm = () => {
         setTitle("");
         setAuthor("");
-        setStatementOfResponsibility("");
 
         setIsbn("");
         setIssn("");
         setAccessionNumber("");
-        setGenre("");
+        setSubjects("");
 
         setSubtitle("");
         setEdition("");
         setPubYear("");
-        setCopyrightYear("");
         setPlaceOfPublication("");
         setPublisher("");
 
@@ -171,7 +159,6 @@ export default function LibrarianBooksPage() {
         setDimensions("");
         setNotes("");
         setSeries("");
-        setCategory("");
         setAddedEntries("");
 
         setBarcode("");
@@ -194,17 +181,15 @@ export default function LibrarianBooksPage() {
 
         setEditTitle("");
         setEditAuthor("");
-        setEditStatementOfResponsibility("");
 
         setEditIsbn("");
         setEditIssn("");
         setEditAccessionNumber("");
-        setEditGenre("");
+        setEditSubjects("");
 
         setEditSubtitle("");
         setEditEdition("");
         setEditPubYear("");
-        setEditCopyrightYear("");
         setEditPlaceOfPublication("");
         setEditPublisher("");
 
@@ -213,7 +198,6 @@ export default function LibrarianBooksPage() {
         setEditDimensions("");
         setEditNotes("");
         setEditSeries("");
-        setEditCategory("");
         setEditAddedEntries("");
 
         setEditBarcode("");
@@ -244,9 +228,7 @@ export default function LibrarianBooksPage() {
             const data = await fetchBooks();
             setBooks(data);
         } catch (err: unknown) {
-            const msg =
-                getErrorMessage(err) ||
-                "Failed to load books. Please try again later.";
+            const msg = getErrorMessage(err) || "Failed to load books. Please try again later.";
             setError(msg);
             toast.error("Failed to load books", { description: msg });
         } finally {
@@ -267,12 +249,35 @@ export default function LibrarianBooksPage() {
         }
     };
 
+    const resolveLibraryArea = (
+        option: string,
+        other: string
+    ): { ok: true; value: string } | { ok: false; message: string } => {
+        if (!option) {
+            return { ok: false, message: "Library area is required." };
+        }
+
+        if (option === LIBRARY_AREA_OTHER_VALUE) {
+            const normalized = normalizeOtherLibraryArea(other);
+            if (!normalized) {
+                return { ok: false, message: "Please specify the library area." };
+            }
+            return { ok: true, value: normalized };
+        }
+
+        if (!isKnownLibraryArea(option)) {
+            return { ok: false, message: "Please select a valid library area." };
+        }
+
+        return { ok: true, value: option };
+    };
+
     const handleCreateBook = async () => {
         setFormError("");
 
         const resolvedTitle = title.trim();
         const resolvedAuthor = author.trim();
-        const resolvedSOR = statementOfResponsibility.trim();
+        const resolvedSubjects = subjects.trim();
 
         if (!resolvedTitle) {
             const msg = "Title is required.";
@@ -281,32 +286,16 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        if (!resolvedAuthor && !resolvedSOR) {
-            const msg = "Author or Statement of Responsibility is required.";
+        if (!resolvedAuthor) {
+            const msg = "Author is required.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
         const pubYearNum = parseYearOrNull(pubYear);
-        const copyrightYearNum = parseYearOrNull(copyrightYear);
-
-        if (pubYear.trim() && pubYearNum === null) {
-            const msg = "Please enter a valid 4-digit publication year.";
-            setFormError(msg);
-            toast.error("Validation error", { description: msg });
-            return;
-        }
-
-        if (copyrightYear.trim() && copyrightYearNum === null) {
-            const msg = "Please enter a valid 4-digit copyright year.";
-            setFormError(msg);
-            toast.error("Validation error", { description: msg });
-            return;
-        }
-
-        if (pubYearNum === null && copyrightYearNum === null) {
-            const msg = "Publication year or Copyright year is required.";
+        if (pubYearNum === null) {
+            const msg = "Publication year is required and must be a valid 4-digit year.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
@@ -326,30 +315,11 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        if (!libraryAreaOption) {
-            const msg = "Library area is required.";
-            setFormError(msg);
-            toast.error("Validation error", { description: msg });
+        const area = resolveLibraryArea(libraryAreaOption, libraryAreaOther);
+        if (!area.ok) {
+            setFormError(area.message);
+            toast.error("Validation error", { description: area.message });
             return;
-        }
-
-        let resolvedLibraryArea = "";
-        if (libraryAreaOption === LIBRARY_AREA_OTHER_VALUE) {
-            resolvedLibraryArea = normalizeOtherLibraryArea(libraryAreaOther);
-            if (!resolvedLibraryArea) {
-                const msg = "Please specify the library area.";
-                setFormError(msg);
-                toast.error("Validation error", { description: msg });
-                return;
-            }
-        } else {
-            if (!isKnownLibraryArea(libraryAreaOption)) {
-                const msg = "Please select a valid library area.";
-                setFormError(msg);
-                toast.error("Validation error", { description: msg });
-                return;
-            }
-            resolvedLibraryArea = libraryAreaOption;
         }
 
         if (!borrowDuration.trim()) {
@@ -376,9 +346,7 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        const copyNum = copyNumber.trim()
-            ? parsePositiveIntOrNull(copyNumber)
-            : null;
+        const copyNum = copyNumber.trim() ? parsePositiveIntOrNull(copyNumber) : null;
         if (copyNumber.trim() && copyNum === null) {
             const msg = "Copy number must be a positive number.";
             setFormError(msg);
@@ -386,7 +354,6 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        // Total inventory copies
         const copiesTotal = parsePositiveIntOrNull(numberOfCopies);
         if (copiesTotal === null) {
             const msg = "Total copies must be a positive number.";
@@ -399,19 +366,19 @@ export default function LibrarianBooksPage() {
         try {
             const created = await createBook({
                 title: resolvedTitle,
-                author: resolvedAuthor || undefined,
-                statementOfResponsibility: resolvedSOR || undefined,
+                author: resolvedAuthor,
 
                 isbn: isbn.trim(),
                 issn: issn.trim(),
                 accessionNumber: accessionNumber.trim(),
-                genre: genre.trim(),
+
+                subjects: resolvedSubjects || undefined,
+                category: resolvedSubjects || undefined,
 
                 subtitle: subtitle.trim(),
                 edition: edition.trim(),
 
-                publicationYear: pubYearNum ?? undefined,
-                copyrightYear: copyrightYearNum ?? undefined,
+                publicationYear: pubYearNum,
                 placeOfPublication: placeOfPublication.trim(),
                 publisher: publisher.trim(),
 
@@ -420,19 +387,15 @@ export default function LibrarianBooksPage() {
                 dimensions: dimensions.trim(),
                 notes: notes.trim(),
                 series: series.trim(),
-                category: category.trim(),
                 addedEntries: addedEntries.trim(),
 
                 barcode: barcode.trim(),
                 callNumber: callNumber.trim(),
                 copyNumber: copyNum,
                 volumeNumber: volumeNumber.trim(),
-                libraryArea: resolvedLibraryArea as unknown as LibraryArea,
+                libraryArea: area.value as unknown as LibraryArea,
 
-                // This is TOTAL inventory input (backend computes remaining/available)
                 numberOfCopies: copiesTotal,
-
-                // Keep for backward compat
                 available,
                 borrowDurationDays: borrowDaysInt,
             });
@@ -445,8 +408,7 @@ export default function LibrarianBooksPage() {
             resetForm();
             setAddOpen(false);
         } catch (err: unknown) {
-            const msg =
-                getErrorMessage(err) || "Failed to create book. Please try again later.";
+            const msg = getErrorMessage(err) || "Failed to create book. Please try again later.";
             setFormError(msg);
             toast.error("Failed to create book", { description: msg });
         } finally {
@@ -459,25 +421,22 @@ export default function LibrarianBooksPage() {
 
         setEditTitle(book.title || "");
         setEditAuthor(book.author || "");
-        setEditStatementOfResponsibility(book.statementOfResponsibility || "");
 
         setEditIsbn(book.isbn || "");
         setEditIssn(book.issn || "");
         setEditAccessionNumber(book.accessionNumber || "");
-        setEditGenre(book.genre || "");
+        setEditSubjects(
+            (book.subjects && String(book.subjects).trim()) ||
+            (book.genre && String(book.genre).trim()) ||
+            (book.category && String(book.category).trim()) ||
+            ""
+        );
 
         setEditSubtitle(book.subtitle || "");
         setEditEdition(book.edition || "");
 
         setEditPubYear(
-            typeof book.publicationYear === "number"
-                ? String(book.publicationYear)
-                : ""
-        );
-        setEditCopyrightYear(
-            typeof book.copyrightYear === "number"
-                ? String(book.copyrightYear)
-                : ""
+            typeof book.publicationYear === "number" ? String(book.publicationYear) : ""
         );
 
         setEditPlaceOfPublication(book.placeOfPublication || "");
@@ -488,7 +447,6 @@ export default function LibrarianBooksPage() {
         setEditDimensions(book.dimensions || "");
         setEditNotes(book.notes || "");
         setEditSeries(book.series || "");
-        setEditCategory(book.category || "");
         setEditAddedEntries(book.addedEntries || "");
 
         setEditBarcode(book.barcode || "");
@@ -498,7 +456,6 @@ export default function LibrarianBooksPage() {
         );
         setEditVolumeNumber(book.volumeNumber || "");
 
-        // Inventory snapshot + correct "total copies" field usage
         const inv = getInventory(book);
         setEditCurrentTotal(inv.total);
         setEditCurrentBorrowed(inv.borrowed);
@@ -529,9 +486,7 @@ export default function LibrarianBooksPage() {
                 : "7"
         );
 
-        // Backend likely computes this, but keep it editable for backward compatibility.
         setEditAvailable(book.available);
-
         setEditError("");
         setEditOpen(true);
     };
@@ -542,7 +497,7 @@ export default function LibrarianBooksPage() {
 
         const resolvedTitle = editTitle.trim();
         const resolvedAuthor = editAuthor.trim();
-        const resolvedSOR = editStatementOfResponsibility.trim();
+        const resolvedSubjects = editSubjects.trim();
 
         if (!resolvedTitle) {
             const msg = "Title is required.";
@@ -551,32 +506,16 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        if (!resolvedAuthor && !resolvedSOR) {
-            const msg = "Author or Statement of Responsibility is required.";
+        if (!resolvedAuthor) {
+            const msg = "Author is required.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
         const pubYearNum = parseYearOrNull(editPubYear);
-        const copyrightYearNum = parseYearOrNull(editCopyrightYear);
-
-        if (editPubYear.trim() && pubYearNum === null) {
-            const msg = "Please enter a valid 4-digit publication year.";
-            setEditError(msg);
-            toast.error("Validation error", { description: msg });
-            return;
-        }
-
-        if (editCopyrightYear.trim() && copyrightYearNum === null) {
-            const msg = "Please enter a valid 4-digit copyright year.";
-            setEditError(msg);
-            toast.error("Validation error", { description: msg });
-            return;
-        }
-
-        if (pubYearNum === null && copyrightYearNum === null) {
-            const msg = "Publication year or Copyright year is required.";
+        if (pubYearNum === null) {
+            const msg = "Publication year is required and must be a valid 4-digit year.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
@@ -596,30 +535,11 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        if (!editLibraryAreaOption) {
-            const msg = "Library area is required.";
-            setEditError(msg);
-            toast.error("Validation error", { description: msg });
+        const area = resolveLibraryArea(editLibraryAreaOption, editLibraryAreaOther);
+        if (!area.ok) {
+            setEditError(area.message);
+            toast.error("Validation error", { description: area.message });
             return;
-        }
-
-        let resolvedLibraryArea = "";
-        if (editLibraryAreaOption === LIBRARY_AREA_OTHER_VALUE) {
-            resolvedLibraryArea = normalizeOtherLibraryArea(editLibraryAreaOther);
-            if (!resolvedLibraryArea) {
-                const msg = "Please specify the library area.";
-                setEditError(msg);
-                toast.error("Validation error", { description: msg });
-                return;
-            }
-        } else {
-            if (!isKnownLibraryArea(editLibraryAreaOption)) {
-                const msg = "Please select a valid library area.";
-                setEditError(msg);
-                toast.error("Validation error", { description: msg });
-                return;
-            }
-            resolvedLibraryArea = editLibraryAreaOption;
         }
 
         if (!editBorrowDuration.trim()) {
@@ -646,9 +566,7 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        const copyNum = editCopyNumber.trim()
-            ? parsePositiveIntOrNull(editCopyNumber)
-            : null;
+        const copyNum = editCopyNumber.trim() ? parsePositiveIntOrNull(editCopyNumber) : null;
         if (editCopyNumber.trim() && copyNum === null) {
             const msg = "Copy number must be a positive number.";
             setEditError(msg);
@@ -656,7 +574,6 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        // Copies payload: either SET TOTAL inventory or ADD inventory
         let copiesPayload: { numberOfCopies?: number; copiesToAdd?: number } = {};
 
         if (editCopiesMode === "set") {
@@ -668,7 +585,6 @@ export default function LibrarianBooksPage() {
                 return;
             }
 
-            // If we know borrowed copies, prevent setting total < borrowed.
             if (typeof editCurrentBorrowed === "number" && total < editCurrentBorrowed) {
                 const msg = `Total copies cannot be less than currently borrowed copies (${editCurrentBorrowed}).`;
                 setEditError(msg);
@@ -692,19 +608,19 @@ export default function LibrarianBooksPage() {
         try {
             const updated = await updateBook(editBookId, {
                 title: resolvedTitle,
-                author: resolvedAuthor || undefined,
-                statementOfResponsibility: resolvedSOR || undefined,
+                author: resolvedAuthor,
 
                 isbn: editIsbn.trim(),
                 issn: editIssn.trim(),
                 accessionNumber: editAccessionNumber.trim(),
-                genre: editGenre.trim(),
+
+                subjects: resolvedSubjects || undefined,
+                category: resolvedSubjects || undefined,
 
                 subtitle: editSubtitle.trim(),
                 edition: editEdition.trim(),
 
-                publicationYear: pubYearNum ?? undefined,
-                copyrightYear: copyrightYearNum ?? undefined,
+                publicationYear: pubYearNum,
                 placeOfPublication: editPlaceOfPublication.trim(),
                 publisher: editPublisher.trim(),
 
@@ -713,18 +629,16 @@ export default function LibrarianBooksPage() {
                 dimensions: editDimensions.trim(),
                 notes: editNotes.trim(),
                 series: editSeries.trim(),
-                category: editCategory.trim(),
                 addedEntries: editAddedEntries.trim(),
 
                 barcode: editBarcode.trim(),
                 callNumber: editCallNumber.trim(),
                 copyNumber: copyNum,
                 volumeNumber: editVolumeNumber.trim(),
-                libraryArea: resolvedLibraryArea as unknown as LibraryArea,
+                libraryArea: area.value as unknown as LibraryArea,
 
                 ...copiesPayload,
 
-                // Keep for backward compat
                 available: editAvailable,
                 borrowDurationDays: borrowDaysInt,
             });
@@ -738,8 +652,7 @@ export default function LibrarianBooksPage() {
             setEditOpen(false);
             resetEditForm();
         } catch (err: unknown) {
-            const msg =
-                getErrorMessage(err) || "Failed to update book. Please try again later.";
+            const msg = getErrorMessage(err) || "Failed to update book. Please try again later.";
             setEditError(msg);
             toast.error("Failed to update book", { description: msg });
         } finally {
@@ -758,8 +671,7 @@ export default function LibrarianBooksPage() {
             });
         } catch (err: unknown) {
             setBooks(previous);
-            const msg =
-                getErrorMessage(err) || "Failed to delete book. Please try again later.";
+            const msg = getErrorMessage(err) || "Failed to delete book. Please try again later.";
             toast.error("Delete failed", { description: msg });
         }
     };
@@ -779,9 +691,9 @@ export default function LibrarianBooksPage() {
                 b.title,
                 b.subtitle || "",
                 b.author,
-                b.statementOfResponsibility || "",
                 b.isbn || "",
                 b.issn || "",
+                b.subjects || "",
                 b.genre || "",
                 b.category || "",
                 b.accessionNumber || "",
@@ -805,7 +717,6 @@ export default function LibrarianBooksPage() {
         });
     }, [books, search]);
 
-    // Reusable scrollbar styling for dark, thin horizontal scrollbars
     const cellScrollbarClasses =
         "overflow-x-auto whitespace-nowrap " +
         "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
@@ -821,12 +732,9 @@ export default function LibrarianBooksPage() {
                 <div className="flex items-center gap-2">
                     <BookOpen className="h-5 w-5" />
                     <div>
-                        <h2 className="text-lg font-semibold leading-tight">
-                            Catalog &amp; inventory
-                        </h2>
+                        <h2 className="text-lg font-semibold leading-tight">Catalog &amp; inventory</h2>
                         <p className="text-xs text-white/70">
-                            Add new titles, manage inventory copies, and monitor
-                            remaining/borrowed counts.
+                            Add new titles, manage inventory copies, and monitor remaining/borrowed counts.
                         </p>
                     </div>
                 </div>
@@ -915,32 +823,12 @@ export default function LibrarianBooksPage() {
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Author</FieldLabel>
+                                        <FieldLabel className="text-white">Author *</FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={author}
                                                 onChange={(e) => setAuthor(e.target.value)}
                                                 placeholder="e.g., Robert C. Martin"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                        <p className="mt-1 text-[11px] text-white/60">
-                                            Provide Author or Statement of Responsibility.
-                                        </p>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">
-                                            Statement of Responsibility
-                                        </FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={statementOfResponsibility}
-                                                onChange={(e) =>
-                                                    setStatementOfResponsibility(e.target.value)
-                                                }
-                                                placeholder="Optional (can be used instead of Author)"
                                                 className="bg-slate-900/70 border-white/20 text-white"
                                                 autoComplete="off"
                                             />
@@ -963,13 +851,11 @@ export default function LibrarianBooksPage() {
 
                                 <div className="space-y-4 pt-2 border-t border-white/10">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                        Identifiers
+                                        Identifiers & classification
                                     </div>
 
                                     <Field>
-                                        <FieldLabel className="text-white">
-                                            Accession Number
-                                        </FieldLabel>
+                                        <FieldLabel className="text-white">Accession Number</FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={accessionNumber}
@@ -1008,25 +894,12 @@ export default function LibrarianBooksPage() {
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Genre (legacy)</FieldLabel>
+                                        <FieldLabel className="text-white">Subjects</FieldLabel>
                                         <FieldContent>
                                             <Input
-                                                value={genre}
-                                                onChange={(e) => setGenre(e.target.value)}
+                                                value={subjects}
+                                                onChange={(e) => setSubjects(e.target.value)}
                                                 placeholder="e.g., Software Engineering"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Category</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={category}
-                                                onChange={(e) => setCategory(e.target.value)}
-                                                placeholder="Optional (if provided, mirrors Genre)"
                                                 className="bg-slate-900/70 border-white/20 text-white"
                                                 autoComplete="off"
                                             />
@@ -1040,7 +913,7 @@ export default function LibrarianBooksPage() {
                                     </div>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Publication year</FieldLabel>
+                                        <FieldLabel className="text-white">Publication year *</FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={pubYear}
@@ -1051,29 +924,10 @@ export default function LibrarianBooksPage() {
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
-                                        <p className="mt-1 text-[11px] text-white/60">
-                                            Provide Publication year or Copyright year.
-                                        </p>
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Copyright year</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={copyrightYear}
-                                                onChange={(e) => setCopyrightYear(e.target.value)}
-                                                placeholder="Optional (4-digit year)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                inputMode="numeric"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">
-                                            Place of publication
-                                        </FieldLabel>
+                                        <FieldLabel className="text-white">Place of publication</FieldLabel>
                                         <FieldContent>
                                             <Input
                                                 value={placeOfPublication}
@@ -1202,8 +1056,8 @@ export default function LibrarianBooksPage() {
                                             />
                                         </FieldContent>
                                         <p className="mt-1 text-[11px] text-white/60">
-                                            Total physical inventory copies. Remaining/available copies
-                                            are computed as users borrow.
+                                            Total physical inventory copies. Remaining/available copies are
+                                            computed as users borrow.
                                         </p>
                                     </Field>
 
@@ -1346,8 +1200,7 @@ export default function LibrarianBooksPage() {
                                             onCheckedChange={(v) => setAvailable(v === true)}
                                         />
                                         <Label htmlFor="available" className="text-sm text-white/80">
-                                            Mark as available in the catalog (may be computed by remaining
-                                            copies)
+                                            Mark as available in the catalog (may be computed by remaining copies)
                                         </Label>
                                     </div>
 
@@ -1446,30 +1299,12 @@ export default function LibrarianBooksPage() {
                             </Field>
 
                             <Field>
-                                <FieldLabel className="text-white">Author</FieldLabel>
+                                <FieldLabel className="text-white">Author *</FieldLabel>
                                 <FieldContent>
                                     <Input
                                         value={editAuthor}
                                         onChange={(e) => setEditAuthor(e.target.value)}
                                         placeholder="e.g., Robert C. Martin"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                                <p className="mt-1 text-[11px] text-white/60">
-                                    Provide Author or Statement of Responsibility.
-                                </p>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">
-                                    Statement of Responsibility
-                                </FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editStatementOfResponsibility}
-                                        onChange={(e) => setEditStatementOfResponsibility(e.target.value)}
-                                        placeholder="Optional (can be used instead of Author)"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
                                     />
@@ -1492,7 +1327,7 @@ export default function LibrarianBooksPage() {
 
                         <div className="space-y-4 pt-2 border-t border-white/10">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                Identifiers
+                                Identifiers & classification
                             </div>
 
                             <Field>
@@ -1535,25 +1370,12 @@ export default function LibrarianBooksPage() {
                             </Field>
 
                             <Field>
-                                <FieldLabel className="text-white">Genre (legacy)</FieldLabel>
+                                <FieldLabel className="text-white">Subjects</FieldLabel>
                                 <FieldContent>
                                     <Input
-                                        value={editGenre}
-                                        onChange={(e) => setEditGenre(e.target.value)}
+                                        value={editSubjects}
+                                        onChange={(e) => setEditSubjects(e.target.value)}
                                         placeholder="e.g., Software Engineering"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">Category</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editCategory}
-                                        onChange={(e) => setEditCategory(e.target.value)}
-                                        placeholder="Optional (if provided, mirrors Genre)"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
                                     />
@@ -1567,29 +1389,12 @@ export default function LibrarianBooksPage() {
                             </div>
 
                             <Field>
-                                <FieldLabel className="text-white">Publication year</FieldLabel>
+                                <FieldLabel className="text-white">Publication year *</FieldLabel>
                                 <FieldContent>
                                     <Input
                                         value={editPubYear}
                                         onChange={(e) => setEditPubYear(e.target.value)}
                                         placeholder="e.g., 2008"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        inputMode="numeric"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                                <p className="mt-1 text-[11px] text-white/60">
-                                    Provide Publication year or Copyright year.
-                                </p>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">Copyright year</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editCopyrightYear}
-                                        onChange={(e) => setEditCopyrightYear(e.target.value)}
-                                        placeholder="Optional (4-digit year)"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         inputMode="numeric"
                                         autoComplete="off"
@@ -1936,8 +1741,7 @@ export default function LibrarianBooksPage() {
                                     />
                                 </FieldContent>
                                 <p className="mt-1 text-[11px] text-white/60">
-                                    This controls how many days a student can initially borrow this
-                                    book.
+                                    This controls how many days a student can initially borrow this book.
                                 </p>
                             </Field>
 
@@ -1948,8 +1752,7 @@ export default function LibrarianBooksPage() {
                                     onCheckedChange={(v) => setEditAvailable(v === true)}
                                 />
                                 <Label htmlFor="edit-available" className="text-sm text-white/80">
-                                    Mark as available in the catalog (may be computed by remaining
-                                    copies)
+                                    Mark as available in the catalog (may be computed by remaining copies)
                                 </Label>
                             </div>
 
@@ -2002,7 +1805,7 @@ export default function LibrarianBooksPage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search title, author, accession, barcode, call no., inventory, area…"
+                                    placeholder="Search title, author, subjects, accession, barcode, call no., inventory, area…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>

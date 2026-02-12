@@ -77,7 +77,7 @@ export function BooksCatalogTable({
                         ISBN
                     </TableHead>
                     <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                        Genre
+                        Subjects
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-white/70">
                         Pub. year
@@ -100,6 +100,11 @@ export function BooksCatalogTable({
                     const area = book.libraryArea ? String(book.libraryArea) : "";
                     const areaLabel = area ? formatLibraryAreaLabel(area) : "—";
                     const borrowable = isBorrowableByCopies(book);
+
+                    const subjectsValue =
+                        (book.subjects && String(book.subjects).trim()) ||
+                        (book.genre && String(book.genre).trim()) ||
+                        "—";
 
                     return (
                         <TableRow
@@ -196,11 +201,11 @@ export function BooksCatalogTable({
 
                             <TableCell
                                 className={
-                                    "text-sm opacity-80 align-top w-[50px] max-w-[50px] " +
+                                    "text-sm opacity-80 align-top w-[80px] max-w-[80px] " +
                                     cellScrollbarClasses
                                 }
                             >
-                                {book.genre || <span className="opacity-50">—</span>}
+                                {subjectsValue}
                             </TableCell>
 
                             <TableCell className="text-sm opacity-80">

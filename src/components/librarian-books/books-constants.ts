@@ -3,7 +3,6 @@ import type { BookDTO, LibraryArea } from "@/lib/books";
 export const LIBRARY_AREA_OPTIONS: LibraryArea[] = [
     "filipiniana",
     "general_circulation",
-    "maritime",
     "periodicals",
     "thesis_dissertations",
     "rizaliana",
@@ -116,6 +115,13 @@ export function toExcelRows(books: BookDTO[]): ExcelBookRow[] {
                     ? inv.remaining
                     : "";
 
+        const copyrightValue =
+            typeof book.copyrightYear === "number"
+                ? book.copyrightYear
+                : typeof book.publicationYear === "number"
+                    ? book.publicationYear
+                    : "";
+
         return {
             callNumber: asSafeText(book.callNumber),
             accessionNumber: asSafeText(book.accessionNumber),
@@ -123,10 +129,7 @@ export function toExcelRows(books: BookDTO[]): ExcelBookRow[] {
             author: asSafeText(book.author),
             publisher: asSafeText(book.publisher),
             edition: asSafeText(book.edition),
-            copyright:
-                typeof book.copyrightYear === "number"
-                    ? asSafeText(book.copyrightYear)
-                    : "",
+            copyright: asSafeText(copyrightValue),
             copies: asSafeText(copiesValue),
         };
     });

@@ -25,12 +25,15 @@ export type BookDTO = {
   title: string;
   subtitle?: string;
   author: string;
-  statementOfResponsibility?: string;
   edition?: string;
 
   // Identifiers
   isbn: string;
   issn?: string;
+
+  // Classification
+  subjects?: string; // ✅ new attribute
+  genre: string; // legacy (kept for backward compatibility)
 
   // Publication
   placeOfPublication?: string;
@@ -47,9 +50,6 @@ export type BookDTO = {
   category?: string;
   addedEntries?: string;
 
-  // Existing legacy field (kept)
-  genre: string;
-
   // Copy details
   barcode?: string;
   callNumber?: string;
@@ -58,10 +58,8 @@ export type BookDTO = {
   libraryArea?: LibraryArea | null;
 
   /**
-   * ✅ IMPORTANT (updated behavior):
-   * numberOfCopies = REMAINING/AVAILABLE copies (this deducts as users borrow).
-   *
-   * The backend also sends:
+   * numberOfCopies = REMAINING/AVAILABLE copies (deducts as users borrow).
+   * Backend also sends:
    * - totalCopies = total inventory copies
    * - borrowedCopies = active borrows (status <> returned)
    */
@@ -73,7 +71,7 @@ export type BookDTO = {
 
   /**
    * Default loan duration for this book in days.
-   * Used by the server when a student borrows via /borrow-records/self.
+   * Used by server when borrowing via /borrow-records/self.
    */
   borrowDurationDays?: number | null;
 };
@@ -85,7 +83,6 @@ type FetchInit = Omit<RequestInit, "body" | "credentials"> & {
   asFormData?: boolean;
 };
 
-/** Safely pull a readable message out of an unknown error value */
 function getErrorMessage(e: unknown): string {
   if (!e) return "";
   if (typeof e === "string") return e;
@@ -107,7 +104,7 @@ async function requestJSON<T = unknown>(
   const { asFormData, body, headers, ...rest } = init;
 
   const finalInit: RequestInit = {
-    credentials: "include", // use cookies for auth session
+    credentials: "include",
     method: "GET",
     ...rest,
     headers: new Headers(headers || {}),
@@ -167,15 +164,9 @@ async function requestJSON<T = unknown>(
 /* ----------------------- Public Books API ----------------------- */
 
 export type CreateBookPayload = {
-  // Required-ish on backend: title + (author OR statementOfResponsibility) + (publicationYear OR copyrightYear)
   title: string;
-
-  // Backward compatible: still supported and commonly used
   author?: string;
 
-  statementOfResponsibility?: string;
-
-  // ✅ used by the UI + supported by backend
   subtitle?: string;
   edition?: string;
 
@@ -184,11 +175,16 @@ export type CreateBookPayload = {
   issn?: string;
   accessionNumber?: string;
 
+  // Classification
+  subjects?: string;
+  genre?: string; // legacy
+  category?: string;
+
   // Publication
   publicationYear?: number;
   placeOfPublication?: string;
   publisher?: string;
-  copyrightYear?: number | null;
+  copyrightYear?: number | null; // legacy support
 
   // Physical description / notes
   pages?: number | null;
@@ -196,11 +192,7 @@ export type CreateBookPayload = {
   dimensions?: string;
   notes?: string;
   series?: string;
-  category?: string;
   addedEntries?: string;
-
-  // Legacy
-  genre?: string;
 
   // Copy details
   barcode?: string;
@@ -210,25 +202,22 @@ export type CreateBookPayload = {
   libraryArea?: LibraryArea | null;
 
   /**
-   * ✅ TOTAL inventory copies (admin input).
-   * Remaining copies shown to users are computed by the backend.
+   * TOTAL inventory copies (admin input).
+   * Remaining copies shown to users are computed by backend.
    */
   numberOfCopies?: number;
 
   /**
-   * Availability is computed by backend based on remaining copies.
-   * (No need to set this manually.)
+   * Availability may be computed by backend based on remaining copies.
    */
   available?: boolean;
 
   /**
-   * Default loan duration for this book in days.
-   * If omitted, the backend will fall back to its default (e.g. 7).
+   * Default loan duration in days.
    */
   borrowDurationDays?: number;
 };
 
-// ✅ allow special PATCH-only field (increment copies)
 export type UpdateBookPayload = Partial<CreateBookPayload> & {
   copiesToAdd?: number;
 };
@@ -260,7 +249,6 @@ export async function updateBook(
   return res.book;
 }
 
-// ✅ optional helper if you want to use POST /books/:id/copies
 export async function addBookCopies(
   id: string | number,
   count: number
