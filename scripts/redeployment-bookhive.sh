@@ -9,8 +9,16 @@ CADDY_REPO_FILE="${CADDY_REPO_FILE:-infra/Caddyfile}"
 ACTIVE_MARKER="${ACTIVE_MARKER:-/opt/bookhive-env/bookhive.active}"
 DOMAIN="${DOMAIN:-bookhive.jrmsu-tc.cloud}"
 CADDY_CTN="${CADDY_CTN:-}"   # optional: force container name (e.g. workloadhub_caddy_1002)
+
 PUBLIC_CHECK_RETRIES="${PUBLIC_CHECK_RETRIES:-30}"
 PUBLIC_CHECK_SLEEP_SECS="${PUBLIC_CHECK_SLEEP_SECS:-2}"
+
+UPSTREAM_PROBE_IMAGE="${UPSTREAM_PROBE_IMAGE:-curlimages/curl:8.11.1}"
+UPSTREAM_PROBE_RETRIES="${UPSTREAM_PROBE_RETRIES:-8}"
+UPSTREAM_PROBE_SLEEP_SECS="${UPSTREAM_PROBE_SLEEP_SECS:-2}"
+
+AUTO_REMEDY_502="${AUTO_REMEDY_502:-1}"                  # 1=try auto network fix + reload on 502
+AUTO_ROLLBACK_ON_VERIFY_FAIL="${AUTO_ROLLBACK_ON_VERIFY_FAIL:-0}"  # 1=rollback Caddy target if verify fails
 
 BLUE_SVC="bookhive-blue"
 GREEN_SVC="bookhive-green"
@@ -165,6 +173,89 @@ get_container_caddyfile_source() {
   docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' "$ctn" 2>/dev/null || true
 }
 
+container_networks() {
+  local ctn="$1"
+  docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$ctn" 2>/dev/null | sed '/^[[:space:]]*$/d'
+}
+
+container_has_network() {
+  local ctn="$1" net="$2"
+  [[ "$(docker inspect -f "{{if index .NetworkSettings.Networks \"$net\"}}yes{{else}}no{{end}}" "$ctn" 2>/dev/null || true)" == "yes" ]]
+}
+
+ensure_caddy_connected_to_service_networks() {
+  local svc="$1" ctn="$2"
+  local cid net
+
+  [[ -n "$ctn" ]] || return 0
+  cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
+  [[ -n "$cid" ]] || { err "Cannot find container id for service: $svc"; return 1; }
+
+  while IFS= read -r net; do
+    [[ -z "$net" ]] && continue
+    if ! container_has_network "$ctn" "$net"; then
+      log "Connecting Caddy container '$ctn' to network '$net'"
+      docker network connect "$net" "$ctn" 2>/dev/null || true
+    fi
+  done < <(container_networks "$cid")
+
+  return 0
+}
+
+probe_service_from_caddy_networks() {
+  # Return 0 if service reachable by name from at least one network shared with caddy container.
+  local svc="$1" ctn="$2"
+  local cid net attempt
+
+  cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
+  [[ -n "$cid" ]] || return 1
+
+  for attempt in $(seq 1 "$UPSTREAM_PROBE_RETRIES"); do
+    while IFS= read -r net; do
+      [[ -z "$net" ]] && continue
+      container_has_network "$ctn" "$net" || continue
+      if docker run --rm --network "$net" "$UPSTREAM_PROBE_IMAGE" -fsS --max-time 3 "http://${svc}:8080/" >/dev/null 2>&1; then
+        return 0
+      fi
+    done < <(container_networks "$cid")
+
+    sleep "$UPSTREAM_PROBE_SLEEP_SECS"
+  done
+
+  return 1
+}
+
+run_public_check_loop() {
+  PUBLIC_OK=0
+  PUBLIC_CODE=""
+  PUBLIC_SLOT=""
+  PUBLIC_HEADERS=""
+
+  if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
+    for _ in $(seq 1 "$PUBLIC_CHECK_RETRIES"); do
+      PUBLIC_HEADERS="$(probe_headers "https://${DOMAIN}/")"
+      PUBLIC_CODE="$(http_code_from_headers <<< "$PUBLIC_HEADERS")"
+      PUBLIC_SLOT="$(slot_from_headers <<< "$PUBLIC_HEADERS")"
+
+      if is_http_2xx_or_3xx "$PUBLIC_CODE"; then
+        if [[ -z "$PUBLIC_SLOT" || "$PUBLIC_SLOT" == "$IDLE_COLOR" ]]; then
+          PUBLIC_OK=1
+          break
+        fi
+      fi
+
+      sleep "$PUBLIC_CHECK_SLEEP_SECS"
+    done
+  fi
+}
+
+write_active_marker() {
+  local color="$1"
+  install -d -m 700 "$(dirname "$ACTIVE_MARKER")"
+  printf "%s\n" "$color" > "$ACTIVE_MARKER"
+  chmod 600 "$ACTIVE_MARKER"
+}
+
 # Build a unique list of target files to edit (runtime first, then repo file).
 build_caddy_target_files() {
   local runtime_file="$1"
@@ -264,22 +355,24 @@ wait_idle_ready() {
   done
 }
 
-ensure_caddy_on_idle_network_if_needed() {
-  local idle_svc="$1"
-  local ctn="$2"
-  local mode="$3"
-  local cid net
+rollback_traffic_switch() {
+  local from_color="$1" to_color="$2"
+  local target
 
-  [[ "$mode" == "service" || "$mode" == "unknown" ]] || return 0
-  [[ -n "$ctn" ]] || return 0
+  log "Rollback traffic in Caddy from $from_color -> $to_color"
+  for target in "${CADDY_TARGET_FILES[@]}"; do
+    echo "Reverting: $target"
+    switch_target_file "$target" "$from_color" "$to_color"
+  done
 
-  cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$idle_svc" || true)"
-  [[ -n "$cid" ]] || return 0
+  if reload_caddy "$CADDY_RUNTIME_FILE"; then
+    write_active_marker "$to_color"
+    echo "Rollback completed. Active slot restored to: $to_color"
+    return 0
+  fi
 
-  net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$cid" | head -n1)"
-  [[ -n "$net" ]] || return 0
-
-  docker network connect "$net" "$ctn" 2>/dev/null || true
+  err "Rollback failed to reload Caddy."
+  return 1
 }
 
 # ===== Main =====
@@ -375,11 +468,26 @@ fi
 if [[ "$SWITCH_MODE" == "unknown" ]]; then
   SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_REPO_FILE")"
 fi
-
 echo "Caddy switch mode: $SWITCH_MODE"
 
 log "5) Ensure Caddy can reach idle slot (service mode only)"
-ensure_caddy_on_idle_network_if_needed "$IDLE_SVC" "$CADDY_CONTAINER_NAME" "$SWITCH_MODE"
+if [[ "$SWITCH_MODE" == "service" ]]; then
+  if [[ "$CADDY_RUNTIME_MODE" == "host" ]]; then
+    die "Detected host Caddy + service upstream mode. This usually causes 502 (host Caddy can't resolve Docker service names). Use port mode in Caddyfile for host Caddy."
+  fi
+
+  if [[ -n "$CADDY_CONTAINER_NAME" ]]; then
+    ensure_caddy_connected_to_service_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"
+    if ! probe_service_from_caddy_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"; then
+      err "Caddy network probe failed: cannot reach http://${IDLE_SVC}:8080 from shared Docker networks."
+      echo "Diagnostics (copy/paste):"
+      echo "  docker inspect '$CADDY_CONTAINER_NAME' --format '{{json .NetworkSettings.Networks}}' | jq"
+      echo "  docker compose -f '$COMPOSE_FILE' ps"
+      echo "  docker inspect \$(docker compose -f '$COMPOSE_FILE' ps -q '$IDLE_SVC') --format '{{json .NetworkSettings.Networks}}' | jq"
+      die "Aborting before traffic switch to avoid public 502."
+    fi
+  fi
+fi
 
 log "6) Switch traffic in Caddy from $ACTIVE_COLOR -> $IDLE_COLOR"
 CADDY_TARGET_FILES=()
@@ -399,10 +507,6 @@ if reload_caddy "$CADDY_RUNTIME_FILE"; then
 else
   die "Could not reload Caddy. Your Caddyfile backups were kept with .bak.<timestamp>."
 fi
-
-install -d -m 700 "$(dirname "$ACTIVE_MARKER")"
-printf "%s\n" "$IDLE_COLOR" > "$ACTIVE_MARKER"
-chmod 600 "$ACTIVE_MARKER"
 
 log "7) Verify public + runtime status"
 
@@ -424,27 +528,7 @@ for target in "${CADDY_TARGET_FILES[@]}"; do
 done
 
 # 7c) Public DNS path check
-PUBLIC_OK=0
-PUBLIC_CODE=""
-PUBLIC_SLOT=""
-PUBLIC_HEADERS=""
-
-if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
-  for _ in $(seq 1 "$PUBLIC_CHECK_RETRIES"); do
-    PUBLIC_HEADERS="$(probe_headers "https://${DOMAIN}/")"
-    PUBLIC_CODE="$(http_code_from_headers <<< "$PUBLIC_HEADERS")"
-    PUBLIC_SLOT="$(slot_from_headers <<< "$PUBLIC_HEADERS")"
-
-    if is_http_2xx_or_3xx "$PUBLIC_CODE"; then
-      if [[ -z "$PUBLIC_SLOT" || "$PUBLIC_SLOT" == "$IDLE_COLOR" ]]; then
-        PUBLIC_OK=1
-        break
-      fi
-    fi
-
-    sleep "$PUBLIC_CHECK_SLEEP_SECS"
-  done
-fi
+run_public_check_loop
 
 # 7d) Local ingress check via forced host mapping (bypasses external DNS path)
 LOCAL_INGRESS_TESTED=0
@@ -466,6 +550,18 @@ if command -v curl >/dev/null 2>&1 && [[ -n "$DOMAIN" ]]; then
   fi
 fi
 
+# 7e) Auto-remedy for common 502 case in containerized Caddy service-mode
+if [[ "$PUBLIC_OK" -ne 1 && "$AUTO_REMEDY_502" == "1" && "$SWITCH_MODE" == "service" && -n "$CADDY_CONTAINER_NAME" && "$PUBLIC_CODE" == "502" ]]; then
+  log "7e) Auto-remedy: reconnect Caddy to idle service network(s), reload, and re-check public endpoint"
+  ensure_caddy_connected_to_service_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME" || true
+  if probe_service_from_caddy_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"; then
+    reload_caddy "$CADDY_RUNTIME_FILE" || true
+    run_public_check_loop
+  else
+    err "Auto-remedy probe failed: ${IDLE_SVC}:8080 still unreachable from Caddy network context."
+  fi
+fi
+
 echo ""
 echo "Verification summary:"
 printf "  - Idle slot local     : %s (%s:%s)\n" "$( [[ "$LOCAL_IDLE_OK" -eq 1 ]] && echo PASS || echo FAIL )" "$IDLE_SVC" "$IDLE_PORT"
@@ -476,6 +572,10 @@ if [[ "$LOCAL_INGRESS_TESTED" -eq 1 ]]; then
 else
   printf "  - Local ingress(443)  : SKIP\n"
 fi
+
+# Decide marker + rollback behavior
+FINAL_ACTIVE_COLOR="$IDLE_COLOR"
+FINAL_PREV_COLOR="$ACTIVE_COLOR"
 
 if [[ "$PUBLIC_OK" -eq 1 ]]; then
   echo "Public live status confirmed for https://${DOMAIN}"
@@ -491,12 +591,26 @@ elif [[ "$LOCAL_IDLE_OK" -eq 1 && "$CADDY_TARGET_OK" -eq 1 && ( "$LOCAL_INGRESS_
     echo "  grep -nE 'bookhive.jrmsu-tc.cloud|reverse_proxy|18081|18082|bookhive-blue|bookhive-green' '$CADDY_REPO_FILE'"
   fi
 else
-  err "Deployment switch done, but verification failed. Review diagnostics below."
+  err "Deployment switch done, but verification failed."
   [[ -n "$PUBLIC_HEADERS" ]] && { echo "--- Public headers ---"; echo "$PUBLIC_HEADERS" | sed -n '1,30p'; }
   [[ -n "$LOCAL_INGRESS_HEADERS" ]] && { echo "--- Local ingress headers ---"; echo "$LOCAL_INGRESS_HEADERS" | sed -n '1,30p'; }
+
+  if [[ "$AUTO_ROLLBACK_ON_VERIFY_FAIL" == "1" ]]; then
+    err "AUTO_ROLLBACK_ON_VERIFY_FAIL=1 -> reverting traffic to $ACTIVE_COLOR"
+    if rollback_traffic_switch "$IDLE_COLOR" "$ACTIVE_COLOR"; then
+      FINAL_ACTIVE_COLOR="$ACTIVE_COLOR"
+      FINAL_PREV_COLOR="$IDLE_COLOR"
+      die "Rolled back due to failed verification."
+    else
+      die "Verification failed and rollback failed. Manual intervention required."
+    fi
+  fi
 fi
+
+# Persist active marker only after final decision
+write_active_marker "$FINAL_ACTIVE_COLOR"
 
 log "8) Final status"
 docker compose -f "$COMPOSE_FILE" ps
-echo "Active slot is now: $IDLE_COLOR"
-echo "Previous slot kept running for rollback: $ACTIVE_COLOR"
+echo "Active slot is now: $FINAL_ACTIVE_COLOR"
+echo "Previous slot kept running for rollback: $FINAL_PREV_COLOR"
