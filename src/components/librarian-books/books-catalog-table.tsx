@@ -201,7 +201,7 @@ export function BooksCatalogTable({
 
                             <TableCell
                                 className={
-                                    "text-sm opacity-80 align-top w-[80px] max-w-[80px] " +
+                                    "text-sm opacity-80 align-top w-20 max-w-20 " +
                                     cellScrollbarClasses
                                 }
                             >

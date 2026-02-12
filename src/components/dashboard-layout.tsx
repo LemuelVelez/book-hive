@@ -26,7 +26,7 @@ export default function DashboardLayout({
     children: React.ReactNode
 }) {
     return (
-        <div className="min-h-screen bg-slate-900 text-white">
+        <div className="min-h-screen bg-slate-900 text-white p-4">
             <SidebarProvider defaultOpen>
                 <Sidebar collapsible="icon" variant="inset" className="bg-slate-900 text-white border-white/10">
                     <NavHeader />

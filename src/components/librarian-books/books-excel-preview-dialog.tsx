@@ -549,7 +549,7 @@ export function BooksExcelPreviewDialog({ books }: BooksExcelPreviewDialogProps)
                         <Table>
                             <TableHeader>
                                 <TableRow className="border-white/10">
-                                    <TableHead className="text-white/70 w-[48px]">#</TableHead>
+                                    <TableHead className="text-white/70 w-12">#</TableHead>
                                     {EXCEL_COLUMNS.map((col) => (
                                         <TableHead key={col.key} className="text-white/70">
                                             {col.label}
