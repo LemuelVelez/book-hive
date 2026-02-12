@@ -15,7 +15,12 @@ CADDY_REPO_FILE="${CADDY_REPO_FILE:-infra/Caddyfile}"
 ACTIVE_MARKER="${ACTIVE_MARKER:-/opt/bookhive-env/bookhive.active}"
 
 DOMAIN="${DOMAIN:-bookhive.jrmsu-tc.cloud}"
-PUBLIC_CHECK_URL="${PUBLIC_CHECK_URL:-https://${DOMAIN}}"
+HEALTH_PATH="${HEALTH_PATH:-/}"
+PUBLIC_CHECK_URL="${PUBLIC_CHECK_URL:-https://${DOMAIN}${HEALTH_PATH}}"
+SLOT_HEADER_NAME="${SLOT_HEADER_NAME:-X-BookHive-Slot}"
+
+# Set REQUIRED_ENV_KEY="EXTERNAL_ENV_1" (or another key) if you want strict env validation
+REQUIRED_ENV_KEY="${REQUIRED_ENV_KEY:-EXTERNAL_ENV_1}"
 
 # Optional preferred Caddy container name
 CADDY_CTN="${CADDY_CTN:-}"
@@ -27,7 +32,7 @@ UPSTREAM_PROBE_IMAGE="${UPSTREAM_PROBE_IMAGE:-curlimages/curl:8.11.1}"
 UPSTREAM_PROBE_RETRIES="${UPSTREAM_PROBE_RETRIES:-8}"
 UPSTREAM_PROBE_SLEEP_SECS="${UPSTREAM_PROBE_SLEEP_SECS:-2}"
 
-AUTO_REMEDY_502="${AUTO_REMEDY_502:-1}"                  # 1=try network fix + reload on 502
+AUTO_REMEDY_502="${AUTO_REMEDY_502:-1}"                            # 1=try network fix + reload on 502
 AUTO_ROLLBACK_ON_VERIFY_FAIL="${AUTO_ROLLBACK_ON_VERIFY_FAIL:-0}"  # 1=rollback switch if verify fails
 
 # Reliability knobs
@@ -35,10 +40,12 @@ LOCK_FILE="${LOCK_FILE:-/tmp/redeployment-bookhive.lock}"
 CADDY_RESTART_ON_RELOAD_FAIL="${CADDY_RESTART_ON_RELOAD_FAIL:-1}"
 CADDY_ENABLE_FMT="${CADDY_ENABLE_FMT:-0}"
 
-BLUE_SVC="bookhive-blue"
-GREEN_SVC="bookhive-green"
-BLUE_PORT="18081"
-GREEN_PORT="18082"
+# Slot services/ports (overridable by backend wrapper)
+BLUE_SVC="${BLUE_SVC:-bookhive-blue}"
+GREEN_SVC="${GREEN_SVC:-bookhive-green}"
+BLUE_PORT="${BLUE_PORT:-18081}"
+GREEN_PORT="${GREEN_PORT:-18082}"
+UPSTREAM_CONTAINER_PORT="${UPSTREAM_CONTAINER_PORT:-8080}"
 
 EDGE_OWNER="none"               # docker|host|none
 SERVICE_CADDY_ACTIVE="inactive" # active|inactive|failed|...
@@ -47,6 +54,9 @@ CADDY_RUNTIME_FILE=""           # path to editable runtime Caddyfile (if availab
 CADDY_CONTAINER_NAME=""         # edge Caddy container (when EDGE_OWNER=docker)
 CADDY_TARGET_FILE=""            # exactly one file that this script edits
 SWITCH_MODE="unknown"           # service|port|unknown
+
+# Compose command array, initialized in main
+COMPOSE_BASE=()
 
 # ===== Utilities =====
 require_file() {
@@ -57,6 +67,19 @@ require_file() {
 require_cmd() {
   local c="$1"
   command -v "$c" >/dev/null 2>&1 || die "Missing required command: $c"
+}
+
+compose() {
+  "${COMPOSE_BASE[@]}" "$@"
+}
+
+to_abs_under_repo() {
+  local p="$1"
+  if [[ "$p" = /* ]]; then
+    printf '%s\n' "$p"
+  else
+    printf '%s\n' "$REPO_DIR/$p"
+  fi
 }
 
 acquire_lock() {
@@ -77,7 +100,12 @@ http_code_from_headers() {
 }
 
 slot_from_headers() {
-  awk -F': ' 'tolower($1)=="x-bookhive-slot"{gsub("\r","",$2); slot=tolower($2)} END{print slot}'
+  local hdr_lc
+  hdr_lc="$(tr '[:upper:]' '[:lower:]' <<< "$SLOT_HEADER_NAME")"
+  awk -F': ' -v h="$hdr_lc" '
+    tolower($1)==h {gsub("\r","",$2); slot=tolower($2)}
+    END{print slot}
+  '
 }
 
 probe_headers() {
@@ -91,11 +119,20 @@ backup_file() {
   cp -a "$f" "${f}.bak.$(date +%F-%H%M%S-%N)"
 }
 
+service_for_slot() {
+  case "$1" in
+    blue)  printf '%s\n' "$BLUE_SVC" ;;
+    green) printf '%s\n' "$GREEN_SVC" ;;
+    *) return 1 ;;
+  esac
+}
+
 upstream_for_slot() {
-  local color="$1" mode="$2"
+  local color="$1" mode="$2" svc
   case "$mode" in
     service)
-      printf 'bookhive-%s:8080\n' "$color"
+      svc="$(service_for_slot "$color")" || return 1
+      printf '%s:%s\n' "$svc" "$UPSTREAM_CONTAINER_PORT"
       ;;
     port)
       case "$color" in
@@ -113,39 +150,44 @@ get_active_from_caddy_file() {
   local file="$1"
   [[ -f "$file" ]] || return 1
 
-  python3 - "$file" "$DOMAIN" <<'PY'
+  python3 - "$file" "$DOMAIN" "$SLOT_HEADER_NAME" "$BLUE_SVC" "$GREEN_SVC" "$BLUE_PORT" "$GREEN_PORT" "$UPSTREAM_CONTAINER_PORT" <<'PY'
 import re, sys
 from pathlib import Path
 
-file_path, domain = sys.argv[1], sys.argv[2]
+file_path, domain, slot_header, blue_svc, green_svc, blue_port, green_port, upstream_port = sys.argv[1:]
 text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
 
-# First: try domain-specific blocks
+# Domain-specific block scan first
 pat = re.compile(rf'(?ms)^\s*{re.escape(domain)}\s*\{{.*?^\s*\}}\s*', re.MULTILINE)
 blocks = list(pat.finditer(text))
 
+# 1) Header-based detection
+hpat = re.compile(rf'(?im)^\s*header\s+{re.escape(slot_header)}\s+(blue|green)\b')
 for m in reversed(blocks):
     blk = m.group(0)
-    h = re.search(r'(?im)^\s*header\s+X-BookHive-Slot\s+(blue|green)\b', blk)
+    h = hpat.search(blk)
     if h:
         print(h.group(1).lower())
         raise SystemExit(0)
 
+# 2) Upstream-based detection in domain block
 for m in reversed(blocks):
     blk = m.group(0)
-    if re.search(r'(?i)reverse_proxy\s+bookhive-blue:8080\b', blk):
+    if re.search(rf'(?i)reverse_proxy\s+{re.escape(blue_svc)}:{re.escape(upstream_port)}\b', blk):
         print("blue"); raise SystemExit(0)
-    if re.search(r'(?i)reverse_proxy\s+bookhive-green:8080\b', blk):
+    if re.search(rf'(?i)reverse_proxy\s+{re.escape(green_svc)}:{re.escape(upstream_port)}\b', blk):
         print("green"); raise SystemExit(0)
-    if re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18081\b', blk):
+    if re.search(rf'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):{re.escape(blue_port)}\b', blk):
         print("blue"); raise SystemExit(0)
-    if re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18082\b', blk):
+    if re.search(rf'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):{re.escape(green_port)}\b', blk):
         print("green"); raise SystemExit(0)
 
-# Fallback: global (best effort)
-if re.search(r'(?i)reverse_proxy\s+bookhive-blue:8080\b', text) or re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18081\b', text):
+# 3) Fallback global (best effort)
+if re.search(rf'(?i)reverse_proxy\s+{re.escape(blue_svc)}:{re.escape(upstream_port)}\b', text) or \
+   re.search(rf'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):{re.escape(blue_port)}\b', text):
     print("blue"); raise SystemExit(0)
-if re.search(r'(?i)reverse_proxy\s+bookhive-green:8080\b', text) or re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):18082\b', text):
+if re.search(rf'(?i)reverse_proxy\s+{re.escape(green_svc)}:{re.escape(upstream_port)}\b', text) or \
+   re.search(rf'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):{re.escape(green_port)}\b', text):
     print("green"); raise SystemExit(0)
 
 print("")
@@ -157,73 +199,47 @@ get_proxy_mode_from_file() {
   local file="$1"
   [[ -f "$file" ]] || { echo "unknown"; return 0; }
 
-  python3 - "$file" "$DOMAIN" <<'PY'
+  python3 - "$file" "$DOMAIN" "$BLUE_SVC" "$GREEN_SVC" "$BLUE_PORT" "$GREEN_PORT" "$UPSTREAM_CONTAINER_PORT" <<'PY'
 import re, sys
 from pathlib import Path
 
-file_path, domain = sys.argv[1], sys.argv[2]
+file_path, domain, blue_svc, green_svc, blue_port, green_port, upstream_port = sys.argv[1:]
 text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
 
 pat = re.compile(rf'(?ms)^\s*{re.escape(domain)}\s*\{{.*?^\s*\}}\s*', re.MULTILINE)
 blocks = [m.group(0) for m in pat.finditer(text)]
 scan = "\n".join(blocks) if blocks else text
 
-if re.search(r'(?i)reverse_proxy\s+bookhive-(blue|green):8080\b', scan):
+if re.search(rf'(?i)reverse_proxy\s+({re.escape(blue_svc)}|{re.escape(green_svc)}):{re.escape(upstream_port)}\b', scan):
     print("service")
-elif re.search(r'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):(18081|18082)\b', scan):
+elif re.search(rf'(?i)reverse_proxy\s+(127\.0\.0\.1|localhost):({re.escape(blue_port)}|{re.escape(green_port)})\b', scan):
     print("port")
 else:
     print("unknown")
 PY
 }
 
-# In-place switch (NO mv/rename):
-# - swaps BookHive upstream tokens globally (so api-bookhive can follow slot)
-# - removes duplicate DOMAIN blocks
+# In-place switch:
+# - edits ONLY the target DOMAIN block
+# - removes duplicate blocks for DOMAIN
 # - appends one canonical DOMAIN block
 switch_target_file_in_place() {
-  local file="$1" from_color="$2" to_color="$3" mode="$4"
-  local from_port to_port upstream_to
+  local file="$1" _from_color="$2" to_color="$3" mode="$4"
+  local upstream_to
 
   [[ -f "$file" ]] || return 1
-
-  case "$from_color" in
-    blue)  from_port="$BLUE_PORT" ;;
-    green) from_port="$GREEN_PORT" ;;
-    *) return 1 ;;
-  esac
-  case "$to_color" in
-    blue)  to_port="$BLUE_PORT" ;;
-    green) to_port="$GREEN_PORT" ;;
-    *) return 1 ;;
-  esac
-
   upstream_to="$(upstream_for_slot "$to_color" "$mode")"
 
   backup_file "$file"
 
-  python3 - "$file" "$DOMAIN" "$from_color" "$to_color" "$mode" "$from_port" "$to_port" "$upstream_to" <<'PY'
+  python3 - "$file" "$DOMAIN" "$to_color" "$upstream_to" "$SLOT_HEADER_NAME" <<'PY'
 import re, sys
 from pathlib import Path
 
-file_path, domain, from_color, to_color, mode, from_port, to_port, upstream_to = sys.argv[1:]
+file_path, domain, to_color, upstream_to, slot_header = sys.argv[1:]
 text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
 
-# 1) Swap BookHive upstream tokens globally but only on reverse_proxy lines
-if mode == "service":
-    text = re.sub(
-        rf'(?im)^(\s*reverse_proxy\s+)bookhive-{re.escape(from_color)}(:8080\b)',
-        rf'\1bookhive-{to_color}\2',
-        text,
-    )
-elif mode == "port":
-    text = re.sub(
-        rf'(?im)^(\s*reverse_proxy\s+(?:127\.0\.0\.1|localhost):){re.escape(from_port)}(\b)',
-        rf'\1{to_port}\2',
-        text,
-    )
-
-# 2) Remove all DOMAIN blocks using brace-depth parser (handles nested braces)
+# Remove all DOMAIN blocks using brace-depth parser (handles nested braces)
 lines = text.splitlines(keepends=True)
 out = []
 i = 0
@@ -246,11 +262,11 @@ while i < len(lines):
 
 text = ''.join(out).rstrip() + "\n\n"
 
-# 3) Append one canonical DOMAIN block
+# Append one canonical DOMAIN block
 block = (
     f"{domain} {{\n"
     f"    encode zstd gzip\n"
-    f"    header X-BookHive-Slot {to_color}\n"
+    f"    header {slot_header} {to_color}\n"
     f"    reverse_proxy {upstream_to}\n"
     f"}}\n"
 )
@@ -271,7 +287,21 @@ caddy_points_to_slot() {
   local expected
   expected="$(upstream_for_slot "$color" "$mode")" || return 1
 
-  grep -Eqi "reverse_proxy[[:space:]]+${expected//./\\.}\\b" "$file"
+  python3 - "$file" "$DOMAIN" "$expected" <<'PY'
+import re, sys
+from pathlib import Path
+
+file_path, domain, expected = sys.argv[1:]
+text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+pat = re.compile(rf'(?ms)^\s*{re.escape(domain)}\s*\{{.*?^\s*\}}\s*', re.MULTILINE)
+blocks = [m.group(0) for m in pat.finditer(text)]
+if not blocks:
+    raise SystemExit(1)
+for blk in reversed(blocks):
+    if re.search(rf'(?i)reverse_proxy\s+{re.escape(expected)}\b', blk):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
 }
 
 container_publishes_443() {
@@ -331,7 +361,7 @@ ensure_caddy_connected_to_service_networks() {
   local cid net
 
   [[ -n "$ctn" ]] || return 0
-  cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
+  cid="$(compose ps -q "$svc" || true)"
   [[ -n "$cid" ]] || { err "Cannot find container id for service: $svc"; return 1; }
 
   while IFS= read -r net; do
@@ -350,14 +380,14 @@ probe_service_from_caddy_networks() {
   local svc="$1" ctn="$2"
   local cid net attempt
 
-  cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
+  cid="$(compose ps -q "$svc" || true)"
   [[ -n "$cid" ]] || return 1
 
   for attempt in $(seq 1 "$UPSTREAM_PROBE_RETRIES"); do
     while IFS= read -r net; do
       [[ -z "$net" ]] && continue
       container_has_network "$ctn" "$net" || continue
-      if docker run --rm --network "$net" "$UPSTREAM_PROBE_IMAGE" -fsS --max-time 3 "http://${svc}:8080/" >/dev/null 2>&1; then
+      if docker run --rm --network "$net" "$UPSTREAM_PROBE_IMAGE" -fsS --max-time 3 "http://${svc}:${UPSTREAM_CONTAINER_PORT}${HEALTH_PATH}" >/dev/null 2>&1; then
         return 0
       fi
     done < <(container_networks "$cid")
@@ -408,7 +438,7 @@ select_caddy_target_file() {
     return 0
   fi
 
-  if [[ -f "$CADDY_REPO_FILE" ]]; then
+  if [[ -n "$CADDY_REPO_FILE" && -f "$CADDY_REPO_FILE" ]]; then
     CADDY_TARGET_FILE="$CADDY_REPO_FILE"
     return 0
   fi
@@ -543,7 +573,7 @@ wait_idle_ready() {
 
   start_ts="$(date +%s)"
   while true; do
-    cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
+    cid="$(compose ps -q "$svc" || true)"
     if [[ -n "$cid" ]]; then
       running="$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)"
       health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
@@ -555,7 +585,7 @@ wait_idle_ready() {
       if [[ "$running" == "true" && "$health" == "none" ]]; then
         # Try host-port readiness first
         if command -v curl >/dev/null 2>&1; then
-          if curl -fsS --max-time 2 "http://127.0.0.1:${host_port}/" >/dev/null 2>&1; then
+          if curl -fsS --max-time 2 "http://127.0.0.1:${host_port}${HEALTH_PATH}" >/dev/null 2>&1; then
             return 0
           fi
         else
@@ -565,7 +595,7 @@ wait_idle_ready() {
         # Fallback: internal service check over compose network
         net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$cid" | head -n1)"
         if [[ -n "$net" ]]; then
-          if docker run --rm --network "$net" "$UPSTREAM_PROBE_IMAGE" -fsS --max-time 2 "http://${svc}:8080/" >/dev/null 2>&1; then
+          if docker run --rm --network "$net" "$UPSTREAM_PROBE_IMAGE" -fsS --max-time 2 "http://${svc}:${UPSTREAM_CONTAINER_PORT}${HEALTH_PATH}" >/dev/null 2>&1; then
             return 0
           fi
         fi
@@ -608,10 +638,27 @@ require_cmd git
 require_cmd python3
 acquire_lock
 
-cd "$REPO_DIR"
+[[ -d "$REPO_DIR" ]] || die "Missing repo dir: $REPO_DIR"
+REPO_DIR="$(cd "$REPO_DIR" && pwd -P)"
+
+COMPOSE_FILE="$(to_abs_under_repo "$COMPOSE_FILE")"
+ENV_LOADER="$(to_abs_under_repo "$ENV_LOADER")"
+if [[ -n "${CADDY_REPO_FILE:-}" ]]; then
+  CADDY_REPO_FILE="$(to_abs_under_repo "$CADDY_REPO_FILE")"
+fi
+
 require_file "$COMPOSE_FILE"
 require_file "$ENV_LOADER"
-require_file "$CADDY_REPO_FILE"
+if [[ -n "${CADDY_REPO_FILE:-}" && ! -f "$CADDY_REPO_FILE" ]]; then
+  echo "[WARN] CADDY_REPO_FILE not found now: $CADDY_REPO_FILE (runtime Caddyfile may still be used)"
+fi
+
+COMPOSE_BASE=(docker compose -f "$COMPOSE_FILE")
+if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+  COMPOSE_BASE+=(-p "$COMPOSE_PROJECT_NAME")
+fi
+
+cd "$REPO_DIR"
 
 log "1) Sync repo (fast-forward only)"
 git fetch origin main --prune
@@ -624,11 +671,15 @@ else
   echo "Already up to date."
 fi
 
-log "2) Load external frontend env"
+log "2) Load external env"
 # shellcheck source=/dev/null
 . "$ENV_LOADER"
-: "${EXTERNAL_ENV_1:?EXTERNAL_ENV_1 missing in .env bridge}"
-echo "Loaded EXTERNAL_ENV_1=$EXTERNAL_ENV_1"
+if [[ -n "${REQUIRED_ENV_KEY:-}" ]]; then
+  if [[ -z "${!REQUIRED_ENV_KEY:-}" ]]; then
+    die "$REQUIRED_ENV_KEY missing after loading $ENV_LOADER"
+  fi
+  echo "Loaded $REQUIRED_ENV_KEY=${!REQUIRED_ENV_KEY}"
+fi
 
 detect_edge_runtime
 echo "Caddy edge owner: $EDGE_OWNER"
@@ -666,7 +717,7 @@ fi
 if [[ -z "$ACTIVE_COLOR" ]]; then
   ACTIVE_COLOR="$(get_active_from_caddy_file "$CADDY_TARGET_FILE" 2>/dev/null || true)"
 fi
-if [[ -z "$ACTIVE_COLOR" ]]; then
+if [[ -z "$ACTIVE_COLOR" && -n "${CADDY_REPO_FILE:-}" ]]; then
   ACTIVE_COLOR="$(get_active_from_caddy_file "$CADDY_REPO_FILE" 2>/dev/null || true)"
 fi
 if [[ -z "$ACTIVE_COLOR" ]]; then
@@ -687,14 +738,14 @@ echo "Active slot: $ACTIVE_COLOR ($ACTIVE_SVC:$ACTIVE_PORT)"
 echo "Deploy slot: $IDLE_COLOR ($IDLE_SVC:$IDLE_PORT)"
 
 log "3) Build + start idle slot only"
-docker compose -f "$COMPOSE_FILE" up -d --build --no-deps "$IDLE_SVC"
+compose up -d --build --no-deps "$IDLE_SVC"
 
 log "4) Wait idle slot ready"
 wait_idle_ready "$IDLE_SVC" "$IDLE_PORT"
 
 # Determine switch mode from target file first.
 SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_TARGET_FILE")"
-if [[ "$SWITCH_MODE" == "unknown" ]]; then
+if [[ "$SWITCH_MODE" == "unknown" && -n "${CADDY_REPO_FILE:-}" ]]; then
   SWITCH_MODE="$(get_proxy_mode_from_file "$CADDY_REPO_FILE")"
 fi
 
@@ -720,7 +771,7 @@ if [[ "$SWITCH_MODE" == "service" ]]; then
   if [[ "$EDGE_OWNER" == "docker" && -n "$CADDY_CONTAINER_NAME" ]]; then
     ensure_caddy_connected_to_service_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"
     if ! probe_service_from_caddy_networks "$IDLE_SVC" "$CADDY_CONTAINER_NAME"; then
-      err "Caddy network probe failed: cannot reach http://${IDLE_SVC}:8080 from shared Docker networks."
+      err "Caddy network probe failed: cannot reach http://${IDLE_SVC}:${UPSTREAM_CONTAINER_PORT}${HEALTH_PATH} from shared Docker networks."
       echo "Diagnostics (copy/paste):"
       echo "  docker inspect '$CADDY_CONTAINER_NAME' --format '{{json .NetworkSettings.Networks}}' | jq"
       echo "  docker compose -f '$COMPOSE_FILE' ps"
@@ -732,7 +783,7 @@ if [[ "$SWITCH_MODE" == "service" ]]; then
   fi
 fi
 
-log "6) Switch traffic in Caddy from $ACTIVE_COLOR -> $IDLE_COLOR (in-place, single target file)"
+log "6) Switch traffic in Caddy from $ACTIVE_COLOR -> $IDLE_COLOR (domain-scoped, in-place)"
 echo "Updating: $CADDY_TARGET_FILE"
 switch_target_file_in_place "$CADDY_TARGET_FILE" "$ACTIVE_COLOR" "$IDLE_COLOR" "$SWITCH_MODE"
 
@@ -747,7 +798,7 @@ log "7) Verify status"
 # 7a) Local direct slot check (required)
 LOCAL_IDLE_OK=0
 if command -v curl >/dev/null 2>&1; then
-  local_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 "http://127.0.0.1:${IDLE_PORT}/" || true)"
+  local_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 "http://127.0.0.1:${IDLE_PORT}${HEALTH_PATH}" || true)"
   if is_http_2xx_or_3xx "$local_code"; then
     LOCAL_IDLE_OK=1
   fi
@@ -772,7 +823,7 @@ if [[ "$PUBLIC_OK" -ne 1 && "$AUTO_REMEDY_502" == "1" && "$SWITCH_MODE" == "serv
     reload_caddy || true
     run_public_check_loop
   else
-    err "Auto-remedy probe failed: ${IDLE_SVC}:8080 still unreachable from Caddy network context."
+    err "Auto-remedy probe failed: ${IDLE_SVC}:${UPSTREAM_CONTAINER_PORT} still unreachable from Caddy network context."
   fi
 fi
 
@@ -793,7 +844,7 @@ else
   [[ -n "${PUBLIC_HEADERS:-}" ]] && { echo "--- Public headers ---"; echo "$PUBLIC_HEADERS" | sed -n '1,30p'; }
 
   echo "Diagnostics (copy/paste):"
-  echo "  curl -sS -o /dev/null -w 'idle slot HTTP %{http_code}\n' http://127.0.0.1:${IDLE_PORT}/"
+  echo "  curl -sS -o /dev/null -w 'idle slot HTTP %{http_code}\n' http://127.0.0.1:${IDLE_PORT}${HEALTH_PATH}"
   echo "  curl -ksSI '${PUBLIC_CHECK_URL}' | sed -n '1,30p'"
   [[ -n "$CADDY_CONTAINER_NAME" ]] && echo "  docker logs --tail=120 '$CADDY_CONTAINER_NAME'"
 
@@ -813,6 +864,6 @@ fi
 write_active_marker "$FINAL_ACTIVE_COLOR"
 
 log "8) Final status"
-docker compose -f "$COMPOSE_FILE" ps
+compose ps
 echo "Active slot is now: $FINAL_ACTIVE_COLOR"
 echo "Previous slot kept running for rollback: $FINAL_PREV_COLOR"
