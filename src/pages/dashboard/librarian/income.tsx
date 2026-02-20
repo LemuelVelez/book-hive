@@ -40,6 +40,7 @@ import { API_BASE } from "@/api/auth/route"
 import type { DamageReportDTO, DamageStatus, DamageSeverity } from "@/lib/damageReports"
 
 type StatusFilter = "paid" | "all" | FineStatus
+type MonthFilter = "all" | string // "YYYY-MM"
 
 type DamageReportRow = DamageReportDTO & {
     photoUrl?: string | null
@@ -104,6 +105,33 @@ function suggestedFineFromSeverity(severity?: DamageSeverity | null): number {
             return 300
         default:
             return 0
+    }
+}
+
+function getRowPaidDate(r: IncomeRow): string | null {
+    if (r.status === "paid") return (r.resolvedAt || r.updatedAt || r.createdAt || null) as any
+    return (r.createdAt || null) as any
+}
+
+function toMonthKey(dateStr?: string | null): string | null {
+    if (!dateStr) return null
+    const d = new Date(dateStr)
+    if (Number.isNaN(d.getTime())) return null
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, "0")
+    return `${y}-${m}`
+}
+
+function monthLabel(key: string) {
+    // key = YYYY-MM
+    const [yy, mm] = key.split("-")
+    const y = Number(yy)
+    const m = Number(mm)
+    if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return key
+    try {
+        return new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric" }).format(new Date(y, m - 1, 1))
+    } catch {
+        return key
     }
 }
 
@@ -283,6 +311,7 @@ export default function LibrarianIncomePage() {
 
     const [search, setSearch] = React.useState("")
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("paid")
+    const [monthFilter, setMonthFilter] = React.useState<MonthFilter>("all")
 
     const loadIncome = React.useCallback(async () => {
         setError(null)
@@ -330,7 +359,23 @@ export default function LibrarianIncomePage() {
         }
     }
 
-    const stats = React.useMemo(() => {
+    const monthOptions = React.useMemo(() => {
+        // Build options from PAID rows first (income), then include other rows if needed.
+        const set = new Set<string>()
+        for (const r of rows) {
+            const key = toMonthKey(getRowPaidDate(r))
+            if (key) set.add(key)
+        }
+        return Array.from(set).sort((a, b) => b.localeCompare(a)) // newest month first
+    }, [rows])
+
+    // If the currently selected month is no longer present, reset to all (e.g., after refresh)
+    React.useEffect(() => {
+        if (monthFilter === "all") return
+        if (!monthOptions.includes(monthFilter)) setMonthFilter("all")
+    }, [monthFilter, monthOptions])
+
+    const statsAll = React.useMemo(() => {
         let paidTotal = 0
         let paidCount = 0
         let activeTotal = 0
@@ -361,13 +406,22 @@ export default function LibrarianIncomePage() {
             }
         }
 
+        if (monthFilter !== "all") {
+            list = list.filter((r) => {
+                const key = toMonthKey(getRowPaidDate(r))
+                return key === monthFilter
+            })
+        }
+
         const q = search.trim().toLowerCase()
         if (q) {
             list = list.filter((r) => {
                 const anyRow = r as any
+                // Names first for user-friendly searching
                 const haystack =
-                    `${r.id} ${r.studentName ?? ""} ${r.studentEmail ?? ""} ${r.studentId ?? ""} ` +
-                    `${r.bookTitle ?? ""} ${r.bookId ?? ""} ${r.reason ?? ""} ${r.borrowRecordId ?? ""} ` +
+                    `${r.studentName ?? ""} ${r.studentEmail ?? ""} ${r.studentId ?? ""} ` +
+                    `${r.bookTitle ?? ""} ${r.reason ?? ""} ` +
+                    `${r.id} ${r.bookId ?? ""} ${r.borrowRecordId ?? ""} ` +
                     `${anyRow.damageReportId ?? ""} ${anyRow.damageNotes ?? ""}`
                 return haystack.toLowerCase().includes(q)
             })
@@ -375,11 +429,31 @@ export default function LibrarianIncomePage() {
 
         // Sort newest first by resolvedAt (preferred), else createdAt
         return list.sort((a, b) => {
-            const da = (a.resolvedAt || a.createdAt || "").toString()
-            const db = (b.resolvedAt || b.createdAt || "").toString()
+            const da = (getRowPaidDate(a) || "").toString()
+            const db = (getRowPaidDate(b) || "").toString()
             return db.localeCompare(da)
         })
-    }, [rows, search, statusFilter])
+    }, [rows, search, statusFilter, monthFilter])
+
+    const statsView = React.useMemo(() => {
+        let paidTotal = 0
+        let paidCount = 0
+        let activeTotal = 0
+        let activeCount = 0
+
+        for (const r of filtered) {
+            const amt = normalizeAmount(r.amount)
+            if (r.status === "paid") {
+                paidCount += 1
+                if (amt > 0) paidTotal += amt
+            } else if (r.status === "active") {
+                activeCount += 1
+                if (amt > 0) activeTotal += amt
+            }
+        }
+
+        return { paidTotal, paidCount, activeTotal, activeCount, totalCount: filtered.length }
+    }, [filtered])
 
     const cellScrollbarClasses =
         "overflow-x-auto whitespace-nowrap " +
@@ -399,7 +473,7 @@ export default function LibrarianIncomePage() {
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Income Records</h2>
                         <p className="text-xs text-white/70">
-                            Shows fines collected by the library, including the borrowed book and user who paid.
+                            Track collected income from paid fines and paid damage fees (names shown first for clarity).
                         </p>
                     </div>
                 </div>
@@ -407,13 +481,18 @@ export default function LibrarianIncomePage() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm text-white/70">
                     <div className="flex flex-col items-start sm:items-end">
                         <span>
-                            Total collected (Paid):{" "}
+                            Total collected (All paid):{" "}
                             <span className="font-semibold text-emerald-200">
-                                {peso(stats.paidTotal)} ({stats.paidCount})
+                                {peso(statsAll.paidTotal)} ({statsAll.paidCount})
                             </span>
                         </span>
                         <span className="text-[11px] text-white/60">
-                            Outstanding (Active): {peso(stats.activeTotal)} ({stats.activeCount})
+                            In view:{" "}
+                            <span className="text-emerald-200 font-semibold">
+                                {peso(statsView.paidTotal)} ({statsView.paidCount})
+                            </span>
+                            <span className="text-white/60"> · </span>
+                            Outstanding: {peso(statsView.activeTotal)} ({statsView.activeCount})
                         </span>
                     </div>
 
@@ -446,7 +525,7 @@ export default function LibrarianIncomePage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search user, book, fine ID…"
+                                    placeholder="Search name, email, book title, notes…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>
@@ -461,6 +540,26 @@ export default function LibrarianIncomePage() {
                                         <SelectItem value="all">All statuses</SelectItem>
                                         <SelectItem value="active">Active</SelectItem>
                                         <SelectItem value="cancelled">Cancelled</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="w-full md:w-56">
+                                <Select
+                                    value={monthFilter}
+                                    onValueChange={(v) => setMonthFilter(v as MonthFilter)}
+                                    disabled={loading || monthOptions.length === 0}
+                                >
+                                    <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                                        <SelectValue placeholder="Month" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-white border-white/10">
+                                        <SelectItem value="all">All months</SelectItem>
+                                        {monthOptions.map((m) => (
+                                            <SelectItem key={m} value={m}>
+                                                {monthLabel(m)}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -481,7 +580,7 @@ export default function LibrarianIncomePage() {
                         <div className="py-10 text-center text-sm text-white/70">
                             No income records matched your filters.
                             <br />
-                            <span className="text-xs opacity-80">Try clearing the search or changing the status filter.</span>
+                            <span className="text-xs opacity-80">Try clearing search, changing status, or selecting “All months”.</span>
                         </div>
                     ) : (
                         <Table>
@@ -491,65 +590,59 @@ export default function LibrarianIncomePage() {
 
                             <TableHeader>
                                 <TableRow className="border-white/10">
-                                    <TableHead className="w-[90px] text-xs font-semibold text-white/70">Fine ID</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">User</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Book borrowed</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Status</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Amount</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Paid / Date</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Notes</TableHead>
+                                    <TableHead className="w-[110px] text-xs font-semibold text-white/70">Reference</TableHead>
                                 </TableRow>
                             </TableHeader>
 
                             <TableBody>
                                 {filtered.map((r) => {
                                     const amount = normalizeAmount(r.amount)
-                                    const paidDate = r.status === "paid" ? (r.resolvedAt || r.updatedAt || r.createdAt) : r.createdAt
+                                    const paidDate = getRowPaidDate(r)
 
-                                    const bookText =
-                                        r.bookTitle ||
-                                        (r.bookId ? `Book #${r.bookId}` : "—")
+                                    // Prioritize names & titles for UX (IDs only as secondary)
+                                    const userPrimary =
+                                        (r.studentName && String(r.studentName).trim()) ||
+                                        (r.studentEmail && String(r.studentEmail).trim()) ||
+                                        "Unknown user"
 
+                                    const userMeta: string[] = []
+                                    if (r.studentId) userMeta.push(`Student ID: ${r.studentId}`)
+                                    if (r.studentEmail && userPrimary !== r.studentEmail) userMeta.push(String(r.studentEmail))
+                                    if (!r.studentId && !r.studentEmail && r.userId) userMeta.push(`User ID: ${r.userId}`)
+
+                                    const bookPrimary = (r.bookTitle && String(r.bookTitle).trim()) || "Unknown book"
                                     const sourceText =
-                                        r._source === "damage" || (r as any).damageReportId
-                                            ? "Damage"
-                                            : "Borrow fine"
+                                        r._source === "damage" || (r as any).damageReportId ? "Damage" : "Borrow fine"
+
+                                    const bookMeta: string[] = []
+                                    if (r.bookId) bookMeta.push(`Book ID: ${r.bookId}`)
+                                    if (r.borrowRecordId) bookMeta.push(`Borrow #: ${r.borrowRecordId}`)
+                                    bookMeta.push(`Type: ${sourceText}`)
 
                                     return (
                                         <TableRow
                                             key={`${r.id}-${r._source ?? "fine"}`}
                                             className="border-white/5 hover:bg-white/5 transition-colors"
                                         >
-                                            <TableCell className="text-xs opacity-80">{r.id}</TableCell>
-
                                             <TableCell className="text-sm">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className="font-medium">
-                                                        {r.studentName || r.studentEmail || "—"}
-                                                    </span>
-                                                    {(r.studentId || r.studentEmail) && (
-                                                        <span className="text-xs text-white/70">
-                                                            {r.studentId && (
-                                                                <>
-                                                                    ID: {r.studentId}
-                                                                    {r.studentEmail && " · "}
-                                                                </>
-                                                            )}
-                                                            {r.studentEmail}
-                                                        </span>
+                                                    <span className="font-medium">{userPrimary}</span>
+                                                    {userMeta.length > 0 && (
+                                                        <span className="text-xs text-white/70">{userMeta.join(" · ")}</span>
                                                     )}
                                                 </div>
                                             </TableCell>
 
-                                            <TableCell className={"text-sm w-[140px] max-w-60 " + cellScrollbarClasses}>
+                                            <TableCell className={"text-sm w-[170px] max-w-72 " + cellScrollbarClasses}>
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span>{bookText}</span>
-                                                    {r.borrowRecordId && (
-                                                        <span className="text-[11px] text-white/60">
-                                                            Borrow #{r.borrowRecordId}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-[11px] text-white/60">Type: {sourceText}</span>
+                                                    <span>{bookPrimary}</span>
+                                                    <span className="text-[11px] text-white/60">{bookMeta.join(" · ")}</span>
                                                 </div>
                                             </TableCell>
 
@@ -561,6 +654,15 @@ export default function LibrarianIncomePage() {
 
                                             <TableCell className={"text-xs text-white/70 w-[180px] max-w-[320px] " + cellScrollbarClasses}>
                                                 {r.reason ? r.reason : "—"}
+                                            </TableCell>
+
+                                            <TableCell className="text-xs text-white/60">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="opacity-80">#{r.id}</span>
+                                                    {monthFilter !== "all" && (
+                                                        <span className="text-[11px] text-white/50">{monthLabel(monthFilter)}</span>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     )
