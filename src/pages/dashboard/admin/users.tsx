@@ -31,6 +31,9 @@ import {
     ShieldAlert,
     Eye,
     EyeOff,
+    KeyRound,
+    Wand2,
+    Mail,
 } from "lucide-react";
 import {
     Select,
@@ -56,6 +59,7 @@ import {
     disapproveUserById,
     deleteUserById,
     createUser,
+    sendLoginCredentialsById,
 } from "@/lib/authentication";
 import { ROUTES } from "@/api/auth/route";
 
@@ -109,7 +113,7 @@ function approvalBadgeClasses(approved: boolean) {
 const ROLE_OPTIONS: Role[] = ["student", "other", "faculty", "librarian", "admin"];
 
 type BusyState =
-    | { id: string; action: "approve" | "disapprove" | "delete" | "role" }
+    | { id: string; action: "approve" | "disapprove" | "delete" | "role" | "credentials" }
     | null;
 
 type ConfirmState =
@@ -264,6 +268,21 @@ async function updateUserRoleRoleOnly(id: string, role: Role) {
     return data;
 }
 
+function genPasswordReadable(len = 12) {
+    try {
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        const bytes = new Uint8Array(Math.max(16, len));
+        window.crypto.getRandomValues(bytes);
+        let out = "";
+        for (let i = 0; i < len; i++) out += chars[bytes[i] % chars.length];
+        // add a tiny complexity suffix (still readable)
+        return `${out}A1!`;
+    } catch {
+        // fallback
+        return `Temp${Math.random().toString(36).slice(2, 10)}A1!`;
+    }
+}
+
 export default function AdminUsersPage() {
     const { user: sessionUser } = useSession();
     const selfId = sessionUser?.id ? String(sessionUser.id) : "";
@@ -299,8 +318,18 @@ export default function AdminUsersPage() {
 
     const [cApproveNow, setCApproveNow] = React.useState(true);
 
+    // ✅ NEW: send credentials on create
+    const [cSendCredentials, setCSendCredentials] = React.useState(true);
+
     // Confirm dialog state (delete / role change)
     const [confirm, setConfirm] = React.useState<ConfirmState>(null);
+
+    // ✅ NEW: credentials dialog (send/resend)
+    const [credOpen, setCredOpen] = React.useState(false);
+    const [credUser, setCredUser] = React.useState<UserRowDTO | null>(null);
+    const [credUseCustomPassword, setCredUseCustomPassword] = React.useState(false);
+    const [credPassword, setCredPassword] = React.useState("");
+    const [showCredPassword, setShowCredPassword] = React.useState(false);
 
     React.useEffect(() => {
         // keep accountType sensible by default when changing role
@@ -321,6 +350,13 @@ export default function AdminUsersPage() {
         setCCourse("");
         setCYearLevel("");
         setCApproveNow(true);
+        setCSendCredentials(true);
+    };
+
+    const resetCredForm = () => {
+        setCredUseCustomPassword(false);
+        setCredPassword("");
+        setShowCredPassword(false);
     };
 
     const loadUsers = React.useCallback(async () => {
@@ -493,6 +529,7 @@ export default function AdminUsersPage() {
                 studentId: cAccountType === "student" ? cStudentId.trim() : undefined,
                 course: cAccountType === "student" ? cCourse.trim() : undefined,
                 yearLevel: cAccountType === "student" ? cYearLevel.trim() : undefined,
+                sendLoginCredentials: cSendCredentials,
             });
 
             // If backend ignores isApproved on create, do best-effort approve after creation.
@@ -504,7 +541,15 @@ export default function AdminUsersPage() {
                 }
             }
 
-            toast.success("User created");
+            toast.success(
+                cSendCredentials ? "User created & credentials emailed" : "User created",
+                {
+                    description: cSendCredentials
+                        ? "If the user didn’t receive it, use the key button in the user row to resend."
+                        : "Credentials were not emailed. Use the key button in the user row to send them anytime.",
+                }
+            );
+
             setCreateOpen(false);
             resetCreateForm();
             await loadUsers();
@@ -512,6 +557,48 @@ export default function AdminUsersPage() {
             toast.error("Create failed", { description: e?.message || "Unknown error" });
         } finally {
             setCreating(false);
+        }
+    };
+
+    const openCredentialsDialog = (u: UserRowDTO) => {
+        setCredUser(u);
+        resetCredForm();
+        setCredOpen(true);
+    };
+
+    const submitSendCredentials = async () => {
+        if (!credUser) return;
+
+        if (credUseCustomPassword) {
+            const p = credPassword.trim();
+            if (!p) {
+                toast.error("Validation error", { description: "Enter a temporary password or turn off custom password." });
+                return;
+            }
+            if (p.length < 8) {
+                toast.error("Validation error", { description: "Password must be at least 8 characters." });
+                return;
+            }
+        }
+
+        setBusy({ id: credUser.id, action: "credentials" });
+        try {
+            await sendLoginCredentialsById(
+                credUser.id,
+                credUseCustomPassword ? { password: credPassword.trim() } : undefined
+            );
+
+            toast.success("Login credentials sent", {
+                description: `An email was sent to ${credUser.email}.`,
+            });
+
+            setCredOpen(false);
+            setCredUser(null);
+            resetCredForm();
+        } catch (e: any) {
+            toast.error("Send failed", { description: e?.message || "Unknown error" });
+        } finally {
+            setBusy(null);
         }
     };
 
@@ -602,7 +689,7 @@ export default function AdminUsersPage() {
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Label htmlFor="c-password">Password</Label>
+                                    <Label htmlFor="c-password">Temporary password</Label>
                                     <div className="relative">
                                         <Input
                                             id="c-password"
@@ -610,23 +697,39 @@ export default function AdminUsersPage() {
                                             value={cPassword}
                                             onChange={(e) => setCPassword(e.target.value)}
                                             placeholder="At least 8 characters"
-                                            className="bg-slate-900/70 border-white/10 text-white pr-10"
+                                            className="bg-slate-900/70 border-white/10 text-white pr-20"
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowCreatePassword((s) => !s)}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white"
-                                            aria-label={showCreatePassword ? "Hide password" : "Show password"}
-                                        >
-                                            {showCreatePassword ? (
-                                                <EyeOff className="h-4 w-4" />
-                                            ) : (
-                                                <Eye className="h-4 w-4" />
-                                            )}
-                                        </button>
+                                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setCPassword(genPasswordReadable())}
+                                                className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10"
+                                                aria-label="Generate password"
+                                                title="Generate password"
+                                            >
+                                                <Wand2 className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setShowCreatePassword((s) => !s)}
+                                                className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10"
+                                                aria-label={showCreatePassword ? "Hide password" : "Show password"}
+                                                title={showCreatePassword ? "Hide password" : "Show password"}
+                                            >
+                                                {showCreatePassword ? (
+                                                    <EyeOff className="h-4 w-4" />
+                                                ) : (
+                                                    <Eye className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        </div>
                                     </div>
                                     <p className="text-xs text-white/50">
-                                        Tip: Use a temporary password and let the user change it later.
+                                        Tip: Use a temporary password and let the user change it after logging in.
                                     </p>
                                 </div>
 
@@ -709,15 +812,39 @@ export default function AdminUsersPage() {
                                     </div>
                                 )}
 
-                                <div className="flex items-start gap-2">
-                                    <Checkbox
-                                        id="c-approve"
-                                        checked={cApproveNow}
-                                        onCheckedChange={(v) => setCApproveNow(v === true)}
-                                    />
-                                    <Label htmlFor="c-approve" className="text-sm text-white/80">
-                                        Approve immediately
-                                    </Label>
+                                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                    <div className="flex items-center gap-2 text-xs text-white/70">
+                                        <Mail className="h-4 w-4" />
+                                        Email delivery
+                                    </div>
+
+                                    <div className="mt-3 flex items-start gap-2">
+                                        <Checkbox
+                                            id="c-send-credentials"
+                                            checked={cSendCredentials}
+                                            onCheckedChange={(v) => setCSendCredentials(v === true)}
+                                        />
+                                        <div className="grid gap-1">
+                                            <Label htmlFor="c-send-credentials" className="text-sm text-white/80">
+                                                Send login credentials to the user
+                                            </Label>
+                                            <p className="text-xs text-white/55">
+                                                Sends an email containing their login email + temporary password (and a verify-email link if needed).
+                                                You can resend anytime from the user row using the key button.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 flex items-start gap-2">
+                                        <Checkbox
+                                            id="c-approve"
+                                            checked={cApproveNow}
+                                            onCheckedChange={(v) => setCApproveNow(v === true)}
+                                        />
+                                        <Label htmlFor="c-approve" className="text-sm text-white/80">
+                                            Approve immediately
+                                        </Label>
+                                    </div>
                                 </div>
                             </div>
 
@@ -837,6 +964,7 @@ export default function AdminUsersPage() {
                                     const isBusyDisapprove = busy?.id === u.id && busy?.action === "disapprove";
                                     const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
                                     const isBusyRole = busy?.id === u.id && busy?.action === "role";
+                                    const isBusyCred = busy?.id === u.id && busy?.action === "credentials";
                                     const anyBusyForRow = busy?.id === u.id;
 
                                     const currentRole = u.role;
@@ -922,6 +1050,24 @@ export default function AdminUsersPage() {
 
                                             <TableCell className="text-right">
                                                 <div className="inline-flex items-center gap-2">
+                                                    {/* Credentials (send/resend) */}
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                                        onClick={() => openCredentialsDialog(u)}
+                                                        disabled={anyBusyForRow}
+                                                        title="Send / resend login credentials"
+                                                        aria-label="Send / resend login credentials"
+                                                    >
+                                                        {isBusyCred ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <KeyRound className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+
                                                     {/* Save role */}
                                                     <Button
                                                         type="button"
@@ -1082,6 +1228,143 @@ export default function AdminUsersPage() {
                                 Change role
                             </Button>
                         )}
+                    </DialogFooterUI>
+                </DialogContent>
+            </Dialog>
+
+            {/* ✅ Credentials dialog */}
+            <Dialog
+                open={credOpen}
+                onOpenChange={(o) => {
+                    setCredOpen(o);
+                    if (!o) {
+                        setCredUser(null);
+                        resetCredForm();
+                    }
+                }}
+            >
+                <DialogContent className="bg-slate-900 text-white border-white/10">
+                    <DialogHeader>
+                        <DialogTitle className="text-white flex items-center gap-2">
+                            <KeyRound className="h-5 w-5" />
+                            Send / resend login credentials
+                        </DialogTitle>
+                        <DialogDescription className="text-white/70">
+                            This will email the user their login credentials. Sending credentials will reset the user’s password.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-4">
+                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                            <div className="text-xs text-white/60">User</div>
+                            <div className="mt-1 text-sm font-semibold text-white">
+                                {credUser?.fullName || "—"}
+                            </div>
+                            <div className="mt-1 text-sm text-white/80">{credUser?.email || "—"}</div>
+                        </div>
+
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                            <div className="inline-flex items-center gap-2">
+                                <ShieldAlert className="h-4 w-4" />
+                                <span className="font-medium">Important</span>
+                            </div>
+                            <p className="mt-1 text-xs text-amber-200/90">
+                                Sending credentials will overwrite the user’s existing password.
+                            </p>
+                        </div>
+
+                        <div className="flex items-start gap-2">
+                            <Checkbox
+                                id="cred-custom"
+                                checked={credUseCustomPassword}
+                                onCheckedChange={(v) => setCredUseCustomPassword(v === true)}
+                            />
+                            <div className="grid gap-1">
+                                <Label htmlFor="cred-custom" className="text-sm text-white/80">
+                                    Set a specific temporary password (optional)
+                                </Label>
+                                <p className="text-xs text-white/55">
+                                    If off, the system will generate a new temporary password automatically.
+                                </p>
+                            </div>
+                        </div>
+
+                        {credUseCustomPassword ? (
+                            <div className="grid gap-2">
+                                <Label htmlFor="cred-pass">Temporary password</Label>
+                                <div className="relative">
+                                    <Input
+                                        id="cred-pass"
+                                        type={showCredPassword ? "text" : "password"}
+                                        value={credPassword}
+                                        onChange={(e) => setCredPassword(e.target.value)}
+                                        placeholder="At least 8 characters"
+                                        className="bg-slate-900/70 border-white/10 text-white pr-20"
+                                    />
+                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setCredPassword(genPasswordReadable())}
+                                            className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10"
+                                            aria-label="Generate password"
+                                            title="Generate password"
+                                        >
+                                            <Wand2 className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setShowCredPassword((s) => !s)}
+                                            className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10"
+                                            aria-label={showCredPassword ? "Hide password" : "Show password"}
+                                            title={showCredPassword ? "Hide password" : "Show password"}
+                                        >
+                                            {showCredPassword ? (
+                                                <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                                <Eye className="h-4 w-4" />
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-white/55">
+                                    The user should change this password immediately after logging in.
+                                </p>
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <DialogFooterUI className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCredOpen(false)}
+                            className="border-white/15 bg-black/50 text-white hover:text-white hover:bg-white/10"
+                            disabled={!!busy}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+                            disabled={!!busy || !credUser}
+                            onClick={submitSendCredentials}
+                        >
+                            {busy?.action === "credentials" ? (
+                                <span className="inline-flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Sending…
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-2">
+                                    <Mail className="h-4 w-4" />
+                                    Send credentials
+                                </span>
+                            )}
+                        </Button>
                     </DialogFooterUI>
                 </DialogContent>
             </Dialog>

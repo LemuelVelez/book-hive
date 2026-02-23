@@ -64,6 +64,10 @@ export const ROUTES = {
     disapprove: (id: string) => api(`/users/${encodeURIComponent(id)}/disapprove`), // PATCH
     updateRole: (id: string) => api(`/users/${encodeURIComponent(id)}/role`), // PATCH ✅ NEW
     delete: (id: string) => api(`/users/${encodeURIComponent(id)}`), // DELETE
+
+    // ✅ NEW: send/resend login credentials (admin)
+    sendLoginCredentials: (id: string) =>
+      api(`/users/${encodeURIComponent(id)}/send-login-credentials`), // POST
   },
   support: {
     ticket: api("/support/ticket"),

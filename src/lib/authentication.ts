@@ -90,21 +90,15 @@ function normalizeUserDTO(u: any): UserDTO {
    * Keep accountType as-is (student/other in many systems),
    * but DO NOT rely on it for routing decisions.
    */
-  const accountType = normalizeRole(
-    u?.accountType ?? u?.account_type ?? "student"
-  );
+  const accountType = normalizeRole(u?.accountType ?? u?.account_type ?? "student");
 
   /**
    * ✅ role is the effective authorization role.
    * IMPORTANT: prioritize `u.role` over accountType.
    */
-  const role = normalizeRole(
-    u?.role ?? u?.accountType ?? u?.account_type ?? "student"
-  );
+  const role = normalizeRole(u?.role ?? u?.accountType ?? u?.account_type ?? "student");
 
-  const isEmailVerified = Boolean(
-    u?.isEmailVerified ?? u?.is_email_verified ?? false
-  );
+  const isEmailVerified = Boolean(u?.isEmailVerified ?? u?.is_email_verified ?? false);
 
   const isApproved = u?.isApproved ?? u?.is_approved ?? undefined;
   const approvedAt = (u?.approvedAt ?? u?.approved_at ?? null) as string | null;
@@ -141,9 +135,7 @@ function normalizeUserListItem(u: any): UserListItemDTO | null {
   const fullName = String(u.fullName ?? u.full_name ?? "").trim();
 
   // keep list item compatible, but still normalize
-  const accountType = normalizeRole(
-    u.accountType ?? u.account_type ?? u.role ?? "student"
-  );
+  const accountType = normalizeRole(u.accountType ?? u.account_type ?? u.role ?? "student");
 
   const isApproved = Boolean(u.isApproved ?? u.is_approved ?? false);
   const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
@@ -162,10 +154,7 @@ function normalizeUserListItem(u: any): UserListItemDTO | null {
   };
 }
 
-async function requestJSON<T = unknown>(
-  url: string,
-  init: FetchInit = {}
-): Promise<T> {
+async function requestJSON<T = unknown>(url: string, init: FetchInit = {}): Promise<T> {
   const { asFormData, body, headers, ...rest } = init;
 
   const finalInit: RequestInit = {
@@ -190,7 +179,8 @@ async function requestJSON<T = unknown>(
     const details = getErrorMessage(e);
     const tail = details ? ` Details: ${details}` : "";
     throw new Error(
-      `Cannot reach the API (${API_BASE}). Is the server running on port 5000 and allowing ${typeof window !== "undefined" ? window.location.origin : "this origin"
+      `Cannot reach the API (${API_BASE}). Is the server running on port 5000 and allowing ${
+        typeof window !== "undefined" ? window.location.origin : "this origin"
       }?${tail}`
     );
   }
@@ -350,11 +340,9 @@ export async function updateMyProfile(payload: UpdateMyProfilePayload) {
     Object.prototype.hasOwnProperty.call(payload, "yearLevel") ||
     Object.prototype.hasOwnProperty.call(payload, "year_level");
 
-  const desiredStudentId =
-    payload.studentId !== undefined ? payload.studentId : payload.student_id;
+  const desiredStudentId = payload.studentId !== undefined ? payload.studentId : payload.student_id;
 
-  const desiredYearLevel =
-    payload.yearLevel !== undefined ? payload.yearLevel : payload.year_level;
+  const desiredYearLevel = payload.yearLevel !== undefined ? payload.yearLevel : payload.year_level;
 
   // Build camelCase body first (most common for JSON APIs)
   const bodyCamel: any = {};
@@ -378,10 +366,8 @@ export async function updateMyProfile(payload: UpdateMyProfilePayload) {
 
     // If server ignored studentId/yearLevel (common mismatch: expects snake_case),
     // retry ONLY those fields using snake_case to ensure they persist.
-    const needStudentRetry =
-      hasStudentId && !sameNullable(r1.user.studentId, desiredStudentId);
-    const needYearRetry =
-      hasYearLevel && !sameNullable(r1.user.yearLevel, desiredYearLevel);
+    const needStudentRetry = hasStudentId && !sameNullable(r1.user.studentId, desiredStudentId);
+    const needYearRetry = hasYearLevel && !sameNullable(r1.user.yearLevel, desiredYearLevel);
 
     if (needStudentRetry || needYearRetry) {
       const bodySnake: any = {};
@@ -446,21 +432,13 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 export async function listUsers(): Promise<UserListItemDTO[]> {
   const data = await requestJSON<any>(ROUTES.users.list, { method: "GET" });
-  const arr: any[] = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.users)
-      ? data.users
-      : [];
+  const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
   return arr.map(normalizeUserListItem).filter(Boolean) as UserListItemDTO[];
 }
 
 export async function listPendingUsers(): Promise<UserListItemDTO[]> {
   const data = await requestJSON<any>(ROUTES.users.pending, { method: "GET" });
-  const arr: any[] = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.users)
-      ? data.users
-      : [];
+  const arr: any[] = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
   return arr.map(normalizeUserListItem).filter(Boolean) as UserListItemDTO[];
 }
 
@@ -499,6 +477,12 @@ export type CreateUserPayload = {
   course?: string;
   yearLevel?: string;
   isApproved?: boolean;
+
+  /**
+   * ✅ If false, backend should NOT email login credentials on create.
+   * Default behavior in backend is true when omitted.
+   */
+  sendLoginCredentials?: boolean;
 };
 
 export async function createUser(payload: CreateUserPayload): Promise<UserDTO> {
@@ -519,4 +503,17 @@ export async function updateUserRoleById(id: string, role: Role): Promise<UserDT
 
   const user = data?.user ?? data;
   return normalizeUserDTO(user);
+}
+
+/* ---------------- admin send/resend login credentials ---------------- */
+
+export async function sendLoginCredentialsById(
+  id: string,
+  opts?: { password?: string }
+) {
+  type Resp = JsonOk<{ message?: string }>;
+  return requestJSON<Resp>(ROUTES.users.sendLoginCredentials(id), {
+    method: "POST",
+    body: opts?.password ? { password: opts.password } : {},
+  });
 }
