@@ -1,8 +1,0 @@
-{
-  email admin@jrmsu-tc.cloud
-}
-
-bookhive.jrmsu-tc.cloud {
-  encode zstd gzip
-  reverse_proxy bookhive-green:8080
-}

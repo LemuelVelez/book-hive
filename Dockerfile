@@ -1,35 +1,43 @@
-# ---- Build stage ----
-FROM node:20-alpine AS build
+# syntax=docker/dockerfile:1
 
+############################
+# 1) Install dependencies
+############################
+FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Optional: allow setting Vite env at build-time in Coolify (Build Args)
-# Example Build Arg key: VITE_API_BASE_URL
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
-
-# Install deps (prefer lockfile when available)
+# Copy only package files first for better caching
 COPY package.json ./
-# If you have a lockfile, uncomment the next line and make sure it's committed:
-# COPY package-lock.json ./
+# If you have a lockfile, copy it too (any of these)
+COPY package-lock.json* ./
+COPY npm-shrinkwrap.json* ./
 
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# Install deps (uses npm ci if lockfile exists)
+RUN if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else npm install; fi
 
-# Copy app source and build
+############################
+# 2) Build the app
+############################
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Build (your script runs: tsc -b && vite build)
 RUN npm run build
 
+############################
+# 3) Serve with Nginx
+############################
+FROM nginx:1.27-alpine AS runner
 
-# ---- Runtime stage (static) ----
-FROM nginx:1.27-alpine AS runtime
-
-# SPA-friendly Nginx config (React Router refresh support)
+# Replace default nginx site config
+RUN rm -f /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built assets
+# Copy built site
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
-
-# Keep nginx in foreground
 CMD ["nginx", "-g", "daemon off;"]
