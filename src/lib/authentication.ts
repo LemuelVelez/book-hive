@@ -470,7 +470,19 @@ export async function deleteUserById(id: string) {
 export type CreateUserPayload = {
   fullName: string;
   email: string;
-  password: string;
+
+  /**
+   * If omitted and autoGeneratePassword is true, backend will generate a temporary password.
+   * If provided, must be at least 8 chars.
+   */
+  password?: string;
+
+  /**
+   * ✅ Optional: instruct backend to generate a temporary password if password is missing.
+   * Frontend can still send a generated password value (recommended) so admin can see it.
+   */
+  autoGeneratePassword?: boolean;
+
   role: Role;
   accountType?: Role;
   studentId?: string;
@@ -485,14 +497,38 @@ export type CreateUserPayload = {
   sendLoginCredentials?: boolean;
 };
 
-export async function createUser(payload: CreateUserPayload): Promise<UserDTO> {
-  const data = await requestJSON<any>(ROUTES.users.create, {
+export type CreateUserResult = {
+  user: UserDTO;
+  credentials?: {
+    requested: boolean;
+    sent: boolean;
+    error?: string | null;
+    passwordGenerated?: boolean;
+  };
+};
+
+function normalizeCreateCredentials(raw: any): CreateUserResult["credentials"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  return {
+    requested: Boolean(raw.requested),
+    sent: Boolean(raw.sent),
+    error: raw.error ? String(raw.error) : null,
+    passwordGenerated: raw.passwordGenerated === undefined ? undefined : Boolean(raw.passwordGenerated),
+  };
+}
+
+export async function createUser(payload: CreateUserPayload): Promise<CreateUserResult> {
+  type Resp = JsonOk<{ user: any; credentials?: any }>;
+  const data = await requestJSON<Resp>(ROUTES.users.create, {
     method: "POST",
     body: payload as any,
   });
 
   const user = data?.user ?? data;
-  return normalizeUserDTO(user);
+  return {
+    user: normalizeUserDTO(user),
+    credentials: normalizeCreateCredentials((data as any)?.credentials),
+  };
 }
 
 export async function updateUserRoleById(id: string, role: Role): Promise<UserDTO> {
@@ -507,11 +543,8 @@ export async function updateUserRoleById(id: string, role: Role): Promise<UserDT
 
 /* ---------------- admin send/resend login credentials ---------------- */
 
-export async function sendLoginCredentialsById(
-  id: string,
-  opts?: { password?: string }
-) {
-  type Resp = JsonOk<{ message?: string }>;
+export async function sendLoginCredentialsById(id: string, opts?: { password?: string }) {
+  type Resp = JsonOk<{ message?: string; passwordGenerated?: boolean }>;
   return requestJSON<Resp>(ROUTES.users.sendLoginCredentials(id), {
     method: "POST",
     body: opts?.password ? { password: opts.password } : {},
