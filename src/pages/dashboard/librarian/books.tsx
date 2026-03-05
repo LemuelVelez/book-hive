@@ -67,6 +67,7 @@ export default function LibrarianBooksPage() {
     const [placeOfPublication, setPlaceOfPublication] = React.useState("");
     const [publisher, setPublisher] = React.useState("");
 
+    // NOTE: Pages is now free-text (can be numeric, roman numerals, "Preliminary", etc.)
     const [pages, setPages] = React.useState("");
     const [otherDetails, setOtherDetails] = React.useState("");
     const [dimensions, setDimensions] = React.useState("");
@@ -110,6 +111,7 @@ export default function LibrarianBooksPage() {
     const [editPlaceOfPublication, setEditPlaceOfPublication] = React.useState("");
     const [editPublisher, setEditPublisher] = React.useState("");
 
+    // NOTE: Pages is now free-text (can be numeric, roman numerals, "Preliminary", etc.)
     const [editPages, setEditPages] = React.useState("");
     const [editOtherDetails, setEditOtherDetails] = React.useState("");
     const [editDimensions, setEditDimensions] = React.useState("");
@@ -272,22 +274,45 @@ export default function LibrarianBooksPage() {
         return { ok: true, value: option };
     };
 
+    const resolvePagesValue = (raw: string): number | string | null => {
+        const v = raw.trim();
+        if (!v) return null;
+
+        // If purely numeric, keep it numeric (backward compatible).
+        const n = parsePositiveIntOrNull(v);
+        if (n !== null) return n;
+
+        // Otherwise keep as free text (e.g., "xii, 200 p.", "Preliminary").
+        return v;
+    };
+
     const handleCreateBook = async () => {
         setFormError("");
 
+        const resolvedCallNo = callNumber.trim();
+        const resolvedAccNo = accessionNumber.trim();
         const resolvedTitle = title.trim();
+        const resolvedSubtitle = subtitle.trim();
         const resolvedAuthor = author.trim();
         const resolvedSubjects = subjects.trim();
 
-        if (!resolvedTitle) {
-            const msg = "Title is required.";
+        // Order-based validation: Call No -> Acc No -> Title -> Subtitle -> Pub Year -> ...
+        if (!resolvedCallNo) {
+            const msg = "Call number is required.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        if (!resolvedAuthor) {
-            const msg = "Author is required.";
+        if (!resolvedAccNo) {
+            const msg = "Accession number is required.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (!resolvedTitle) {
+            const msg = "Title is required.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
@@ -301,15 +326,33 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        if (!barcode.trim()) {
-            const msg = "Barcode is required.";
+        if (!resolvedAuthor) {
+            const msg = "Author is required.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        if (!callNumber.trim()) {
-            const msg = "Call number is required.";
+        const resolvedPubPlace = placeOfPublication.trim();
+        if (!resolvedPubPlace) {
+            const msg = "Place of publication is required.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const resolvedPublisher = publisher.trim();
+        if (!resolvedPublisher) {
+            const msg = "Publisher is required.";
+            setFormError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const pagesValue = resolvePagesValue(pages);
+
+        if (!barcode.trim()) {
+            const msg = "Barcode is required.";
             setFormError(msg);
             toast.error("Validation error", { description: msg });
             return;
@@ -338,14 +381,6 @@ export default function LibrarianBooksPage() {
         }
         const borrowDaysInt = Math.floor(borrowDaysNum);
 
-        const pagesNum = pages.trim() ? parsePositiveIntOrNull(pages) : null;
-        if (pages.trim() && pagesNum === null) {
-            const msg = "Pages must be a positive number.";
-            setFormError(msg);
-            toast.error("Validation error", { description: msg });
-            return;
-        }
-
         const copyNum = copyNumber.trim() ? parsePositiveIntOrNull(copyNumber) : null;
         if (copyNumber.trim() && copyNum === null) {
             const msg = "Copy number must be a positive number.";
@@ -365,24 +400,30 @@ export default function LibrarianBooksPage() {
         setSaving(true);
         try {
             const created = await createBook({
+                // Core ordering requested
+                callNumber: resolvedCallNo,
+                accessionNumber: resolvedAccNo,
                 title: resolvedTitle,
-                author: resolvedAuthor,
+                subtitle: resolvedSubtitle,
+                publicationYear: pubYearNum,
 
+                // Other required/important fields
+                author: resolvedAuthor,
+                placeOfPublication: resolvedPubPlace,
+                publisher: resolvedPublisher,
+
+                // Optional fields
                 isbn: isbn.trim(),
                 issn: issn.trim(),
-                accessionNumber: accessionNumber.trim(),
 
                 subjects: resolvedSubjects || undefined,
                 category: resolvedSubjects || undefined,
 
-                subtitle: subtitle.trim(),
                 edition: edition.trim(),
 
-                publicationYear: pubYearNum,
-                placeOfPublication: placeOfPublication.trim(),
-                publisher: publisher.trim(),
+                // Pages is free-text; keep numeric when possible, otherwise send as string.
+                pages: pagesValue as unknown as any,
 
-                pages: pagesNum,
                 otherDetails: otherDetails.trim(),
                 dimensions: dimensions.trim(),
                 notes: notes.trim(),
@@ -390,7 +431,6 @@ export default function LibrarianBooksPage() {
                 addedEntries: addedEntries.trim(),
 
                 barcode: barcode.trim(),
-                callNumber: callNumber.trim(),
                 copyNumber: copyNum,
                 volumeNumber: volumeNumber.trim(),
                 libraryArea: area.value as unknown as LibraryArea,
@@ -427,22 +467,22 @@ export default function LibrarianBooksPage() {
         setEditAccessionNumber(book.accessionNumber || "");
         setEditSubjects(
             (book.subjects && String(book.subjects).trim()) ||
-            (book.genre && String(book.genre).trim()) ||
-            (book.category && String(book.category).trim()) ||
-            ""
+                (book.genre && String(book.genre).trim()) ||
+                (book.category && String(book.category).trim()) ||
+                ""
         );
 
         setEditSubtitle(book.subtitle || "");
         setEditEdition(book.edition || "");
 
-        setEditPubYear(
-            typeof book.publicationYear === "number" ? String(book.publicationYear) : ""
-        );
+        setEditPubYear(typeof book.publicationYear === "number" ? String(book.publicationYear) : "");
 
         setEditPlaceOfPublication(book.placeOfPublication || "");
         setEditPublisher(book.publisher || "");
 
-        setEditPages(typeof book.pages === "number" ? String(book.pages) : "");
+        const rawPages = (book as any).pages;
+        setEditPages(rawPages !== undefined && rawPages !== null ? String(rawPages) : "");
+
         setEditOtherDetails(book.otherDetails || "");
         setEditDimensions(book.dimensions || "");
         setEditNotes(book.notes || "");
@@ -451,9 +491,7 @@ export default function LibrarianBooksPage() {
 
         setEditBarcode(book.barcode || "");
         setEditCallNumber(book.callNumber || "");
-        setEditCopyNumber(
-            typeof book.copyNumber === "number" ? String(book.copyNumber) : ""
-        );
+        setEditCopyNumber(typeof book.copyNumber === "number" ? String(book.copyNumber) : "");
         setEditVolumeNumber(book.volumeNumber || "");
 
         const inv = getInventory(book);
@@ -461,8 +499,7 @@ export default function LibrarianBooksPage() {
         setEditCurrentBorrowed(inv.borrowed);
         setEditCurrentRemaining(inv.remaining);
 
-        const currentTotalCopies =
-            typeof inv.total === "number" && inv.total > 0 ? inv.total : 1;
+        const currentTotalCopies = typeof inv.total === "number" && inv.total > 0 ? inv.total : 1;
 
         setEditCopiesMode("set");
         setEditNumberOfCopies(String(currentTotalCopies));
@@ -495,19 +532,29 @@ export default function LibrarianBooksPage() {
         if (!editBookId) return;
         setEditError("");
 
+        const resolvedCallNo = editCallNumber.trim();
+        const resolvedAccNo = editAccessionNumber.trim();
         const resolvedTitle = editTitle.trim();
+        const resolvedSubtitle = editSubtitle.trim();
         const resolvedAuthor = editAuthor.trim();
         const resolvedSubjects = editSubjects.trim();
 
-        if (!resolvedTitle) {
-            const msg = "Title is required.";
+        if (!resolvedCallNo) {
+            const msg = "Call number is required.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        if (!resolvedAuthor) {
-            const msg = "Author is required.";
+        if (!resolvedAccNo) {
+            const msg = "Accession number is required.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        if (!resolvedTitle) {
+            const msg = "Title is required.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
@@ -521,15 +568,33 @@ export default function LibrarianBooksPage() {
             return;
         }
 
-        if (!editBarcode.trim()) {
-            const msg = "Barcode is required.";
+        if (!resolvedAuthor) {
+            const msg = "Author is required.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
         }
 
-        if (!editCallNumber.trim()) {
-            const msg = "Call number is required.";
+        const resolvedPubPlace = editPlaceOfPublication.trim();
+        if (!resolvedPubPlace) {
+            const msg = "Place of publication is required.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const resolvedPublisher = editPublisher.trim();
+        if (!resolvedPublisher) {
+            const msg = "Publisher is required.";
+            setEditError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
+
+        const pagesValue = resolvePagesValue(editPages);
+
+        if (!editBarcode.trim()) {
+            const msg = "Barcode is required.";
             setEditError(msg);
             toast.error("Validation error", { description: msg });
             return;
@@ -557,14 +622,6 @@ export default function LibrarianBooksPage() {
             return;
         }
         const borrowDaysInt = Math.floor(borrowDaysNum);
-
-        const pagesNum = editPages.trim() ? parsePositiveIntOrNull(editPages) : null;
-        if (editPages.trim() && pagesNum === null) {
-            const msg = "Pages must be a positive number.";
-            setEditError(msg);
-            toast.error("Validation error", { description: msg });
-            return;
-        }
 
         const copyNum = editCopyNumber.trim() ? parsePositiveIntOrNull(editCopyNumber) : null;
         if (editCopyNumber.trim() && copyNum === null) {
@@ -607,24 +664,30 @@ export default function LibrarianBooksPage() {
         setEditing(true);
         try {
             const updated = await updateBook(editBookId, {
+                // Core ordering requested
+                callNumber: resolvedCallNo,
+                accessionNumber: resolvedAccNo,
                 title: resolvedTitle,
-                author: resolvedAuthor,
+                subtitle: resolvedSubtitle,
+                publicationYear: pubYearNum,
 
+                // Other required/important fields
+                author: resolvedAuthor,
+                placeOfPublication: resolvedPubPlace,
+                publisher: resolvedPublisher,
+
+                // Optional fields
                 isbn: editIsbn.trim(),
                 issn: editIssn.trim(),
-                accessionNumber: editAccessionNumber.trim(),
 
                 subjects: resolvedSubjects || undefined,
                 category: resolvedSubjects || undefined,
 
-                subtitle: editSubtitle.trim(),
                 edition: editEdition.trim(),
 
-                publicationYear: pubYearNum,
-                placeOfPublication: editPlaceOfPublication.trim(),
-                publisher: editPublisher.trim(),
+                // Pages is free-text; keep numeric when possible, otherwise send as string.
+                pages: pagesValue as unknown as any,
 
-                pages: pagesNum,
                 otherDetails: editOtherDetails.trim(),
                 dimensions: editDimensions.trim(),
                 notes: editNotes.trim(),
@@ -632,7 +695,6 @@ export default function LibrarianBooksPage() {
                 addedEntries: editAddedEntries.trim(),
 
                 barcode: editBarcode.trim(),
-                callNumber: editCallNumber.trim(),
                 copyNumber: copyNum,
                 volumeNumber: editVolumeNumber.trim(),
                 libraryArea: area.value as unknown as LibraryArea,
@@ -686,6 +748,8 @@ export default function LibrarianBooksPage() {
             const area = b.libraryArea ? String(b.libraryArea) : "";
             const areaLabel = area ? formatLibraryAreaLabel(area) : "";
 
+            const rawPages = (b as any).pages;
+
             const hay = [
                 b.id,
                 b.title,
@@ -701,6 +765,7 @@ export default function LibrarianBooksPage() {
                 b.callNumber || "",
                 b.publisher || "",
                 b.placeOfPublication || "",
+                String(rawPages ?? ""),
                 area,
                 areaLabel,
                 String(typeof b.borrowDurationDays === "number" ? b.borrowDurationDays : ""),
@@ -786,15 +851,43 @@ export default function LibrarianBooksPage() {
                             <DialogHeader>
                                 <DialogTitle>Add a new book</DialogTitle>
                                 <DialogDescription className="text-white/70">
-                                    Fill in the details for the new catalog entry.
+                                    Enter catalog details. You can add more copies later via{" "}
+                                    <span className="font-semibold text-white/80">Edit → Add copies</span>.
                                 </DialogDescription>
                             </DialogHeader>
 
                             <div className="space-y-5 py-2">
+                                {/* Requested ordering: Call No -> Acc No -> Title -> Subtitle -> Pub Year -> ... */}
                                 <div className="space-y-4">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                        Core details
+                                        Cataloging essentials
                                     </div>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Call number *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={callNumber}
+                                                onChange={(e) => setCallNumber(e.target.value)}
+                                                placeholder="Required (e.g., QA76.73.J38 M37 2008)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Accession Number *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={accessionNumber}
+                                                onChange={(e) => setAccessionNumber(e.target.value)}
+                                                placeholder="Required"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
 
                                     <Field>
                                         <FieldLabel className="text-white">Title *</FieldLabel>
@@ -823,6 +916,20 @@ export default function LibrarianBooksPage() {
                                     </Field>
 
                                     <Field>
+                                        <FieldLabel className="text-white">Publication year *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={pubYear}
+                                                onChange={(e) => setPubYear(e.target.value)}
+                                                placeholder="e.g., 2008"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                inputMode="numeric"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
                                         <FieldLabel className="text-white">Author *</FieldLabel>
                                         <FieldContent>
                                             <Input
@@ -836,11 +943,66 @@ export default function LibrarianBooksPage() {
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Edition</FieldLabel>
+                                        <FieldLabel className="text-white">Place of publication *</FieldLabel>
                                         <FieldContent>
                                             <Input
-                                                value={edition}
-                                                onChange={(e) => setEdition(e.target.value)}
+                                                value={placeOfPublication}
+                                                onChange={(e) => setPlaceOfPublication(e.target.value)}
+                                                placeholder="Required (e.g., Boston)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Publisher *</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={publisher}
+                                                onChange={(e) => setPublisher(e.target.value)}
+                                                placeholder="Required (e.g., Pearson)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Pages</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={pages}
+                                                onChange={(e) => setPages(e.target.value)}
+                                                placeholder='Optional (e.g., "xii, 200 p." / "Preliminary")'
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                        <p className="mt-1 text-[11px] text-white/60">
+                                            Accepts text (not numbers only).
+                                        </p>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Subjects</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={subjects}
+                                                onChange={(e) => setSubjects(e.target.value)}
+                                                placeholder="Optional (e.g., Software Engineering)"
+                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                autoComplete="off"
+                                            />
+                                        </FieldContent>
+                                    </Field>
+
+                                    <Field>
+                                        <FieldLabel className="text-white">Other details</FieldLabel>
+                                        <FieldContent>
+                                            <Input
+                                                value={otherDetails}
+                                                onChange={(e) => setOtherDetails(e.target.value)}
                                                 placeholder="Optional"
                                                 className="bg-slate-900/70 border-white/20 text-white"
                                                 autoComplete="off"
@@ -851,16 +1013,16 @@ export default function LibrarianBooksPage() {
 
                                 <div className="space-y-4 pt-2 border-t border-white/10">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                        Identifiers & classification
+                                        Additional info
                                     </div>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Accession Number</FieldLabel>
+                                        <FieldLabel className="text-white">Barcode *</FieldLabel>
                                         <FieldContent>
                                             <Input
-                                                value={accessionNumber}
-                                                onChange={(e) => setAccessionNumber(e.target.value)}
-                                                placeholder="Optional"
+                                                value={barcode}
+                                                onChange={(e) => setBarcode(e.target.value)}
+                                                placeholder="Required"
                                                 className="bg-slate-900/70 border-white/20 text-white"
                                                 autoComplete="off"
                                             />
@@ -873,7 +1035,7 @@ export default function LibrarianBooksPage() {
                                             <Input
                                                 value={isbn}
                                                 onChange={(e) => setIsbn(e.target.value)}
-                                                placeholder="e.g., 9780132350884"
+                                                placeholder="Optional (e.g., 9780132350884)"
                                                 className="bg-slate-900/70 border-white/20 text-white"
                                                 autoComplete="off"
                                             />
@@ -894,90 +1056,11 @@ export default function LibrarianBooksPage() {
                                     </Field>
 
                                     <Field>
-                                        <FieldLabel className="text-white">Subjects</FieldLabel>
+                                        <FieldLabel className="text-white">Edition</FieldLabel>
                                         <FieldContent>
                                             <Input
-                                                value={subjects}
-                                                onChange={(e) => setSubjects(e.target.value)}
-                                                placeholder="e.g., Software Engineering"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-                                </div>
-
-                                <div className="space-y-4 pt-2 border-t border-white/10">
-                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                        Publication
-                                    </div>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Publication year *</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={pubYear}
-                                                onChange={(e) => setPubYear(e.target.value)}
-                                                placeholder="e.g., 2008"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                inputMode="numeric"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Place of publication</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={placeOfPublication}
-                                                onChange={(e) => setPlaceOfPublication(e.target.value)}
-                                                placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Publisher</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={publisher}
-                                                onChange={(e) => setPublisher(e.target.value)}
-                                                placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-                                </div>
-
-                                <div className="space-y-4 pt-2 border-t border-white/10">
-                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                        Physical description & notes
-                                    </div>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Pages</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={pages}
-                                                onChange={(e) => setPages(e.target.value)}
-                                                placeholder="Optional (positive number)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                inputMode="numeric"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Other details</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={otherDetails}
-                                                onChange={(e) => setOtherDetails(e.target.value)}
+                                                value={edition}
+                                                onChange={(e) => setEdition(e.target.value)}
                                                 placeholder="Optional"
                                                 className="bg-slate-900/70 border-white/20 text-white"
                                                 autoComplete="off"
@@ -1040,7 +1123,7 @@ export default function LibrarianBooksPage() {
 
                                 <div className="space-y-4 pt-2 border-t border-white/10">
                                     <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                        Copy & circulation
+                                        Copies & circulation
                                     </div>
 
                                     <Field>
@@ -1056,35 +1139,8 @@ export default function LibrarianBooksPage() {
                                             />
                                         </FieldContent>
                                         <p className="mt-1 text-[11px] text-white/60">
-                                            Total physical inventory copies. Remaining/available copies are
-                                            computed as users borrow.
+                                            Initial inventory copies. You can add more copies later.
                                         </p>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Barcode *</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={barcode}
-                                                onChange={(e) => setBarcode(e.target.value)}
-                                                placeholder="Required"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
-                                    </Field>
-
-                                    <Field>
-                                        <FieldLabel className="text-white">Call number *</FieldLabel>
-                                        <FieldContent>
-                                            <Input
-                                                value={callNumber}
-                                                onChange={(e) => setCallNumber(e.target.value)}
-                                                placeholder="Required"
-                                                className="bg-slate-900/70 border-white/20 text-white"
-                                                autoComplete="off"
-                                            />
-                                        </FieldContent>
                                     </Field>
 
                                     <Field>
@@ -1188,8 +1244,7 @@ export default function LibrarianBooksPage() {
                                             />
                                         </FieldContent>
                                         <p className="mt-1 text-[11px] text-white/60">
-                                            This controls how many days a student can initially borrow this
-                                            book.
+                                            This controls how many days a student can initially borrow this book.
                                         </p>
                                     </Field>
 
@@ -1262,15 +1317,43 @@ export default function LibrarianBooksPage() {
                     <DialogHeader>
                         <DialogTitle>Edit book</DialogTitle>
                         <DialogDescription className="text-white/70">
-                            Update the details for this catalog entry.
+                            Update the details for this catalog entry. Use{" "}
+                            <span className="font-semibold text-white/80">Add copies</span> to increase inventory.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-5 py-2">
+                        {/* Requested ordering: Call No -> Acc No -> Title -> Subtitle -> Pub Year -> ... */}
                         <div className="space-y-4">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                Core details
+                                Cataloging essentials
                             </div>
+
+                            <Field>
+                                <FieldLabel className="text-white">Call number *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editCallNumber}
+                                        onChange={(e) => setEditCallNumber(e.target.value)}
+                                        placeholder="Required"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Accession Number *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editAccessionNumber}
+                                        onChange={(e) => setEditAccessionNumber(e.target.value)}
+                                        placeholder="Required"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
 
                             <Field>
                                 <FieldLabel className="text-white">Title *</FieldLabel>
@@ -1299,6 +1382,20 @@ export default function LibrarianBooksPage() {
                             </Field>
 
                             <Field>
+                                <FieldLabel className="text-white">Publication year *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editPubYear}
+                                        onChange={(e) => setEditPubYear(e.target.value)}
+                                        placeholder="e.g., 2008"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
                                 <FieldLabel className="text-white">Author *</FieldLabel>
                                 <FieldContent>
                                     <Input
@@ -1312,11 +1409,66 @@ export default function LibrarianBooksPage() {
                             </Field>
 
                             <Field>
-                                <FieldLabel className="text-white">Edition</FieldLabel>
+                                <FieldLabel className="text-white">Place of publication *</FieldLabel>
                                 <FieldContent>
                                     <Input
-                                        value={editEdition}
-                                        onChange={(e) => setEditEdition(e.target.value)}
+                                        value={editPlaceOfPublication}
+                                        onChange={(e) => setEditPlaceOfPublication(e.target.value)}
+                                        placeholder="Required"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Publisher *</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editPublisher}
+                                        onChange={(e) => setEditPublisher(e.target.value)}
+                                        placeholder="Required"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Pages</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editPages}
+                                        onChange={(e) => setEditPages(e.target.value)}
+                                        placeholder='Optional (e.g., "xii, 200 p." / "Preliminary")'
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                                <p className="mt-1 text-[11px] text-white/60">
+                                    Accepts text (not numbers only).
+                                </p>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Subjects</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editSubjects}
+                                        onChange={(e) => setEditSubjects(e.target.value)}
+                                        placeholder="Optional (e.g., Software Engineering)"
+                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        autoComplete="off"
+                                    />
+                                </FieldContent>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel className="text-white">Other details</FieldLabel>
+                                <FieldContent>
+                                    <Input
+                                        value={editOtherDetails}
+                                        onChange={(e) => setEditOtherDetails(e.target.value)}
                                         placeholder="Optional"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
@@ -1327,16 +1479,16 @@ export default function LibrarianBooksPage() {
 
                         <div className="space-y-4 pt-2 border-t border-white/10">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                Identifiers & classification
+                                Additional info
                             </div>
 
                             <Field>
-                                <FieldLabel className="text-white">Accession Number</FieldLabel>
+                                <FieldLabel className="text-white">Barcode *</FieldLabel>
                                 <FieldContent>
                                     <Input
-                                        value={editAccessionNumber}
-                                        onChange={(e) => setEditAccessionNumber(e.target.value)}
-                                        placeholder="Optional"
+                                        value={editBarcode}
+                                        onChange={(e) => setEditBarcode(e.target.value)}
+                                        placeholder="Required"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
                                     />
@@ -1349,7 +1501,7 @@ export default function LibrarianBooksPage() {
                                     <Input
                                         value={editIsbn}
                                         onChange={(e) => setEditIsbn(e.target.value)}
-                                        placeholder="e.g., 9780132350884"
+                                        placeholder="Optional"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
                                     />
@@ -1370,90 +1522,11 @@ export default function LibrarianBooksPage() {
                             </Field>
 
                             <Field>
-                                <FieldLabel className="text-white">Subjects</FieldLabel>
+                                <FieldLabel className="text-white">Edition</FieldLabel>
                                 <FieldContent>
                                     <Input
-                                        value={editSubjects}
-                                        onChange={(e) => setEditSubjects(e.target.value)}
-                                        placeholder="e.g., Software Engineering"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                            </Field>
-                        </div>
-
-                        <div className="space-y-4 pt-2 border-t border-white/10">
-                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                Publication
-                            </div>
-
-                            <Field>
-                                <FieldLabel className="text-white">Publication year *</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editPubYear}
-                                        onChange={(e) => setEditPubYear(e.target.value)}
-                                        placeholder="e.g., 2008"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        inputMode="numeric"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">Place of publication</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editPlaceOfPublication}
-                                        onChange={(e) => setEditPlaceOfPublication(e.target.value)}
-                                        placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">Publisher</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editPublisher}
-                                        onChange={(e) => setEditPublisher(e.target.value)}
-                                        placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                            </Field>
-                        </div>
-
-                        <div className="space-y-4 pt-2 border-t border-white/10">
-                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                Physical description & notes
-                            </div>
-
-                            <Field>
-                                <FieldLabel className="text-white">Pages</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editPages}
-                                        onChange={(e) => setEditPages(e.target.value)}
-                                        placeholder="Optional (positive number)"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        inputMode="numeric"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">Other details</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editOtherDetails}
-                                        onChange={(e) => setEditOtherDetails(e.target.value)}
+                                        value={editEdition}
+                                        onChange={(e) => setEditEdition(e.target.value)}
                                         placeholder="Optional"
                                         className="bg-slate-900/70 border-white/20 text-white"
                                         autoComplete="off"
@@ -1516,7 +1589,7 @@ export default function LibrarianBooksPage() {
 
                         <div className="space-y-4 pt-2 border-t border-white/10">
                             <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
-                                Copy & circulation
+                                Copies & circulation
                             </div>
 
                             <div className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 text-xs text-white/70">
@@ -1530,17 +1603,13 @@ export default function LibrarianBooksPage() {
                                     <span>
                                         <span className="text-white/50">Borrowed:</span>{" "}
                                         <span className="font-semibold text-white/80">
-                                            {typeof editCurrentBorrowed === "number"
-                                                ? editCurrentBorrowed
-                                                : "—"}
+                                            {typeof editCurrentBorrowed === "number" ? editCurrentBorrowed : "—"}
                                         </span>
                                     </span>
                                     <span>
                                         <span className="text-white/50">Remaining:</span>{" "}
                                         <span className="font-semibold text-white/80">
-                                            {typeof editCurrentRemaining === "number"
-                                                ? editCurrentRemaining
-                                                : "—"}
+                                            {typeof editCurrentRemaining === "number" ? editCurrentRemaining : "—"}
                                         </span>
                                     </span>
                                 </div>
@@ -1603,40 +1672,12 @@ export default function LibrarianBooksPage() {
                                                 />
                                                 <p className="mt-1 text-[11px] text-white/60">
                                                     Adds to current total{" "}
-                                                    {typeof editCurrentTotal === "number"
-                                                        ? `(${editCurrentTotal})`
-                                                        : ""}
+                                                    {typeof editCurrentTotal === "number" ? `(${editCurrentTotal})` : ""}
                                                     .
                                                 </p>
                                             </div>
                                         )}
                                     </RadioGroup>
-                                </FieldContent>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">Barcode *</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editBarcode}
-                                        onChange={(e) => setEditBarcode(e.target.value)}
-                                        placeholder="Required"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                            </Field>
-
-                            <Field>
-                                <FieldLabel className="text-white">Call number *</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={editCallNumber}
-                                        onChange={(e) => setEditCallNumber(e.target.value)}
-                                        placeholder="Required"
-                                        className="bg-slate-900/70 border-white/20 text-white"
-                                        autoComplete="off"
-                                    />
                                 </FieldContent>
                             </Field>
 
@@ -1805,7 +1846,7 @@ export default function LibrarianBooksPage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search title, author, subjects, accession, barcode, call no., inventory, area…"
+                                    placeholder="Search call no., accession, title, author, pub year, pages, publisher, area, inventory…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>
@@ -1826,9 +1867,7 @@ export default function LibrarianBooksPage() {
                         <div className="py-10 text-center text-sm text-white/70">
                             No books found in the catalog.
                             <br />
-                            <span className="text-xs opacity-80">
-                                Try adjusting your search or add a new book.
-                            </span>
+                            <span className="text-xs opacity-80">Try adjusting your search or add a new book.</span>
                         </div>
                     ) : (
                         <BooksCatalogTable
