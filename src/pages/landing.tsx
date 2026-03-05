@@ -29,6 +29,7 @@ import {
 import logo from "@/assets/images/logo.svg"
 import heroImg from "@/assets/images/hero.svg"
 import { me as apiMe } from "@/lib/authentication"
+import { OpacSheet } from "@/components/landing/opac-sheet"
 
 // Wider page wrapper (replaces Tailwind `container` so sections take more space)
 const PAGE_WRAP = "mx-auto w-full px-12"
@@ -117,6 +118,7 @@ export default function LandingPage() {
 
     // ✅ default to /dashboard (student & other both use this)
     const [dashboardHref, setDashboardHref] = useState("/dashboard")
+    const [booksHref, setBooksHref] = useState("/dashboard/books")
 
     const [sheetOpen, setSheetOpen] = useState(false) // controls Sheet and icon animation
 
@@ -133,21 +135,24 @@ export default function LandingPage() {
                 switch (user.accountType) {
                     case "student":
                     case "other":
-                        // student & other share the same dashboard root
                         setDashboardHref("/dashboard")
+                        setBooksHref("/dashboard/books")
                         break
                     case "librarian":
                         setDashboardHref("/dashboard/librarian")
+                        setBooksHref("/dashboard/librarian/books")
                         break
                     case "faculty":
                         setDashboardHref("/dashboard/faculty")
+                        setBooksHref("/dashboard/faculty/books")
                         break
                     case "admin":
                         setDashboardHref("/dashboard/admin")
+                        setBooksHref("/dashboard/admin")
                         break
                     default:
-                        // Fallback for unknown types
                         setDashboardHref("/dashboard")
+                        setBooksHref("/dashboard/books")
                 }
             })()
 
@@ -170,17 +175,25 @@ export default function LandingPage() {
             {/* Header (sticky) */}
             <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10">
                 <div className={`${PAGE_WRAP} py-5`}>
-                    <nav className="flex items-center justify-between">
-                        <Link to="/" className="flex items-center gap-2 group">
-                            <img
-                                src={logo}
-                                alt="JRMSU-TC Book-Hive logo"
-                                className="h-10 w-10 rounded-md object-contain"
-                            />
-                            <span className="font-semibold tracking-tight group-hover:text-white/90">
-                                JRMSU-TC Book-Hive
-                            </span>
-                        </Link>
+                    <nav className="flex items-center justify-between gap-4">
+                        {/* Left: Logo + OPAC (visible before login) */}
+                        <div className="flex items-center gap-3 min-w-0">
+                            <Link to="/" className="flex items-center gap-2 group min-w-0">
+                                <img
+                                    src={logo}
+                                    alt="JRMSU-TC Book-Hive logo"
+                                    className="h-10 w-10 rounded-md object-contain"
+                                />
+                                <span className="font-semibold tracking-tight group-hover:text-white/90 hidden sm:inline truncate">
+                                    JRMSU-TC Book-Hive
+                                </span>
+                                <span className="font-semibold tracking-tight group-hover:text-white/90 sm:hidden truncate">
+                                    Book-Hive
+                                </span>
+                            </Link>
+
+                            <OpacSheet isAuthed={isAuthed} booksHref={booksHref} />
+                        </div>
 
                         {/* Desktop nav */}
                         <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
