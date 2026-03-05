@@ -23,10 +23,131 @@ import {
 
 type AvailabilityFilter = "all" | "available" | "unavailable"
 
+type CatalogGroup = {
+    key: string
+    title: string
+    author: string
+    callNumber: string
+    publicationYear?: number | string | null
+    subtitle?: string | null
+    availableAny: boolean
+    items: BookDTO[]
+}
+
 function fmt(value: unknown): string {
     if (value === null || value === undefined) return "—"
     if (typeof value === "string" && !value.trim()) return "—"
     return String(value)
+}
+
+function normalizeText(value: unknown): string {
+    if (value === null || value === undefined) return ""
+    if (Array.isArray(value)) return value.map(normalizeText).filter(Boolean).join(" ")
+    if (typeof value === "string") return value.trim().toLowerCase().replace(/\s+/g, " ")
+    return String(value).trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+function tokenizeQuery(query: string): string[] {
+    return normalizeText(query).split(/\s+/).map((t) => t.trim()).filter(Boolean)
+}
+
+function buildBookSearchText(b: BookDTO): string {
+    // Covers: keyword, acc no., title, call no., author, etc.
+    const hay = [
+        b.title,
+        b.subtitle,
+        b.author,
+        b.isbn,
+        b.issn,
+        b.accessionNumber,
+        b.subjects,
+        b.genre,
+        b.category,
+        b.publisher,
+        b.placeOfPublication,
+        b.callNumber,
+        b.barcode,
+        b.libraryArea,
+        b.notes,
+        b.otherDetails,
+        b.series,
+        b.addedEntries,
+        b.publicationYear,
+        b.copyrightYear,
+        b.copyNumber,
+        b.volumeNumber,
+        b.pages,
+        b.dimensions,
+    ]
+        .map(normalizeText)
+        .filter(Boolean)
+        .join(" ")
+
+    return hay
+}
+
+function matchesTokens(hay: string, tokens: string[]): boolean {
+    if (tokens.length === 0) return true
+    // AND matching: every token must be found somewhere (more accurate “keyword search”)
+    return tokens.every((t) => hay.includes(t))
+}
+
+function buildCatalogKey(b: BookDTO): string {
+    // Group similar catalog entries together so keyword searches show grouped titles
+    // Prefer callNumber+title+author; fallback to title+author; fallback to id
+    const callNo = normalizeText(b.callNumber)
+    const title = normalizeText(b.title)
+    const author = normalizeText(b.author)
+
+    const key =
+        [callNo, title, author].filter(Boolean).join("|") ||
+        [title, author].filter(Boolean).join("|") ||
+        normalizeText(b.id)
+
+    return key || normalizeText(b.id)
+}
+
+function groupToCatalog(list: BookDTO[]): CatalogGroup[] {
+    const map = new Map<string, CatalogGroup>()
+
+    for (const b of list) {
+        const key = buildCatalogKey(b)
+        const existing = map.get(key)
+
+        if (!existing) {
+            map.set(key, {
+                key,
+                title: b.title || "Untitled",
+                subtitle: b.subtitle ?? null,
+                author: b.author || "—",
+                callNumber: b.callNumber || "—",
+                publicationYear: b.publicationYear ?? null,
+                availableAny: Boolean(b.available),
+                items: [b],
+            })
+        } else {
+            existing.items.push(b)
+            existing.availableAny = existing.availableAny || Boolean(b.available)
+
+            // Keep the "best" display values
+            if (!existing.callNumber || existing.callNumber === "—") {
+                existing.callNumber = b.callNumber || existing.callNumber
+            }
+            if (!existing.author || existing.author === "—") {
+                existing.author = b.author || existing.author
+            }
+            if (!existing.title || existing.title === "Untitled") {
+                existing.title = b.title || existing.title
+            }
+            if (!existing.publicationYear && b.publicationYear) {
+                existing.publicationYear = b.publicationYear
+            }
+        }
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+        (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" })
+    )
 }
 
 function InfoRow({ label, value }: { label: string; value: unknown }) {
@@ -63,12 +184,9 @@ export function OpacSheet({
             const res = await fetchBooks()
             setBooks(Array.isArray(res) ? res : [])
         } catch (e) {
-            const message =
-                e instanceof Error ? e.message : "Failed to load OPAC books."
+            const message = e instanceof Error ? e.message : "Failed to load OPAC books."
             setError(message)
-            toast.error("Unable to load OPAC", {
-                description: message,
-            })
+            toast.error("Unable to load OPAC", { description: message })
         } finally {
             setLoading(false)
         }
@@ -81,8 +199,8 @@ export function OpacSheet({
         }
     }
 
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase()
+    const filteredRecords = useMemo(() => {
+        const tokens = tokenizeQuery(query)
 
         let list = books
 
@@ -91,49 +209,37 @@ export function OpacSheet({
             list = list.filter((b) => Boolean(b.available) === want)
         }
 
-        if (q) {
-            list = list.filter((b) => {
-                const hay = [
-                    b.title,
-                    b.subtitle,
-                    b.author,
-                    b.isbn,
-                    b.issn,
-                    b.accessionNumber,
-                    b.subjects,
-                    b.genre,
-                    b.category,
-                    b.publisher,
-                    b.placeOfPublication,
-                    b.callNumber,
-                    b.barcode,
-                    b.libraryArea,
-                    b.notes,
-                    b.otherDetails,
-                    b.series,
-                    b.addedEntries,
-                ]
-                    .filter(Boolean)
-                    .join(" • ")
-                    .toLowerCase()
-
-                return hay.includes(q)
-            })
+        if (tokens.length > 0) {
+            list = list.filter((b) => matchesTokens(buildBookSearchText(b), tokens))
         }
 
-        // Stable, user-friendly ordering
-        return [...list].sort((a, b) =>
-            (a.title || "").localeCompare(b.title || "", undefined, {
+        // Sort to feel "catalog-like" even before grouping
+        return [...list].sort((a, b) => {
+            const callCmp = normalizeText(a.callNumber).localeCompare(normalizeText(b.callNumber), undefined, {
                 sensitivity: "base",
             })
-        )
+            if (callCmp !== 0) return callCmp
+
+            const titleCmp = normalizeText(a.title).localeCompare(normalizeText(b.title), undefined, {
+                sensitivity: "base",
+            })
+            if (titleCmp !== 0) return titleCmp
+
+            return normalizeText(a.author).localeCompare(normalizeText(b.author), undefined, {
+                sensitivity: "base",
+            })
+        })
     }, [books, query, availability])
+
+    const groupedCatalog = useMemo(() => groupToCatalog(filteredRecords), [filteredRecords])
 
     const countLabel = useMemo(() => {
         if (loading) return "Loading…"
         if (error) return "—"
-        return `${filtered.length} result${filtered.length === 1 ? "" : "s"}`
-    }, [loading, error, filtered.length])
+        const titles = groupedCatalog.length
+        const records = filteredRecords.length
+        return `${titles} title${titles === 1 ? "" : "s"} • ${records} record${records === 1 ? "" : "s"}`
+    }, [loading, error, groupedCatalog.length, filteredRecords.length])
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -180,8 +286,9 @@ export function OpacSheet({
                         <Input
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search title, author, ISBN, subject…"
+                            placeholder="Search keyword, title, author, acc no., call no., ISBN…"
                             className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-white/40 rounded-xl"
+                            autoComplete="off"
                         />
                     </div>
 
@@ -224,10 +331,7 @@ export function OpacSheet({
                     {loading ? (
                         <div className="space-y-3">
                             {Array.from({ length: 7 }).map((_, i) => (
-                                <Card
-                                    key={i}
-                                    className="bg-white/5 border-white/10 rounded-2xl"
-                                >
+                                <Card key={i} className="bg-white/5 border-white/10 rounded-2xl">
                                     <CardContent className="p-4 space-y-3">
                                         <Skeleton className="h-4 w-3/4 bg-white/10" />
                                         <Skeleton className="h-3 w-1/2 bg-white/10" />
@@ -239,40 +343,39 @@ export function OpacSheet({
                     ) : error ? (
                         <Card className="bg-white/5 border-white/10 rounded-2xl">
                             <CardContent className="p-5 space-y-3">
-                                <div className="text-sm text-white/80">
-                                    {error || "Something went wrong."}
-                                </div>
-                                <Button
-                                    className="rounded-xl"
-                                    onClick={() => void load()}
-                                >
+                                <div className="text-sm text-white/80">{error || "Something went wrong."}</div>
+                                <Button className="rounded-xl" onClick={() => void load()}>
                                     Retry
                                 </Button>
                             </CardContent>
                         </Card>
-                    ) : filtered.length === 0 ? (
+                    ) : groupedCatalog.length === 0 ? (
                         <Card className="bg-white/5 border-white/10 rounded-2xl">
                             <CardContent className="p-5 space-y-2">
-                                <div className="font-medium">No books found</div>
+                                <div className="font-medium">No titles found</div>
                                 <div className="text-sm text-white/70">
-                                    Try a different keyword or switch filters.
+                                    Try a different keyword (e.g., “cooking”) or switch filters.
                                 </div>
                             </CardContent>
                         </Card>
                     ) : (
                         <Accordion type="multiple" className="space-y-3">
-                            {filtered.map((b) => {
-                                const availableCount =
-                                    typeof b.numberOfCopies === "number"
-                                        ? b.numberOfCopies
-                                        : null
-                                const totalCount =
-                                    typeof b.totalCopies === "number" ? b.totalCopies : null
+                            {groupedCatalog.map((g) => {
+                                const primary = g.items[0]
+
+                                // Show counts if your API supplies them; otherwise fall back to grouped record count
+                                const hasCounts =
+                                    g.items.some((x) => typeof x.totalCopies === "number" || typeof x.numberOfCopies === "number") &&
+                                    (typeof primary.totalCopies === "number" || typeof primary.numberOfCopies === "number")
+
+                                const availCount =
+                                    typeof primary.numberOfCopies === "number" ? primary.numberOfCopies : null
+                                const totalCount = typeof primary.totalCopies === "number" ? primary.totalCopies : null
 
                                 return (
                                     <AccordionItem
-                                        key={b.id}
-                                        value={b.id}
+                                        key={g.key}
+                                        value={g.key}
                                         className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden"
                                     >
                                         <AccordionTrigger className="px-4 py-4 text-left hover:no-underline">
@@ -280,31 +383,33 @@ export function OpacSheet({
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div className="min-w-0">
                                                         <div className="font-semibold text-white truncate">
-                                                            {b.title}
+                                                            {g.title}
                                                         </div>
                                                         <div className="text-sm text-white/70 truncate">
-                                                            {b.author}
-                                                            {b.publicationYear
-                                                                ? ` • ${b.publicationYear}`
-                                                                : ""}
+                                                            {g.author}
+                                                            {g.publicationYear ? ` • ${g.publicationYear}` : ""}
+                                                            {g.callNumber && g.callNumber !== "—" ? ` • ${g.callNumber}` : ""}
                                                         </div>
                                                     </div>
 
                                                     <div className="shrink-0 flex items-center gap-2">
                                                         <Badge
-                                                            variant={b.available ? "secondary" : "outline"}
+                                                            variant={g.availableAny ? "secondary" : "outline"}
                                                             className="rounded-xl"
                                                         >
-                                                            {b.available ? "Available" : "Not available"}
+                                                            {g.availableAny ? "Available" : "Not available"}
                                                         </Badge>
-                                                        {availableCount !== null || totalCount !== null ? (
+
+                                                        {hasCounts && (availCount !== null || totalCount !== null) ? (
                                                             <Badge variant="outline" className="rounded-xl">
-                                                                {availableCount !== null
-                                                                    ? `Avail: ${availableCount}`
-                                                                    : "Avail: —"}
+                                                                {availCount !== null ? `Avail: ${availCount}` : "Avail: —"}
                                                                 {totalCount !== null ? ` / ${totalCount}` : ""}
                                                             </Badge>
-                                                        ) : null}
+                                                        ) : (
+                                                            <Badge variant="outline" className="rounded-xl">
+                                                                {g.items.length} record{g.items.length === 1 ? "" : "s"}
+                                                            </Badge>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -312,79 +417,79 @@ export function OpacSheet({
 
                                         <AccordionContent className="px-4 pb-4">
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                <InfoRow label="Subtitle" value={b.subtitle} />
-                                                <InfoRow label="Edition" value={b.edition} />
-                                                <InfoRow label="ISBN" value={b.isbn} />
-                                                <InfoRow label="ISSN" value={b.issn} />
-                                                <InfoRow
-                                                    label="Accession No."
-                                                    value={b.accessionNumber}
-                                                />
-                                                <InfoRow label="Subjects" value={b.subjects} />
-                                                <InfoRow label="Genre" value={b.genre} />
-                                                <InfoRow label="Category" value={b.category} />
-                                                <InfoRow
-                                                    label="Publisher"
-                                                    value={b.publisher}
-                                                />
-                                                <InfoRow
-                                                    label="Place of Publication"
-                                                    value={b.placeOfPublication}
-                                                />
-                                                <InfoRow
-                                                    label="Copyright Year"
-                                                    value={b.copyrightYear}
-                                                />
-                                                <InfoRow
-                                                    label="Call Number"
-                                                    value={b.callNumber}
-                                                />
-                                                <InfoRow label="Barcode" value={b.barcode} />
-                                                <InfoRow
-                                                    label="Copy Number"
-                                                    value={b.copyNumber}
-                                                />
-                                                <InfoRow
-                                                    label="Volume Number"
-                                                    value={b.volumeNumber}
-                                                />
-                                                <InfoRow
-                                                    label="Library Area"
-                                                    value={b.libraryArea}
-                                                />
-                                                <InfoRow label="Pages" value={b.pages} />
-                                                <InfoRow
-                                                    label="Dimensions"
-                                                    value={b.dimensions}
-                                                />
-                                                <InfoRow label="Series" value={b.series} />
-                                                <InfoRow
-                                                    label="Added Entries"
-                                                    value={b.addedEntries}
-                                                />
+                                                <InfoRow label="Subtitle" value={primary.subtitle} />
+                                                <InfoRow label="Edition" value={primary.edition} />
+                                                <InfoRow label="ISBN" value={primary.isbn} />
+                                                <InfoRow label="ISSN" value={primary.issn} />
+                                                <InfoRow label="Accession No." value={primary.accessionNumber} />
+                                                <InfoRow label="Subjects" value={primary.subjects} />
+                                                <InfoRow label="Genre" value={primary.genre} />
+                                                <InfoRow label="Category" value={primary.category} />
+                                                <InfoRow label="Publisher" value={primary.publisher} />
+                                                <InfoRow label="Place of Publication" value={primary.placeOfPublication} />
+                                                <InfoRow label="Copyright Year" value={primary.copyrightYear} />
+                                                <InfoRow label="Call Number" value={primary.callNumber} />
+                                                <InfoRow label="Library Area" value={primary.libraryArea} />
+                                                <InfoRow label="Series" value={primary.series} />
+                                                <InfoRow label="Added Entries" value={primary.addedEntries} />
                                             </div>
 
-                                            {(b.otherDetails || b.notes) && (
+                                            {g.items.length > 1 ? (
                                                 <div className="mt-4 space-y-3">
                                                     <Separator className="bg-white/10" />
-                                                    {b.otherDetails ? (
+                                                    <div className="text-sm font-medium text-white">Catalog records</div>
+                                                    <div className="space-y-2">
+                                                        {g.items.map((b) => (
+                                                            <div
+                                                                key={b.id}
+                                                                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2"
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <div className="text-sm text-white/90 truncate">
+                                                                        <span className="text-white/60">Acc No.:</span>{" "}
+                                                                        {fmt(b.accessionNumber)}
+                                                                        {b.barcode ? (
+                                                                            <>
+                                                                                {" "}
+                                                                                <span className="text-white/60">• Barcode:</span>{" "}
+                                                                                {fmt(b.barcode)}
+                                                                            </>
+                                                                        ) : null}
+                                                                    </div>
+                                                                    <div className="text-xs text-white/60 truncate">
+                                                                        {b.copyNumber ? `Copy: ${b.copyNumber}` : null}
+                                                                        {b.volumeNumber ? `${b.copyNumber ? " • " : ""}Vol: ${b.volumeNumber}` : null}
+                                                                        {b.libraryArea ? `${(b.copyNumber || b.volumeNumber) ? " • " : ""}${b.libraryArea}` : null}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="shrink-0 flex items-center gap-2">
+                                                                    <Badge
+                                                                        variant={b.available ? "secondary" : "outline"}
+                                                                        className="rounded-xl"
+                                                                    >
+                                                                        {b.available ? "Available" : "Not available"}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : null}
+
+                                            {(primary.otherDetails || primary.notes) && (
+                                                <div className="mt-4 space-y-3">
+                                                    <Separator className="bg-white/10" />
+                                                    {primary.otherDetails ? (
                                                         <div className="space-y-1">
-                                                            <div className="text-xs text-white/60">
-                                                                Other Details
-                                                            </div>
-                                                            <div className="text-sm text-white/80">
-                                                                {b.otherDetails}
-                                                            </div>
+                                                            <div className="text-xs text-white/60">Other Details</div>
+                                                            <div className="text-sm text-white/80">{primary.otherDetails}</div>
                                                         </div>
                                                     ) : null}
-                                                    {b.notes ? (
+                                                    {primary.notes ? (
                                                         <div className="space-y-1">
-                                                            <div className="text-xs text-white/60">
-                                                                Notes
-                                                            </div>
-                                                            <div className="text-sm text-white/80">
-                                                                {b.notes}
-                                                            </div>
+                                                            <div className="text-xs text-white/60">Notes</div>
+                                                            <div className="text-sm text-white/80">{primary.notes}</div>
                                                         </div>
                                                     ) : null}
                                                 </div>
@@ -397,8 +502,7 @@ export function OpacSheet({
                                                             className="rounded-xl"
                                                             onClick={() => {
                                                                 toast("Login required", {
-                                                                    description:
-                                                                        "Please login to reserve or manage borrows.",
+                                                                    description: "Please login to reserve or manage borrows.",
                                                                 })
                                                                 navigate("/auth")
                                                             }}
@@ -408,10 +512,7 @@ export function OpacSheet({
                                                     </SheetClose>
                                                 ) : (
                                                     <SheetClose asChild>
-                                                        <Button
-                                                            className="rounded-xl"
-                                                            onClick={() => navigate(booksHref)}
-                                                        >
+                                                        <Button className="rounded-xl" onClick={() => navigate(booksHref)}>
                                                             Open Books Page
                                                         </Button>
                                                     </SheetClose>
@@ -422,10 +523,10 @@ export function OpacSheet({
                                                     className="rounded-xl border-white/15 bg-white/5 hover:bg-white/10"
                                                     onClick={() => {
                                                         const text = [
-                                                            b.title ? `Title: ${b.title}` : null,
-                                                            b.author ? `Author: ${b.author}` : null,
-                                                            b.isbn ? `ISBN: ${b.isbn}` : null,
-                                                            b.callNumber ? `Call No.: ${b.callNumber}` : null,
+                                                            g.title ? `Title: ${g.title}` : null,
+                                                            g.author ? `Author: ${g.author}` : null,
+                                                            primary.isbn ? `ISBN: ${primary.isbn}` : null,
+                                                            g.callNumber && g.callNumber !== "—" ? `Call No.: ${g.callNumber}` : null,
                                                         ]
                                                             .filter(Boolean)
                                                             .join("\n")
@@ -440,8 +541,7 @@ export function OpacSheet({
                                                             .then(() => toast.success("Copied book info"))
                                                             .catch(() =>
                                                                 toast.error("Copy failed", {
-                                                                    description:
-                                                                        "Your browser blocked clipboard access.",
+                                                                    description: "Your browser blocked clipboard access.",
                                                                 })
                                                             )
                                                     }}

@@ -42,6 +42,34 @@ import {
 import { BooksCatalogTable } from "@/components/librarian-books/books-catalog-table";
 import { BooksExcelPreviewDialog } from "@/components/librarian-books/books-excel-preview-dialog";
 
+function normalizeSearchText(value: unknown): string {
+    if (value === null || value === undefined) return "";
+    if (Array.isArray(value)) return value.map(normalizeSearchText).filter(Boolean).join(" ");
+    if (typeof value === "string") return value.trim().toLowerCase().replace(/\s+/g, " ");
+    return String(value).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function tokenizeSearch(query: string): string[] {
+    return normalizeSearchText(query).split(/\s+/).map((t) => t.trim()).filter(Boolean);
+}
+
+function matchesAllTokens(hay: string, tokens: string[]): boolean {
+    if (tokens.length === 0) return true;
+    return tokens.every((t) => hay.includes(t));
+}
+
+function buildCatalogSortKey(b: BookDTO): string {
+    // “Catalog feel”: Call No -> Title -> Author -> Acc No.
+    return [
+        normalizeSearchText(b.callNumber),
+        normalizeSearchText(b.title),
+        normalizeSearchText(b.author),
+        normalizeSearchText(b.accessionNumber),
+    ]
+        .filter(Boolean)
+        .join("|");
+}
+
 export default function LibrarianBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -739,47 +767,57 @@ export default function LibrarianBooksPage() {
     };
 
     const filteredBooks = React.useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return books;
+        const tokens = tokenizeSearch(search);
 
-        return books.filter((b) => {
-            const inv = getInventory(b);
+        const base = tokens.length === 0
+            ? books
+            : books.filter((b) => {
+                const inv = getInventory(b);
 
-            const area = b.libraryArea ? String(b.libraryArea) : "";
-            const areaLabel = area ? formatLibraryAreaLabel(area) : "";
+                const area = b.libraryArea ? String(b.libraryArea) : "";
+                const areaLabel = area ? formatLibraryAreaLabel(area) : "";
 
-            const rawPages = (b as any).pages;
+                const rawPages = (b as any).pages;
 
-            const hay = [
-                b.id,
-                b.title,
-                b.subtitle || "",
-                b.author,
-                b.isbn || "",
-                b.issn || "",
-                b.subjects || "",
-                b.genre || "",
-                b.category || "",
-                b.accessionNumber || "",
-                b.barcode || "",
-                b.callNumber || "",
-                b.publisher || "",
-                b.placeOfPublication || "",
-                String(rawPages ?? ""),
-                area,
-                areaLabel,
-                String(typeof b.borrowDurationDays === "number" ? b.borrowDurationDays : ""),
-                String(inv.remaining ?? ""),
-                String(inv.total ?? ""),
-                String(inv.borrowed ?? ""),
-                b.available ? "available" : "unavailable",
-            ]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase();
+                // Covers: keyword, acc no., title, call no., author, etc.
+                const hay = [
+                    b.title,
+                    b.subtitle || "",
+                    b.author,
+                    b.accessionNumber || "",
+                    b.callNumber || "",
+                    b.isbn || "",
+                    b.issn || "",
+                    b.subjects || "",
+                    b.genre || "",
+                    b.category || "",
+                    b.publisher || "",
+                    b.placeOfPublication || "",
+                    b.barcode || "",
+                    String(rawPages ?? ""),
+                    b.series || "",
+                    b.addedEntries || "",
+                    b.notes || "",
+                    b.otherDetails || "",
+                    String(typeof b.publicationYear === "number" ? b.publicationYear : ""),
+                    String(typeof b.copyrightYear === "number" ? b.copyrightYear : ""),
+                    area,
+                    areaLabel,
+                    String(typeof b.borrowDurationDays === "number" ? b.borrowDurationDays : ""),
+                    String(inv.remaining ?? ""),
+                    String(inv.total ?? ""),
+                    String(inv.borrowed ?? ""),
+                    b.available ? "available" : "unavailable",
+                ]
+                    .map(normalizeSearchText)
+                    .filter(Boolean)
+                    .join(" ");
 
-            return hay.includes(q);
-        });
+                return matchesAllTokens(hay, tokens);
+            });
+
+        // Catalog-like grouping in the table (sorted by call no., title, author...)
+        return [...base].sort((a, b) => buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, { sensitivity: "base" }));
     }, [books, search]);
 
     const cellScrollbarClasses =
@@ -1846,8 +1884,9 @@ export default function LibrarianBooksPage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search call no., accession, title, author, pub year, pages, publisher, area, inventory…"
+                                    placeholder="Search keyword, call no., accession, title, author, publisher, subjects, inventory…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                                    autoComplete="off"
                                 />
                             </div>
                         </div>
