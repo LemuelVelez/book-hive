@@ -17,8 +17,15 @@ import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/fie
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, RefreshCcw, Loader2, BookOpen, Search } from "lucide-react";
+import { Plus, RefreshCcw, Loader2, BookOpen, Search, ArrowUpDown, Filter, X } from "lucide-react";
 import {
     fetchBooks,
     createBook,
@@ -36,6 +43,7 @@ import {
     normalizeOtherLibraryArea,
     getErrorMessage,
     getInventory,
+    isBorrowableByCopies,
     parsePositiveIntOrNull,
     parseYearOrNull,
 } from "@/components/librarian-books/books-constants";
@@ -70,6 +78,44 @@ function buildCatalogSortKey(b: BookDTO): string {
         .join("|");
 }
 
+type CatalogAvailabilityFilter = "all" | "available" | "unavailable";
+type CatalogSortOption =
+    | "catalog"
+    | "title_asc"
+    | "title_desc"
+    | "author_asc"
+    | "author_desc"
+    | "pub_year_desc"
+    | "pub_year_asc"
+    | "copies_desc"
+    | "copies_asc";
+
+function compareText(a: unknown, b: unknown) {
+    const av = normalizeSearchText(a);
+    const bv = normalizeSearchText(b);
+
+    if (!av && !bv) return 0;
+    if (!av) return 1;
+    if (!bv) return -1;
+
+    return av.localeCompare(bv, undefined, { sensitivity: "base" });
+}
+
+function compareNullableNumber(
+    a: number | null | undefined,
+    b: number | null | undefined,
+    direction: "asc" | "desc" = "asc"
+) {
+    const av = typeof a === "number" && Number.isFinite(a) ? a : null;
+    const bv = typeof b === "number" && Number.isFinite(b) ? b : null;
+
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+
+    return direction === "asc" ? av - bv : bv - av;
+}
+
 export default function LibrarianBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -77,6 +123,10 @@ export default function LibrarianBooksPage() {
     const [error, setError] = React.useState<string | null>(null);
 
     const [search, setSearch] = React.useState("");
+    const [availabilityFilter, setAvailabilityFilter] =
+        React.useState<CatalogAvailabilityFilter>("all");
+    const [libraryAreaFilter, setLibraryAreaFilter] = React.useState("all");
+    const [sortOption, setSortOption] = React.useState<CatalogSortOption>("catalog");
 
     const [addOpen, setAddOpen] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
@@ -766,59 +816,193 @@ export default function LibrarianBooksPage() {
         }
     };
 
+    const libraryAreaChoices = React.useMemo(() => {
+        const values = new Set<string>();
+
+        books.forEach((book) => {
+            const area = book.libraryArea ? String(book.libraryArea).trim() : "";
+            if (area) values.add(area);
+        });
+
+        return Array.from(values).sort((a, b) =>
+            formatLibraryAreaLabel(a).localeCompare(formatLibraryAreaLabel(b), undefined, {
+                sensitivity: "base",
+            })
+        );
+    }, [books]);
+
+    React.useEffect(() => {
+        if (libraryAreaFilter !== "all" && !libraryAreaChoices.includes(libraryAreaFilter)) {
+            setLibraryAreaFilter("all");
+        }
+    }, [libraryAreaChoices, libraryAreaFilter]);
+
+    const clearCatalogControls = React.useCallback(() => {
+        setSearch("");
+        setAvailabilityFilter("all");
+        setLibraryAreaFilter("all");
+        setSortOption("catalog");
+    }, []);
+
+    const hasCatalogControlsApplied =
+        search.trim().length > 0 ||
+        availabilityFilter !== "all" ||
+        libraryAreaFilter !== "all" ||
+        sortOption !== "catalog";
+
     const filteredBooks = React.useMemo(() => {
         const tokens = tokenizeSearch(search);
 
-        const base = tokens.length === 0
-            ? books
-            : books.filter((b) => {
-                const inv = getInventory(b);
+        const base = books.filter((b) => {
+            const inv = getInventory(b);
+            const area = b.libraryArea ? String(b.libraryArea).trim() : "";
+            const areaLabel = area ? formatLibraryAreaLabel(area) : "";
+            const rawPages = (b as any).pages;
+            const borrowable = isBorrowableByCopies(b);
 
-                const area = b.libraryArea ? String(b.libraryArea) : "";
-                const areaLabel = area ? formatLibraryAreaLabel(area) : "";
+            if (libraryAreaFilter !== "all" && area !== libraryAreaFilter) {
+                return false;
+            }
 
-                const rawPages = (b as any).pages;
+            if (availabilityFilter === "available" && !borrowable) {
+                return false;
+            }
 
-                // Covers: keyword, acc no., title, call no., author, etc.
-                const hay = [
-                    b.title,
-                    b.subtitle || "",
-                    b.author,
-                    b.accessionNumber || "",
-                    b.callNumber || "",
-                    b.isbn || "",
-                    b.issn || "",
-                    b.subjects || "",
-                    b.genre || "",
-                    b.category || "",
-                    b.publisher || "",
-                    b.placeOfPublication || "",
-                    b.barcode || "",
-                    String(rawPages ?? ""),
-                    b.series || "",
-                    b.addedEntries || "",
-                    b.notes || "",
-                    b.otherDetails || "",
-                    String(typeof b.publicationYear === "number" ? b.publicationYear : ""),
-                    String(typeof b.copyrightYear === "number" ? b.copyrightYear : ""),
-                    area,
-                    areaLabel,
-                    String(typeof b.borrowDurationDays === "number" ? b.borrowDurationDays : ""),
-                    String(inv.remaining ?? ""),
-                    String(inv.total ?? ""),
-                    String(inv.borrowed ?? ""),
-                    b.available ? "available" : "unavailable",
-                ]
-                    .map(normalizeSearchText)
-                    .filter(Boolean)
-                    .join(" ");
+            if (availabilityFilter === "unavailable" && borrowable) {
+                return false;
+            }
 
-                return matchesAllTokens(hay, tokens);
-            });
+            if (tokens.length === 0) {
+                return true;
+            }
 
-        // Catalog-like grouping in the table (sorted by call no., title, author...)
-        return [...base].sort((a, b) => buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, { sensitivity: "base" }));
-    }, [books, search]);
+            // Covers: keyword, acc no., title, call no., author, etc.
+            const hay = [
+                b.title,
+                b.subtitle || "",
+                b.author,
+                b.accessionNumber || "",
+                b.callNumber || "",
+                b.isbn || "",
+                b.issn || "",
+                b.subjects || "",
+                b.genre || "",
+                b.category || "",
+                b.publisher || "",
+                b.placeOfPublication || "",
+                b.barcode || "",
+                String(rawPages ?? ""),
+                b.series || "",
+                b.addedEntries || "",
+                b.notes || "",
+                b.otherDetails || "",
+                String(typeof b.publicationYear === "number" ? b.publicationYear : ""),
+                String(typeof b.copyrightYear === "number" ? b.copyrightYear : ""),
+                area,
+                areaLabel,
+                String(typeof b.borrowDurationDays === "number" ? b.borrowDurationDays : ""),
+                String(inv.remaining ?? ""),
+                String(inv.total ?? ""),
+                String(inv.borrowed ?? ""),
+                b.available ? "available" : "unavailable",
+            ]
+                .map(normalizeSearchText)
+                .filter(Boolean)
+                .join(" ");
+
+            return matchesAllTokens(hay, tokens);
+        });
+
+        return [...base].sort((a, b) => {
+            switch (sortOption) {
+                case "title_asc":
+                    return (
+                        compareText(a.title, b.title) ||
+                        compareText(a.author, b.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+
+                case "title_desc":
+                    return (
+                        compareText(b.title, a.title) ||
+                        compareText(b.author, a.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+
+                case "author_asc":
+                    return (
+                        compareText(a.author, b.author) ||
+                        compareText(a.title, b.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+
+                case "author_desc":
+                    return (
+                        compareText(b.author, a.author) ||
+                        compareText(b.title, a.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+
+                case "pub_year_desc":
+                    return (
+                        compareNullableNumber(a.publicationYear, b.publicationYear, "desc") ||
+                        compareText(a.title, b.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+
+                case "pub_year_asc":
+                    return (
+                        compareNullableNumber(a.publicationYear, b.publicationYear, "asc") ||
+                        compareText(a.title, b.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+
+                case "copies_desc": {
+                    const invA = getInventory(a);
+                    const invB = getInventory(b);
+
+                    return (
+                        compareNullableNumber(invA.total, invB.total, "desc") ||
+                        compareText(a.title, b.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+                }
+
+                case "copies_asc": {
+                    const invA = getInventory(a);
+                    const invB = getInventory(b);
+
+                    return (
+                        compareNullableNumber(invA.total, invB.total, "asc") ||
+                        compareText(a.title, b.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    );
+                }
+
+                case "catalog":
+                default:
+                    return buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                        sensitivity: "base",
+                    });
+            }
+        });
+    }, [books, search, availabilityFilter, libraryAreaFilter, sortOption]);
 
     const cellScrollbarClasses =
         "overflow-x-auto whitespace-nowrap " +
@@ -1641,13 +1825,17 @@ export default function LibrarianBooksPage() {
                                     <span>
                                         <span className="text-white/50">Borrowed:</span>{" "}
                                         <span className="font-semibold text-white/80">
-                                            {typeof editCurrentBorrowed === "number" ? editCurrentBorrowed : "—"}
+                                            {typeof editCurrentBorrowed === "number"
+                                                ? editCurrentBorrowed
+                                                : "—"}
                                         </span>
                                     </span>
                                     <span>
                                         <span className="text-white/50">Remaining:</span>{" "}
                                         <span className="font-semibold text-white/80">
-                                            {typeof editCurrentRemaining === "number" ? editCurrentRemaining : "—"}
+                                            {typeof editCurrentRemaining === "number"
+                                                ? editCurrentRemaining
+                                                : "—"}
                                         </span>
                                     </span>
                                 </div>
@@ -1710,7 +1898,9 @@ export default function LibrarianBooksPage() {
                                                 />
                                                 <p className="mt-1 text-[11px] text-white/60">
                                                     Adds to current total{" "}
-                                                    {typeof editCurrentTotal === "number" ? `(${editCurrentTotal})` : ""}
+                                                    {typeof editCurrentTotal === "number"
+                                                        ? `(${editCurrentTotal})`
+                                                        : ""}
                                                     .
                                                 </p>
                                             </div>
@@ -1873,13 +2063,17 @@ export default function LibrarianBooksPage() {
 
             <Card className="bg-slate-800/60 border-white/10">
                 <CardHeader className="pb-2">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <CardTitle>Books catalog</CardTitle>
+                    <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-1">
+                            <CardTitle>Books catalog</CardTitle>
+                            <p className="text-xs text-white/70">
+                                Showing {filteredBooks.length} of {books.length}{" "}
+                                {books.length === 1 ? "book" : "books"}.
+                            </p>
+                        </div>
 
-                        <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
-                            <BooksExcelPreviewDialog books={filteredBooks} />
-
-                            <div className="relative w-full md:w-72">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(260px,1fr)_190px_190px_220px_auto]">
+                            <div className="relative min-w-0">
                                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                                 <Input
                                     value={search}
@@ -1888,6 +2082,86 @@ export default function LibrarianBooksPage() {
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                     autoComplete="off"
                                 />
+                            </div>
+
+                            <Select
+                                value={libraryAreaFilter}
+                                onValueChange={(value) => setLibraryAreaFilter(value)}
+                            >
+                                <SelectTrigger className="w-full bg-slate-900/70 border-white/20 text-white">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <Filter className="h-4 w-4 text-white/60" />
+                                        <SelectValue placeholder="Library area" />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                    <SelectItem value="all">All library areas</SelectItem>
+                                    {libraryAreaChoices.map((area) => (
+                                        <SelectItem key={area} value={area}>
+                                            {formatLibraryAreaLabel(area)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <Select
+                                value={availabilityFilter}
+                                onValueChange={(value) =>
+                                    setAvailabilityFilter(value as CatalogAvailabilityFilter)
+                                }
+                            >
+                                <SelectTrigger className="w-full bg-slate-900/70 border-white/20 text-white">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <Filter className="h-4 w-4 text-white/60" />
+                                        <SelectValue placeholder="Availability" />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                    <SelectItem value="all">All availability</SelectItem>
+                                    <SelectItem value="available">Available only</SelectItem>
+                                    <SelectItem value="unavailable">Unavailable only</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            <Select
+                                value={sortOption}
+                                onValueChange={(value) => setSortOption(value as CatalogSortOption)}
+                            >
+                                <SelectTrigger className="w-full bg-slate-900/70 border-white/20 text-white">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <ArrowUpDown className="h-4 w-4 text-white/60" />
+                                        <SelectValue placeholder="Sort books" />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                    <SelectItem value="catalog">Catalog order</SelectItem>
+                                    <SelectItem value="title_asc">Title (A–Z)</SelectItem>
+                                    <SelectItem value="title_desc">Title (Z–A)</SelectItem>
+                                    <SelectItem value="author_asc">Author (A–Z)</SelectItem>
+                                    <SelectItem value="author_desc">Author (Z–A)</SelectItem>
+                                    <SelectItem value="pub_year_desc">
+                                        Publication year (Newest first)
+                                    </SelectItem>
+                                    <SelectItem value="pub_year_asc">
+                                        Publication year (Oldest first)
+                                    </SelectItem>
+                                    <SelectItem value="copies_desc">Copies (Most first)</SelectItem>
+                                    <SelectItem value="copies_asc">Copies (Fewest first)</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            <div className="flex items-center gap-2">
+                                <BooksExcelPreviewDialog books={filteredBooks} />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="border-white/20 text-white/90 hover:bg-white/10"
+                                    onClick={clearCatalogControls}
+                                    disabled={!hasCatalogControlsApplied}
+                                >
+                                    <X className="h-4 w-4 mr-2" />
+                                    Clear
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -1906,7 +2180,9 @@ export default function LibrarianBooksPage() {
                         <div className="py-10 text-center text-sm text-white/70">
                             No books found in the catalog.
                             <br />
-                            <span className="text-xs opacity-80">Try adjusting your search or add a new book.</span>
+                            <span className="text-xs opacity-80">
+                                Try adjusting your search, sort, or filters.
+                            </span>
                         </div>
                     ) : (
                         <BooksCatalogTable
