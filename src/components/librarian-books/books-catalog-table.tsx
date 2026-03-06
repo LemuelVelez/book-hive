@@ -49,23 +49,29 @@ export function BooksCatalogTable({
 
             <TableHeader>
                 <TableRow className="border-white/10">
-                    <TableHead className="w-[70px] text-xs font-semibold text-white/70">
-                        ID
+                    <TableHead className="w-[140px] text-xs font-semibold text-white/70">
+                        Call no.
                     </TableHead>
-                    <TableHead className="w-[200px] text-xs font-semibold text-white/70">
-                        Title
-                    </TableHead>
-                    <TableHead className="w-[150px] text-xs font-semibold text-white/70">
-                        Author
-                    </TableHead>
-                    <TableHead className="w-[120px] text-xs font-semibold text-white/70">
+                    <TableHead className="w-[140px] text-xs font-semibold text-white/70">
                         Accession #
                     </TableHead>
-                    <TableHead className="w-[120px] text-xs font-semibold text-white/70">
-                        Barcode
+                    <TableHead className="w-[220px] text-xs font-semibold text-white/70">
+                        Title
                     </TableHead>
-                    <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                        Call no.
+                    <TableHead className="w-[180px] text-xs font-semibold text-white/70">
+                        Sub.
+                    </TableHead>
+                    <TableHead className="w-[100px] text-xs font-semibold text-white/70">
+                        Pub. year
+                    </TableHead>
+                    <TableHead className="w-[180px] text-xs font-semibold text-white/70">
+                        Author
+                    </TableHead>
+                    <TableHead className="w-40 text-xs font-semibold text-white/70">
+                        Subjects
+                    </TableHead>
+                    <TableHead className="w-[180px] text-xs font-semibold text-white/70">
+                        Publisher
                     </TableHead>
                     <TableHead className="w-[140px] text-xs font-semibold text-white/70">
                         Library area
@@ -74,18 +80,15 @@ export function BooksCatalogTable({
                         Inventory
                     </TableHead>
                     <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                        ISBN
+                        Barcode
                     </TableHead>
                     <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                        Subjects
+                        ISBN
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70">
-                        Pub. year
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70">
+                    <TableHead className="w-[100px] text-xs font-semibold text-white/70">
                         Loan days
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70">
+                    <TableHead className="w-[120px] text-xs font-semibold text-white/70">
                         Available
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-white/70 text-right">
@@ -104,6 +107,7 @@ export function BooksCatalogTable({
                     const subjectsValue =
                         (book.subjects && String(book.subjects).trim()) ||
                         (book.genre && String(book.genre).trim()) ||
+                        (book.category && String(book.category).trim()) ||
                         "—";
 
                     return (
@@ -111,51 +115,9 @@ export function BooksCatalogTable({
                             key={book.id}
                             className="border-white/5 hover:bg-white/5 transition-colors"
                         >
-                            <TableCell className="text-xs opacity-80">{book.id}</TableCell>
-
                             <TableCell
                                 className={
-                                    "text-sm font-medium align-top w-[90px] max-w-[90px] " +
-                                    cellScrollbarClasses
-                                }
-                            >
-                                {book.title}
-                            </TableCell>
-
-                            <TableCell
-                                className={
-                                    "text-sm opacity-90 align-top w-[90px] max-w-[90px] " +
-                                    cellScrollbarClasses
-                                }
-                            >
-                                {book.author || <span className="opacity-50">—</span>}
-                            </TableCell>
-
-                            <TableCell
-                                className={
-                                    "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
-                                    cellScrollbarClasses
-                                }
-                            >
-                                {book.accessionNumber ? (
-                                    book.accessionNumber
-                                ) : (
-                                    <span className="opacity-50">—</span>
-                                )}
-                            </TableCell>
-
-                            <TableCell
-                                className={
-                                    "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
-                                    cellScrollbarClasses
-                                }
-                            >
-                                {book.barcode ? book.barcode : <span className="opacity-50">—</span>}
-                            </TableCell>
-
-                            <TableCell
-                                className={
-                                    "text-sm opacity-80 align-top w-[70px] max-w-[70px] " +
+                                    "text-sm opacity-80 align-top w-[120px] max-w-[120px] " +
                                     cellScrollbarClasses
                                 }
                             >
@@ -168,14 +130,84 @@ export function BooksCatalogTable({
 
                             <TableCell
                                 className={
-                                    "text-sm opacity-80 align-top w-[85px] max-w-[85px] " +
+                                    "text-sm opacity-80 align-top w-[120px] max-w-[120px] " +
+                                    cellScrollbarClasses
+                                }
+                            >
+                                {book.accessionNumber ? (
+                                    book.accessionNumber
+                                ) : (
+                                    <span className="opacity-50">—</span>
+                                )}
+                            </TableCell>
+
+                            <TableCell
+                                className={
+                                    "text-sm font-medium align-top w-40 max-w-40 " +
+                                    cellScrollbarClasses
+                                }
+                            >
+                                {book.title || <span className="opacity-50">—</span>}
+                            </TableCell>
+
+                            <TableCell
+                                className={
+                                    "text-sm opacity-80 align-top w-[140px] max-w-[140px] " +
+                                    cellScrollbarClasses
+                                }
+                            >
+                                {book.subtitle ? (
+                                    book.subtitle
+                                ) : (
+                                    <span className="opacity-50">—</span>
+                                )}
+                            </TableCell>
+
+                            <TableCell className="text-sm opacity-80 align-top">
+                                {book.publicationYear || <span className="opacity-50">—</span>}
+                            </TableCell>
+
+                            <TableCell
+                                className={
+                                    "text-sm opacity-90 align-top w-[140px] max-w-[140px] " +
+                                    cellScrollbarClasses
+                                }
+                            >
+                                {book.author || <span className="opacity-50">—</span>}
+                            </TableCell>
+
+                            <TableCell
+                                className={
+                                    "text-sm opacity-80 align-top w-[130px] max-w-[130px] " +
+                                    cellScrollbarClasses
+                                }
+                            >
+                                {subjectsValue}
+                            </TableCell>
+
+                            <TableCell
+                                className={
+                                    "text-sm opacity-80 align-top w-[140px] max-w-[140px] " +
+                                    cellScrollbarClasses
+                                }
+                            >
+                                {book.publisher ? (
+                                    book.publisher
+                                ) : (
+                                    <span className="opacity-50">—</span>
+                                )}
+                            </TableCell>
+
+                            <TableCell
+                                className={
+                                    "text-sm opacity-80 align-top w-[110px] max-w-[110px] " +
                                     cellScrollbarClasses
                                 }
                             >
                                 {area ? areaLabel : <span className="opacity-50">—</span>}
                             </TableCell>
 
-                            <TableCell className="text-sm opacity-90">
+                            <TableCell className="text-sm opacity-90 align-top">
                                 {inv.remaining === null && inv.total === null ? (
                                     <span className="opacity-50">—</span>
                                 ) : (
@@ -192,29 +224,25 @@ export function BooksCatalogTable({
 
                             <TableCell
                                 className={
-                                    "text-sm opacity-80 align-top w-[60px] max-w-[60px] " +
+                                    "text-sm opacity-80 align-top w-[110px] max-w-[110px] " +
+                                    cellScrollbarClasses
+                                }
+                            >
+                                {book.barcode ? book.barcode : <span className="opacity-50">—</span>}
+                            </TableCell>
+
+                            <TableCell
+                                className={
+                                    "text-sm opacity-80 align-top w-[90px] max-w-[90px] " +
                                     cellScrollbarClasses
                                 }
                             >
                                 {book.isbn || <span className="opacity-50">—</span>}
                             </TableCell>
 
-                            <TableCell
-                                className={
-                                    "text-sm opacity-80 align-top w-20 max-w-20 " +
-                                    cellScrollbarClasses
-                                }
-                            >
-                                {subjectsValue}
-                            </TableCell>
-
-                            <TableCell className="text-sm opacity-80">
-                                {book.publicationYear || <span className="opacity-50">—</span>}
-                            </TableCell>
-
-                            <TableCell className="text-sm opacity-80">
+                            <TableCell className="text-sm opacity-80 align-top">
                                 {typeof book.borrowDurationDays === "number" &&
-                                    book.borrowDurationDays > 0 ? (
+                                book.borrowDurationDays > 0 ? (
                                     <>
                                         {book.borrowDurationDays} day
                                         {book.borrowDurationDays === 1 ? "" : "s"}
@@ -224,7 +252,7 @@ export function BooksCatalogTable({
                                 )}
                             </TableCell>
 
-                            <TableCell>
+                            <TableCell className="align-top">
                                 <Badge
                                     variant={borrowable ? "default" : "outline"}
                                     className={
@@ -247,7 +275,7 @@ export function BooksCatalogTable({
                                 </Badge>
                             </TableCell>
 
-                            <TableCell className="text-right">
+                            <TableCell className="text-right align-top">
                                 <div className="flex items-center justify-end gap-1">
                                     <Button
                                         type="button"
