@@ -556,66 +556,6 @@ export default function LibrarianBorrowRecordsPage() {
               Manage active loans, returns, due dates, fines, and return
               requests.
             </p>
-
-            <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-[11px] text-white/70">
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>
-                    <span className="font-semibold text-amber-200">
-                      Pending pickup:
-                    </span>{" "}
-                    hand the book to the student, then click{" "}
-                    <span className="font-semibold text-white">
-                      Confirm pickup → Mark borrowed
-                    </span>
-                    .
-                  </li>
-                  <li>
-                    <span className="font-semibold text-amber-200">
-                      Borrowed:
-                    </span>{" "}
-                    use{" "}
-                    <span className="font-semibold text-white">
-                      Request return
-                    </span>{" "}
-                    to notify the borrower that the book should be returned.
-                  </li>
-                  <li>
-                    <span className="font-semibold text-amber-200">
-                      Pending return:
-                    </span>{" "}
-                    verify the physical return, then click{" "}
-                    <span className="font-semibold text-white">
-                      Mark as returned
-                    </span>{" "}
-                    and set the final fine (if any).
-                  </li>
-                  <li>
-                    Extension requests are processed as{" "}
-                    <span className="font-semibold text-white">Pending</span> →{" "}
-                    <span className="font-semibold text-white">
-                      Approved/Disapproved
-                    </span>
-                    . Approval adds{" "}
-                    <span className="font-semibold text-sky-200">
-                      +{FIXED_EXTENSION_DAYS} day
-                    </span>{" "}
-                    per request.
-                  </li>
-                  <li>
-                    Renew only when there is{" "}
-                    <span className="font-semibold text-white">
-                      no next borrower
-                    </span>{" "}
-                    and the book is still available.
-                  </li>
-                  <li>
-                    Payment status is handled in the{" "}
-                    <span className="font-semibold text-white">Fines</span> page.
-                  </li>
-                </ul>
-              </div>
-            </div>
           </div>
         </div>
 
