@@ -63,6 +63,7 @@ import {
   markBorrowAsBorrowed,
   approveBorrowExtensionRequest,
   disapproveBorrowExtensionRequest,
+  requestBorrowReturnByLibrarian,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -197,6 +198,15 @@ export default function LibrarianBorrowRecordsPage() {
     "approve" | "disapprove" | null
   >(null);
 
+  const [requestReturnDialogOpen, setRequestReturnDialogOpen] =
+    React.useState(false);
+  const [requestReturnRecord, setRequestReturnRecord] =
+    React.useState<BorrowRecordDTO | null>(null);
+  const [requestReturnNoteInput, setRequestReturnNoteInput] =
+    React.useState<string>("");
+  const [submittingRequestReturn, setSubmittingRequestReturn] =
+    React.useState(false);
+
   const loadRecords = React.useCallback(async () => {
     setError(null);
     setLoading(true);
@@ -262,6 +272,20 @@ export default function LibrarianBorrowRecordsPage() {
     setSubmittingReturn(false);
   }
 
+  function openRequestReturnDialog(rec: BorrowRecordDTO) {
+    setRequestReturnRecord(rec);
+    setRequestReturnNoteInput("");
+    setSubmittingRequestReturn(false);
+    setRequestReturnDialogOpen(true);
+  }
+
+  function closeRequestReturnDialog() {
+    setRequestReturnDialogOpen(false);
+    setRequestReturnRecord(null);
+    setRequestReturnNoteInput("");
+    setSubmittingRequestReturn(false);
+  }
+
   async function handleMarkBorrowed(rec: BorrowRecordDTO) {
     setMarkBorrowBusyId(rec.id);
     try {
@@ -312,6 +336,36 @@ export default function LibrarianBorrowRecordsPage() {
       const msg = err?.message || "Failed to mark as returned.";
       toast.error("Update failed", { description: msg });
       setSubmittingReturn(false);
+    }
+  }
+
+  async function handleConfirmRequestReturn() {
+    if (!requestReturnRecord) return;
+
+    setSubmittingRequestReturn(true);
+    try {
+      const { record: updated, message } = await requestBorrowReturnByLibrarian(
+        requestReturnRecord.id,
+        requestReturnNoteInput.trim()
+          ? requestReturnNoteInput.trim()
+          : undefined
+      );
+
+      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+
+      toast.success("Return requested", {
+        description:
+          message ||
+          `A return request was sent for “${
+            updated.bookTitle ?? `Book #${updated.bookId}`
+          }”.`,
+      });
+
+      closeRequestReturnDialog();
+    } catch (err: any) {
+      const msg = err?.message || "Failed to request return.";
+      toast.error("Request failed", { description: msg });
+      setSubmittingRequestReturn(false);
     }
   }
 
@@ -419,10 +473,13 @@ export default function LibrarianBorrowRecordsPage() {
         " " +
         (r.studentId || "");
       const book = (r.bookTitle || "") + " " + r.bookId;
+      const returnRequestMeta =
+        (r.returnRequestedByName || "") + " " + (r.returnRequestNote || "");
       return (
         String(r.id).includes(q) ||
         student.toLowerCase().includes(q) ||
         book.toLowerCase().includes(q) ||
+        returnRequestMeta.toLowerCase().includes(q) ||
         String(r.userId).includes(q)
       );
     });
@@ -496,7 +553,8 @@ export default function LibrarianBorrowRecordsPage() {
             </h2>
 
             <p className="text-xs text-white/70">
-              Manage active loans, returns, due dates, and fines.
+              Manage active loans, returns, due dates, fines, and return
+              requests.
             </p>
 
             <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-3 py-2">
@@ -514,6 +572,16 @@ export default function LibrarianBorrowRecordsPage() {
                   </li>
                   <li>
                     <span className="font-semibold text-amber-200">
+                      Borrowed:
+                    </span>{" "}
+                    use{" "}
+                    <span className="font-semibold text-white">
+                      Request return
+                    </span>{" "}
+                    to notify the borrower that the book should be returned.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-amber-200">
                       Pending return:
                     </span>{" "}
                     verify the physical return, then click{" "}
@@ -525,8 +593,10 @@ export default function LibrarianBorrowRecordsPage() {
                   <li>
                     Extension requests are processed as{" "}
                     <span className="font-semibold text-white">Pending</span> →{" "}
-                    <span className="font-semibold text-white">Approved/Disapproved</span>.
-                    Approval adds{" "}
+                    <span className="font-semibold text-white">
+                      Approved/Disapproved
+                    </span>
+                    . Approval adds{" "}
                     <span className="font-semibold text-sky-200">
                       +{FIXED_EXTENSION_DAYS} day
                     </span>{" "}
@@ -765,6 +835,11 @@ export default function LibrarianBorrowRecordsPage() {
                               const canEditDueDate =
                                 extensionCount > 0 || everRequestedExtension;
 
+                              const hasReturnRequest =
+                                !isReturned && Boolean(rec.returnRequestedAt);
+                              const canRequestReturn =
+                                isBorrowed && !hasReturnRequest;
+
                               return (
                                 <TableRow
                                   key={rec.id}
@@ -790,46 +865,69 @@ export default function LibrarianBorrowRecordsPage() {
 
                                   <TableCell
                                     className={
-                                      "w-[130px] max-w-[130px] " +
+                                      "w-[180px] max-w-[180px] " +
                                       cellScrollbarClasses
                                     }
                                   >
-                                    {isReturned ? (
-                                      <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
-                                        <span className="inline-flex items-center gap-1">
-                                          <CheckCircle2 className="h-3 w-3" />
-                                          Returned
-                                        </span>
-                                      </Badge>
-                                    ) : isPendingPickup ? (
-                                      <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
-                                        <span className="inline-flex items-center gap-1">
-                                          <Clock3 className="h-3 w-3" />
-                                          Pending pickup
-                                        </span>
-                                      </Badge>
-                                    ) : isPendingReturn || isLegacyPending ? (
-                                      <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
-                                        <span className="inline-flex items-center gap-1">
-                                          <Clock3 className="h-3 w-3" />
-                                          Pending
-                                        </span>
-                                      </Badge>
-                                    ) : isOverdue ? (
-                                      <Badge className="bg-red-500/80 hover:bg-red-500 text-white border-red-400/80">
-                                        <span className="inline-flex items-center gap-1">
-                                          <AlertTriangle className="h-3 w-3" />
-                                          Overdue
-                                        </span>
-                                      </Badge>
-                                    ) : (
-                                      <Badge className="bg-amber-500/90 hover:bg-amber-500 text-white border-amber-400/80">
-                                        <span className="inline-flex items-center gap-1">
-                                          <CornerDownLeft className="h-3 w-3" />
-                                          Borrowed
-                                        </span>
-                                      </Badge>
-                                    )}
+                                    <div className="inline-flex flex-col items-start gap-1">
+                                      {isReturned ? (
+                                        <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
+                                          <span className="inline-flex items-center gap-1">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Returned
+                                          </span>
+                                        </Badge>
+                                      ) : isPendingPickup ? (
+                                        <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                                          <span className="inline-flex items-center gap-1">
+                                            <Clock3 className="h-3 w-3" />
+                                            Pending pickup
+                                          </span>
+                                        </Badge>
+                                      ) : isPendingReturn || isLegacyPending ? (
+                                        <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                                          <span className="inline-flex items-center gap-1">
+                                            <Clock3 className="h-3 w-3" />
+                                            Pending return
+                                          </span>
+                                        </Badge>
+                                      ) : isOverdue ? (
+                                        <Badge className="bg-red-500/80 hover:bg-red-500 text-white border-red-400/80">
+                                          <span className="inline-flex items-center gap-1">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            Overdue
+                                          </span>
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="bg-amber-500/90 hover:bg-amber-500 text-white border-amber-400/80">
+                                          <span className="inline-flex items-center gap-1">
+                                            <CornerDownLeft className="h-3 w-3" />
+                                            Borrowed
+                                          </span>
+                                        </Badge>
+                                      )}
+
+                                      {hasReturnRequest ? (
+                                        <div className="space-y-0.5 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-100">
+                                          <div className="font-semibold">
+                                            Return requested
+                                          </div>
+                                          <div>
+                                            {fmtDateTime(rec.returnRequestedAt)}
+                                          </div>
+                                          {rec.returnRequestedByName ? (
+                                            <div>
+                                              By: {rec.returnRequestedByName}
+                                            </div>
+                                          ) : null}
+                                          {rec.returnRequestNote ? (
+                                            <div className="whitespace-normal wrap-break-word text-amber-50/90">
+                                              Note: {rec.returnRequestNote}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   </TableCell>
 
                                   <TableCell
@@ -859,7 +957,7 @@ export default function LibrarianBorrowRecordsPage() {
 
                                   <TableCell
                                     className={
-                                      "text-right w-40 max-w-40 " +
+                                      "text-right w-44 max-w-44 " +
                                       cellScrollbarClasses
                                     }
                                   >
@@ -896,10 +994,43 @@ export default function LibrarianBorrowRecordsPage() {
                                             </span>
                                           ) : extensionPending ? (
                                             <span className="text-[10px] text-amber-200/80">
-                                              Extension pending (+{FIXED_EXTENSION_DAYS}d)
+                                              Extension pending (+
+                                              {FIXED_EXTENSION_DAYS}d)
                                             </span>
                                           ) : null}
                                         </div>
+
+                                        {isBorrowed && (
+                                          <div className="flex flex-col items-end gap-0.5">
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="ghost"
+                                              className="text-amber-300 hover:text-amber-100 hover:bg-amber-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
+                                              disabled={!canRequestReturn}
+                                              onClick={() =>
+                                                openRequestReturnDialog(rec)
+                                              }
+                                              title={
+                                                canRequestReturn
+                                                  ? "Notify borrower to return this book"
+                                                  : "A return request has already been sent for this borrow."
+                                              }
+                                            >
+                                              Request return
+                                            </Button>
+
+                                            {hasReturnRequest ? (
+                                              <span className="text-[10px] text-amber-200/80">
+                                                Already requested
+                                              </span>
+                                            ) : (
+                                              <span className="text-[10px] text-white/50">
+                                                Notify borrower to return
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
 
                                         {isPendingPickup && (
                                           <AlertDialog>
@@ -1033,6 +1164,94 @@ export default function LibrarianBorrowRecordsPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={requestReturnDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeRequestReturnDialog();
+          } else {
+            setRequestReturnDialogOpen(true);
+          }
+        }}
+      >
+        {requestReturnRecord && (
+          <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Request book return?</AlertDialogTitle>
+              <AlertDialogDescription className="text-white/70">
+                This will notify{" "}
+                <span className="font-semibold text-white">
+                  {studentFullName(requestReturnRecord)}
+                </span>{" "}
+                that{" "}
+                <span className="font-semibold text-white">
+                  “
+                  {requestReturnRecord.bookTitle ??
+                    `Book #${requestReturnRecord.bookId}`}
+                  ”
+                </span>{" "}
+                should be returned.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <div className="mt-3 text-sm text-white/80 space-y-1">
+              <p>
+                <span className="text-white/60">Borrowed on:</span>{" "}
+                {fmtDate(requestReturnRecord.borrowDate)}
+              </p>
+              <p>
+                <span className="text-white/60">Due date:</span>{" "}
+                {fmtDate(requestReturnRecord.dueDate)}
+              </p>
+              <p>
+                <span className="text-white/60">Current status:</span>{" "}
+                {requestReturnRecord.status}
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-medium text-white/80">
+                Note to borrower (optional)
+              </p>
+              <Input
+                value={requestReturnNoteInput}
+                onChange={(e) => setRequestReturnNoteInput(e.target.value)}
+                placeholder="Optional message, reminder, or reason…"
+                className="bg-slate-900/70 border-white/20 text-white"
+                disabled={submittingRequestReturn}
+              />
+              <p className="text-[11px] text-white/60">
+                The borrower will be able to see that the librarian requested the
+                return of this book.
+              </p>
+            </div>
+
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="border-white/20 text-white hover:bg-black/20"
+                disabled={submittingRequestReturn}
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                disabled={submittingRequestReturn}
+                onClick={handleConfirmRequestReturn}
+              >
+                {submittingRequestReturn ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending…
+                  </span>
+                ) : (
+                  "Send return request"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
 
       <AlertDialog
         open={returnDialogOpen}
@@ -1322,139 +1541,140 @@ export default function LibrarianBorrowRecordsPage() {
                 <span className="font-semibold text-sky-200">
                   +{FIXED_EXTENSION_DAYS} day
                 </span>{" "}
-                per approved request. Renew only if no next borrower and book remains available.
+                per approved request. Renew only if no next borrower and book
+                remains available.
               </p>
 
-              {((dueRecord.extensionRequestStatus ?? "none")
+              {(dueRecord.extensionRequestStatus ?? "none")
                 .toLowerCase()
-                .trim() === "pending") && (
-                  <div className="pt-2 space-y-2">
-                    <p className="text-xs font-medium text-white/80">
-                      Decision note (optional)
-                    </p>
-                    <Input
-                      value={decisionNoteInput}
-                      onChange={(e) => setDecisionNoteInput(e.target.value)}
-                      placeholder="Optional note for approval/disapproval…"
-                      className="bg-slate-900/70 border-white/20 text-white"
-                      disabled={submittingDecision !== null || submittingDue}
-                    />
-
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-rose-400/50 text-rose-200 hover:bg-rose-500/10"
-                        disabled={submittingDecision !== null || submittingDue}
-                        onClick={() => void handleDisapproveExtension()}
-                      >
-                        {submittingDecision === "disapprove" ? (
-                          <span className="inline-flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Disapproving…
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-2">
-                            <X className="h-4 w-4" />
-                            Disapprove
-                          </span>
-                        )}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={submittingDecision !== null || submittingDue}
-                        onClick={() => void handleApproveExtension()}
-                      >
-                        {submittingDecision === "approve" ? (
-                          <span className="inline-flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Approving…
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-2">
-                            <Check className="h-4 w-4" />
-                            Approve (+{FIXED_EXTENSION_DAYS} day)
-                          </span>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-            </div>
-
-            {((dueRecord.extensionRequestStatus ?? "none")
-              .toLowerCase()
-              .trim() !== "pending") && (
-                <div className="mt-4 space-y-2">
+                .trim() === "pending" && (
+                <div className="pt-2 space-y-2">
                   <p className="text-xs font-medium text-white/80">
-                    New due date
+                    Decision note (optional)
                   </p>
-                  <div className="flex flex-col gap-2">
-                    <Calendar
-                      mode="single"
-                      selected={dueDateInput}
-                      onSelect={setDueDateInput}
-                      captionLayout="dropdown"
-                      className="rounded-md border border-white/10 bg-slate-900/70"
-                      autoFocus
-                    />
-                    <p className="text-[11px] text-white/60">
-                      Selected date:{" "}
-                      <span className="font-semibold">
-                        {dueDateInput
-                          ? dueDateInput.toLocaleDateString("en-CA")
-                          : "—"}
-                      </span>
-                    </p>
+                  <Input
+                    value={decisionNoteInput}
+                    onChange={(e) => setDecisionNoteInput(e.target.value)}
+                    placeholder="Optional note for approval/disapproval…"
+                    className="bg-slate-900/70 border-white/20 text-white"
+                    disabled={submittingDecision !== null || submittingDue}
+                  />
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-rose-400/50 text-rose-200 hover:bg-rose-500/10"
+                      disabled={submittingDecision !== null || submittingDue}
+                      onClick={() => void handleDisapproveExtension()}
+                    >
+                      {submittingDecision === "disapprove" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Disapproving…
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <X className="h-4 w-4" />
+                          Disapprove
+                        </span>
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={submittingDecision !== null || submittingDue}
+                      onClick={() => void handleApproveExtension()}
+                    >
+                      {submittingDecision === "approve" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Approving…
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <Check className="h-4 w-4" />
+                          Approve (+{FIXED_EXTENSION_DAYS} day)
+                        </span>
+                      )}
+                    </Button>
                   </div>
-                  <p className="text-[11px] text-white/60">
-                    Extending the due date can reduce (or remove) overdue fines while
-                    this record is still active.
-                  </p>
                 </div>
               )}
+            </div>
 
-            {((dueRecord.extensionRequestStatus ?? "none")
+            {(dueRecord.extensionRequestStatus ?? "none")
               .toLowerCase()
-              .trim() === "pending") && (
-                <p className="mt-4 text-[11px] text-white/60">
-                  Manual due date editing is disabled while an extension request is pending.
-                  Decide using Approve/Disapprove above.
+              .trim() !== "pending" && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-medium text-white/80">
+                  New due date
                 </p>
-              )}
+                <div className="flex flex-col gap-2">
+                  <Calendar
+                    mode="single"
+                    selected={dueDateInput}
+                    onSelect={setDueDateInput}
+                    captionLayout="dropdown"
+                    className="rounded-md border border-white/10 bg-slate-900/70"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-white/60">
+                    Selected date:{" "}
+                    <span className="font-semibold">
+                      {dueDateInput
+                        ? dueDateInput.toLocaleDateString("en-CA")
+                        : "—"}
+                    </span>
+                  </p>
+                </div>
+                <p className="text-[11px] text-white/60">
+                  Extending the due date can reduce (or remove) overdue fines
+                  while this record is still active.
+                </p>
+              </div>
+            )}
+
+            {(dueRecord.extensionRequestStatus ?? "none")
+              .toLowerCase()
+              .trim() === "pending" && (
+              <p className="mt-4 text-[11px] text-white/60">
+                Manual due date editing is disabled while an extension request is
+                pending. Decide using Approve/Disapprove above.
+              </p>
+            )}
 
             <AlertDialogFooter>
               <AlertDialogCancel
                 className="border-white/20 text-white hover:bg-black/20"
                 disabled={submittingDue || submittingDecision !== null}
               >
-                {((dueRecord.extensionRequestStatus ?? "none")
+                {(dueRecord.extensionRequestStatus ?? "none")
                   .toLowerCase()
-                  .trim() === "pending")
+                  .trim() === "pending"
                   ? "Close"
                   : "Cancel"}
               </AlertDialogCancel>
 
-              {((dueRecord.extensionRequestStatus ?? "none")
+              {(dueRecord.extensionRequestStatus ?? "none")
                 .toLowerCase()
-                .trim() !== "pending") && (
-                  <AlertDialogAction
-                    className="bg-purple-600 hover:bg-purple-700 text-white"
-                    disabled={submittingDue || submittingDecision !== null}
-                    onClick={handleSaveDueDate}
-                  >
-                    {submittingDue ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Saving…
-                      </span>
-                    ) : (
-                      "Save due date"
-                    )}
-                  </AlertDialogAction>
-                )}
+                .trim() !== "pending" && (
+                <AlertDialogAction
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                  disabled={submittingDue || submittingDecision !== null}
+                  onClick={handleSaveDueDate}
+                >
+                  {submittingDue ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </span>
+                  ) : (
+                    "Save due date"
+                  )}
+                </AlertDialogAction>
+              )}
             </AlertDialogFooter>
           </AlertDialogContent>
         )}
