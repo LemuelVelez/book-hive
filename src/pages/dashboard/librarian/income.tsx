@@ -32,12 +32,18 @@ import {
     CheckCircle2,
     AlertTriangle,
     XCircle,
+    FileSearch,
+    Printer,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { fetchFines, type FineDTO, type FineStatus } from "@/lib/fines"
 import { API_BASE } from "@/api/auth/route"
 import type { DamageReportDTO, DamageStatus, DamageSeverity } from "@/lib/damageReports"
+import {
+    ExportPreviewIncome,
+    type PrintableIncomeRecord,
+} from "@/components/income-preview/export-preview-income"
 
 type StatusFilter = "paid" | "all" | FineStatus
 type MonthFilter = "all" | string // "YYYY-MM"
@@ -215,8 +221,8 @@ function buildVirtualDamageIncomeRows(
             typeof rawFee === "number"
                 ? rawFee
                 : rawFee != null && rawFee !== ""
-                    ? Number(rawFee)
-                    : suggestedFineFromSeverity(r.severity)
+                  ? Number(rawFee)
+                  : suggestedFineFromSeverity(r.severity)
 
         const feeNum = Number.isFinite(feeNumRaw) ? Number(feeNumRaw) : 0
         if (feeNum <= 0) continue
@@ -312,6 +318,9 @@ export default function LibrarianIncomePage() {
     const [search, setSearch] = React.useState("")
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("paid")
     const [monthFilter, setMonthFilter] = React.useState<MonthFilter>("all")
+
+    const [exportOpen, setExportOpen] = React.useState(false)
+    const [exportAutoPrint, setExportAutoPrint] = React.useState(false)
 
     const loadIncome = React.useCallback(async () => {
         setError(null)
@@ -455,6 +464,87 @@ export default function LibrarianIncomePage() {
         return { paidTotal, paidCount, activeTotal, activeCount, totalCount: filtered.length }
     }, [filtered])
 
+    const printableRecords = React.useMemo<PrintableIncomeRecord[]>(() => {
+        return filtered.map((r) => {
+            const sourceText =
+                r._source === "damage" || (r as any).damageReportId
+                    ? "Damage"
+                    : "Borrow fine"
+
+            const referenceParts: string[] = [`#${r.id}`]
+            if ((r as any).damageReportId) {
+                referenceParts.push(`Damage #${(r as any).damageReportId}`)
+            }
+            if (r.borrowRecordId) {
+                referenceParts.push(`Borrow #${r.borrowRecordId}`)
+            }
+
+            return {
+                id: r.id,
+                userId: r.userId ?? null,
+                studentId: r.studentId ?? null,
+                studentName: r.studentName ?? null,
+                studentEmail: r.studentEmail ?? null,
+                bookTitle: r.bookTitle ?? null,
+                bookId: r.bookId ?? null,
+                reason: r.reason ?? null,
+                status: r.status,
+                amount: normalizeAmount(r.amount),
+                createdAt: r.createdAt ?? null,
+                resolvedAt: r.resolvedAt ?? r.updatedAt ?? null,
+                paidDate: getRowPaidDate(r),
+                sourceLabel: r._source ?? "fine",
+                referenceLabel: `${sourceText} • ${referenceParts.join(" • ")}`,
+                damageSeverity: r.damageSeverity ?? null,
+            }
+        })
+    }, [filtered])
+
+    const exportSubtitle = React.useMemo(() => {
+        const parts: string[] = []
+
+        if (statusFilter === "all") {
+            parts.push("All statuses")
+        } else if (statusFilter === "paid") {
+            parts.push("Paid income only")
+        } else if (statusFilter === "active") {
+            parts.push("Active records only")
+        } else {
+            parts.push("Cancelled records only")
+        }
+
+        if (monthFilter !== "all") {
+            parts.push(monthLabel(monthFilter))
+        } else {
+            parts.push("All months")
+        }
+
+        const searchText = search.trim()
+        if (searchText) {
+            const compactSearch = searchText.replace(/\s+/g, " ").slice(0, 40)
+            parts.push(`Search: ${compactSearch}`)
+        }
+
+        return `Current filtered librarian income view • ${parts.join(" • ")}`
+    }, [statusFilter, monthFilter, search])
+
+    const exportFileNamePrefix = React.useMemo(() => {
+        let value = "bookhive-income-report"
+        if (statusFilter !== "all") value += `-${statusFilter}`
+        if (monthFilter !== "all") value += `-${monthFilter}`
+        return value
+    }, [statusFilter, monthFilter])
+
+    const handleOpenExportPreview = React.useCallback(() => {
+        setExportAutoPrint(false)
+        setExportOpen(true)
+    }, [])
+
+    const handleQuickPrint = React.useCallback(() => {
+        setExportAutoPrint(true)
+        setExportOpen(true)
+    }, [])
+
     const cellScrollbarClasses =
         "overflow-x-auto whitespace-nowrap " +
         "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
@@ -473,7 +563,7 @@ export default function LibrarianIncomePage() {
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Income Records</h2>
                         <p className="text-xs text-white/70">
-                            Track collected income from paid fines and paid damage fees (names shown first for clarity).
+                            Track collected income from paid fines and paid damage fees with PDF preview, print, and export.
                         </p>
                     </div>
                 </div>
@@ -486,7 +576,7 @@ export default function LibrarianIncomePage() {
                                 {peso(statsAll.paidTotal)} ({statsAll.paidCount})
                             </span>
                         </span>
-                        <span className="text-[11px] text-white/60">
+                        <span className="text-xs text-white/60">
                             In view:{" "}
                             <span className="text-emerald-200 font-semibold">
                                 {peso(statsView.paidTotal)} ({statsView.paidCount})
@@ -496,21 +586,45 @@ export default function LibrarianIncomePage() {
                         </span>
                     </div>
 
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="border-white/20 text-white/90 hover:bg-white/10"
-                        onClick={handleRefresh}
-                        disabled={refreshing || loading}
-                    >
-                        {refreshing || loading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                            <RefreshCcw className="h-4 w-4" />
-                        )}
-                        <span className="sr-only">Refresh</span>
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            onClick={handleOpenExportPreview}
+                            disabled={loading || filtered.length === 0}
+                        >
+                            <FileSearch className="mr-2 h-4 w-4" />
+                            Preview PDF
+                        </Button>
+
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="border-emerald-400/40 text-emerald-100 hover:bg-emerald-500/10"
+                            onClick={handleQuickPrint}
+                            disabled={loading || filtered.length === 0}
+                        >
+                            <Printer className="mr-2 h-4 w-4" />
+                            Print PDF
+                        </Button>
+
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            onClick={handleRefresh}
+                            disabled={refreshing || loading}
+                        >
+                            {refreshing || loading ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <RefreshCcw className="h-4 w-4" />
+                            )}
+                            <span className="sr-only">Refresh</span>
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -596,7 +710,7 @@ export default function LibrarianIncomePage() {
                                     <TableHead className="text-xs font-semibold text-white/70">Amount</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Paid / Date</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Notes</TableHead>
-                                    <TableHead className="w-[110px] text-xs font-semibold text-white/70">Reference</TableHead>
+                                    <TableHead className="w-28 text-xs font-semibold text-white/70">Reference</TableHead>
                                 </TableRow>
                             </TableHeader>
 
@@ -639,10 +753,10 @@ export default function LibrarianIncomePage() {
                                                 </div>
                                             </TableCell>
 
-                                            <TableCell className={"text-sm w-[170px] max-w-72 " + cellScrollbarClasses}>
+                                            <TableCell className={"text-sm w-44 max-w-72 " + cellScrollbarClasses}>
                                                 <div className="flex flex-col gap-0.5">
                                                     <span>{bookPrimary}</span>
-                                                    <span className="text-[11px] text-white/60">{bookMeta.join(" · ")}</span>
+                                                    <span className="text-xs text-white/60">{bookMeta.join(" · ")}</span>
                                                 </div>
                                             </TableCell>
 
@@ -652,7 +766,7 @@ export default function LibrarianIncomePage() {
 
                                             <TableCell className="text-xs opacity-80">{fmtDate(paidDate)}</TableCell>
 
-                                            <TableCell className={"text-xs text-white/70 w-[180px] max-w-[320px] " + cellScrollbarClasses}>
+                                            <TableCell className={"text-xs text-white/70 w-44 max-w-80 " + cellScrollbarClasses}>
                                                 {r.reason ? r.reason : "—"}
                                             </TableCell>
 
@@ -660,7 +774,7 @@ export default function LibrarianIncomePage() {
                                                 <div className="flex flex-col gap-0.5">
                                                     <span className="opacity-80">#{r.id}</span>
                                                     {monthFilter !== "all" && (
-                                                        <span className="text-[11px] text-white/50">{monthLabel(monthFilter)}</span>
+                                                        <span className="text-xs text-white/50">{monthLabel(monthFilter)}</span>
                                                     )}
                                                 </div>
                                             </TableCell>
@@ -672,6 +786,19 @@ export default function LibrarianIncomePage() {
                     )}
                 </CardContent>
             </Card>
+
+            <ExportPreviewIncome
+                open={exportOpen}
+                onOpenChange={(open) => {
+                    setExportOpen(open)
+                    if (!open) setExportAutoPrint(false)
+                }}
+                records={printableRecords}
+                autoPrintOnOpen={exportAutoPrint}
+                fileNamePrefix={exportFileNamePrefix}
+                reportTitle="BookHive Library • Income Report"
+                reportSubtitle={exportSubtitle}
+            />
         </DashboardLayout>
     )
 }
