@@ -76,16 +76,16 @@ function fmtDate(d?: string | null) {
     }
 }
 
-function peso(n: number) {
-    if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00"
+function formatPHP(n: number) {
+    if (typeof n !== "number" || Number.isNaN(n)) return "PHP 0.00"
     try {
-        return new Intl.NumberFormat("en-PH", {
-            style: "currency",
-            currency: "PHP",
+        const formatted = new Intl.NumberFormat("en-PH", {
+            minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         }).format(n)
+        return `PHP ${formatted}`
     } catch {
-        return `₱${n.toFixed(2)}`
+        return `PHP ${n.toFixed(2)}`
     }
 }
 
@@ -573,16 +573,16 @@ export default function LibrarianIncomePage() {
                         <span>
                             Total collected (All paid):{" "}
                             <span className="font-semibold text-emerald-200">
-                                {peso(statsAll.paidTotal)} ({statsAll.paidCount})
+                                {formatPHP(statsAll.paidTotal)} ({statsAll.paidCount})
                             </span>
                         </span>
                         <span className="text-xs text-white/60">
                             In view:{" "}
                             <span className="text-emerald-200 font-semibold">
-                                {peso(statsView.paidTotal)} ({statsView.paidCount})
+                                {formatPHP(statsView.paidTotal)} ({statsView.paidCount})
                             </span>
                             <span className="text-white/60"> · </span>
-                            Outstanding: {peso(statsView.activeTotal)} ({statsView.activeCount})
+                            Outstanding: {formatPHP(statsView.activeTotal)} ({statsView.activeCount})
                         </span>
                     </div>
 
@@ -762,7 +762,7 @@ export default function LibrarianIncomePage() {
 
                                             <TableCell>{renderStatusBadge(r.status)}</TableCell>
 
-                                            <TableCell className="text-sm">{peso(amount)}</TableCell>
+                                            <TableCell className="text-sm">{formatPHP(amount)}</TableCell>
 
                                             <TableCell className="text-xs opacity-80">{fmtDate(paidDate)}</TableCell>
 

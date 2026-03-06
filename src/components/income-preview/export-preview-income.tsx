@@ -61,16 +61,15 @@ type IncomePdfDocProps = {
 }
 
 function formatPHP(n: number) {
-    if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00"
+    if (typeof n !== "number" || Number.isNaN(n)) return "PHP 0.00"
     try {
-        return new Intl.NumberFormat("en-PH", {
-            style: "currency",
-            currency: "PHP",
+        const formatted = new Intl.NumberFormat("en-PH", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         }).format(n)
+        return `PHP ${formatted}`
     } catch {
-        return `₱${n.toFixed(2)}`
+        return `PHP ${n.toFixed(2)}`
     }
 }
 
