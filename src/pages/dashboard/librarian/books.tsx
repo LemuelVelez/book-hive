@@ -1015,10 +1015,10 @@ export default function LibrarianBooksPage() {
 
     return (
         <DashboardLayout title="Books Management">
-            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                    <BookOpen className="h-5 w-5" />
-                    <div>
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-start gap-2">
+                    <BookOpen className="mt-0.5 h-5 w-5 shrink-0" />
+                    <div className="min-w-0">
                         <h2 className="text-lg font-semibold leading-tight">Catalog &amp; inventory</h2>
                         <p className="text-xs text-white/70">
                             Add new titles, manage inventory copies, and monitor remaining/borrowed counts.
@@ -1026,7 +1026,7 @@ export default function LibrarianBooksPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
                     <Button
                         type="button"
                         variant="outline"
@@ -1053,21 +1053,20 @@ export default function LibrarianBooksPage() {
                         <DialogTrigger asChild>
                             <Button
                                 type="button"
-                                className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                                className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
                             >
-                                <Plus className="h-4 w-4 mr-2" />
+                                <Plus className="mr-2 h-4 w-4" />
                                 Add book
                             </Button>
                         </DialogTrigger>
 
                         <DialogContent
-                            className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10
-              max-h-[85vh] overflow-y-auto
+                            className="w-[92vw] max-h-[85vh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-lg
               [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
               [&::-webkit-scrollbar]:w-1.5
               [&::-webkit-scrollbar-track]:bg-slate-900/70
-              [&::-webkit-scrollbar-thumb]:bg-slate-700
               [&::-webkit-scrollbar-thumb]:rounded-full
+              [&::-webkit-scrollbar-thumb]:bg-slate-700
               [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
                         >
                             <DialogHeader>
@@ -1081,7 +1080,7 @@ export default function LibrarianBooksPage() {
                             <div className="space-y-5 py-2">
                                 {/* Requested ordering: Call No -> Acc No -> Title -> Subtitle -> Pub Year -> ... */}
                                 <div className="space-y-4">
-                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                    <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
                                         Cataloging essentials
                                     </div>
 
@@ -1092,7 +1091,7 @@ export default function LibrarianBooksPage() {
                                                 value={callNumber}
                                                 onChange={(e) => setCallNumber(e.target.value)}
                                                 placeholder="Required (e.g., QA76.73.J38 M37 2008)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1105,7 +1104,7 @@ export default function LibrarianBooksPage() {
                                                 value={accessionNumber}
                                                 onChange={(e) => setAccessionNumber(e.target.value)}
                                                 placeholder="Required"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1118,7 +1117,7 @@ export default function LibrarianBooksPage() {
                                                 value={title}
                                                 onChange={(e) => setTitle(e.target.value)}
                                                 placeholder="e.g., Clean Code"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1131,7 +1130,7 @@ export default function LibrarianBooksPage() {
                                                 value={subtitle}
                                                 onChange={(e) => setSubtitle(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1144,7 +1143,7 @@ export default function LibrarianBooksPage() {
                                                 value={pubYear}
                                                 onChange={(e) => setPubYear(e.target.value)}
                                                 placeholder="e.g., 2008"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 inputMode="numeric"
                                                 autoComplete="off"
                                             />
@@ -1158,7 +1157,7 @@ export default function LibrarianBooksPage() {
                                                 value={author}
                                                 onChange={(e) => setAuthor(e.target.value)}
                                                 placeholder="e.g., Robert C. Martin"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1171,7 +1170,7 @@ export default function LibrarianBooksPage() {
                                                 value={placeOfPublication}
                                                 onChange={(e) => setPlaceOfPublication(e.target.value)}
                                                 placeholder="Required (e.g., Boston)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1184,7 +1183,7 @@ export default function LibrarianBooksPage() {
                                                 value={publisher}
                                                 onChange={(e) => setPublisher(e.target.value)}
                                                 placeholder="Required (e.g., Pearson)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1197,7 +1196,7 @@ export default function LibrarianBooksPage() {
                                                 value={pages}
                                                 onChange={(e) => setPages(e.target.value)}
                                                 placeholder='Optional (e.g., "xii, 200 p." / "Preliminary")'
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1213,7 +1212,7 @@ export default function LibrarianBooksPage() {
                                                 value={subjects}
                                                 onChange={(e) => setSubjects(e.target.value)}
                                                 placeholder="Optional (e.g., Software Engineering)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1226,15 +1225,15 @@ export default function LibrarianBooksPage() {
                                                 value={otherDetails}
                                                 onChange={(e) => setOtherDetails(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
                                     </Field>
                                 </div>
 
-                                <div className="space-y-4 pt-2 border-t border-white/10">
-                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                <div className="space-y-4 border-t border-white/10 pt-2">
+                                    <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
                                         Additional info
                                     </div>
 
@@ -1245,7 +1244,7 @@ export default function LibrarianBooksPage() {
                                                 value={barcode}
                                                 onChange={(e) => setBarcode(e.target.value)}
                                                 placeholder="Required"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1258,7 +1257,7 @@ export default function LibrarianBooksPage() {
                                                 value={isbn}
                                                 onChange={(e) => setIsbn(e.target.value)}
                                                 placeholder="Optional (e.g., 9780132350884)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1271,7 +1270,7 @@ export default function LibrarianBooksPage() {
                                                 value={issn}
                                                 onChange={(e) => setIssn(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1284,7 +1283,7 @@ export default function LibrarianBooksPage() {
                                                 value={edition}
                                                 onChange={(e) => setEdition(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1297,7 +1296,7 @@ export default function LibrarianBooksPage() {
                                                 value={dimensions}
                                                 onChange={(e) => setDimensions(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1310,7 +1309,7 @@ export default function LibrarianBooksPage() {
                                                 value={notes}
                                                 onChange={(e) => setNotes(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1323,7 +1322,7 @@ export default function LibrarianBooksPage() {
                                                 value={series}
                                                 onChange={(e) => setSeries(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1336,15 +1335,15 @@ export default function LibrarianBooksPage() {
                                                 value={addedEntries}
                                                 onChange={(e) => setAddedEntries(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
                                     </Field>
                                 </div>
 
-                                <div className="space-y-4 pt-2 border-t border-white/10">
-                                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                                <div className="space-y-4 border-t border-white/10 pt-2">
+                                    <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
                                         Copies & circulation
                                     </div>
 
@@ -1355,7 +1354,7 @@ export default function LibrarianBooksPage() {
                                                 value={numberOfCopies}
                                                 onChange={(e) => setNumberOfCopies(e.target.value)}
                                                 placeholder="e.g., 3"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 inputMode="numeric"
                                                 autoComplete="off"
                                             />
@@ -1372,7 +1371,7 @@ export default function LibrarianBooksPage() {
                                                 value={copyNumber}
                                                 onChange={(e) => setCopyNumber(e.target.value)}
                                                 placeholder="Optional (positive number)"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 inputMode="numeric"
                                                 autoComplete="off"
                                             />
@@ -1386,7 +1385,7 @@ export default function LibrarianBooksPage() {
                                                 value={volumeNumber}
                                                 onChange={(e) => setVolumeNumber(e.target.value)}
                                                 placeholder="Optional"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 autoComplete="off"
                                             />
                                         </FieldContent>
@@ -1403,7 +1402,7 @@ export default function LibrarianBooksPage() {
                                                 }}
                                                 className="space-y-2"
                                             >
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                                     {LIBRARY_AREA_OPTIONS.map((opt) => {
                                                         const id = `lib-area-${opt}`;
                                                         return (
@@ -1414,7 +1413,7 @@ export default function LibrarianBooksPage() {
                                                                 <RadioGroupItem value={opt} id={id} />
                                                                 <Label
                                                                     htmlFor={id}
-                                                                    className="text-sm text-white/80 cursor-pointer"
+                                                                    className="cursor-pointer text-sm text-white/80"
                                                                 >
                                                                     {formatLibraryAreaLabel(opt)}
                                                                 </Label>
@@ -1429,7 +1428,7 @@ export default function LibrarianBooksPage() {
                                                         />
                                                         <Label
                                                             htmlFor="lib-area-others"
-                                                            className="text-sm text-white/80 cursor-pointer"
+                                                            className="cursor-pointer text-sm text-white/80"
                                                         >
                                                             Others (please specify)
                                                         </Label>
@@ -1442,7 +1441,7 @@ export default function LibrarianBooksPage() {
                                                             value={libraryAreaOther}
                                                             onChange={(e) => setLibraryAreaOther(e.target.value)}
                                                             placeholder="Please specify (e.g., archives)"
-                                                            className="bg-slate-900/70 border-white/20 text-white"
+                                                            className="border-white/20 bg-slate-900/70 text-white"
                                                             autoComplete="off"
                                                         />
                                                     </div>
@@ -1460,7 +1459,7 @@ export default function LibrarianBooksPage() {
                                                 value={borrowDuration}
                                                 onChange={(e) => setBorrowDuration(e.target.value)}
                                                 placeholder="e.g., 7"
-                                                className="bg-slate-900/70 border-white/20 text-white"
+                                                className="border-white/20 bg-slate-900/70 text-white"
                                                 inputMode="numeric"
                                                 autoComplete="off"
                                             />
@@ -1485,11 +1484,11 @@ export default function LibrarianBooksPage() {
                                 </div>
                             </div>
 
-                            <DialogFooterUI className="flex flex-col sm:flex-row sm:justify-end gap-2">
+                            <DialogFooterUI className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    className="border-white/20 text-white hover:text-white hover:bg-black/10 w-full sm:w-auto"
+                                    className="w-full border-white/20 text-white hover:bg-black/10 hover:text-white sm:w-auto"
                                     onClick={() => {
                                         setAddOpen(false);
                                         resetForm();
@@ -1500,7 +1499,7 @@ export default function LibrarianBooksPage() {
                                 </Button>
                                 <Button
                                     type="button"
-                                    className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white w-full sm:w-auto"
+                                    className="w-full cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 sm:w-auto"
                                     onClick={handleCreateBook}
                                     disabled={saving}
                                 >
@@ -1527,13 +1526,12 @@ export default function LibrarianBooksPage() {
                 }}
             >
                 <DialogContent
-                    className="w-[92vw] sm:max-w-lg bg-slate-900 text-white border-white/10
-          max-h-[85vh] overflow-y-auto
+                    className="w-[92vw] max-h-[85vh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-lg
           [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
           [&::-webkit-scrollbar]:w-1.5
           [&::-webkit-scrollbar-track]:bg-slate-900/70
-          [&::-webkit-scrollbar-thumb]:bg-slate-700
           [&::-webkit-scrollbar-thumb]:rounded-full
+          [&::-webkit-scrollbar-thumb]:bg-slate-700
           [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
                 >
                     <DialogHeader>
@@ -1547,7 +1545,7 @@ export default function LibrarianBooksPage() {
                     <div className="space-y-5 py-2">
                         {/* Requested ordering: Call No -> Acc No -> Title -> Subtitle -> Pub Year -> ... */}
                         <div className="space-y-4">
-                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
                                 Cataloging essentials
                             </div>
 
@@ -1558,7 +1556,7 @@ export default function LibrarianBooksPage() {
                                         value={editCallNumber}
                                         onChange={(e) => setEditCallNumber(e.target.value)}
                                         placeholder="Required"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1571,7 +1569,7 @@ export default function LibrarianBooksPage() {
                                         value={editAccessionNumber}
                                         onChange={(e) => setEditAccessionNumber(e.target.value)}
                                         placeholder="Required"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1584,7 +1582,7 @@ export default function LibrarianBooksPage() {
                                         value={editTitle}
                                         onChange={(e) => setEditTitle(e.target.value)}
                                         placeholder="e.g., Clean Code"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1597,7 +1595,7 @@ export default function LibrarianBooksPage() {
                                         value={editSubtitle}
                                         onChange={(e) => setEditSubtitle(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1610,7 +1608,7 @@ export default function LibrarianBooksPage() {
                                         value={editPubYear}
                                         onChange={(e) => setEditPubYear(e.target.value)}
                                         placeholder="e.g., 2008"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         inputMode="numeric"
                                         autoComplete="off"
                                     />
@@ -1624,7 +1622,7 @@ export default function LibrarianBooksPage() {
                                         value={editAuthor}
                                         onChange={(e) => setEditAuthor(e.target.value)}
                                         placeholder="e.g., Robert C. Martin"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1637,7 +1635,7 @@ export default function LibrarianBooksPage() {
                                         value={editPlaceOfPublication}
                                         onChange={(e) => setEditPlaceOfPublication(e.target.value)}
                                         placeholder="Required"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1650,7 +1648,7 @@ export default function LibrarianBooksPage() {
                                         value={editPublisher}
                                         onChange={(e) => setEditPublisher(e.target.value)}
                                         placeholder="Required"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1663,7 +1661,7 @@ export default function LibrarianBooksPage() {
                                         value={editPages}
                                         onChange={(e) => setEditPages(e.target.value)}
                                         placeholder='Optional (e.g., "xii, 200 p." / "Preliminary")'
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1679,7 +1677,7 @@ export default function LibrarianBooksPage() {
                                         value={editSubjects}
                                         onChange={(e) => setEditSubjects(e.target.value)}
                                         placeholder="Optional (e.g., Software Engineering)"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1692,15 +1690,15 @@ export default function LibrarianBooksPage() {
                                         value={editOtherDetails}
                                         onChange={(e) => setEditOtherDetails(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
                             </Field>
                         </div>
 
-                        <div className="space-y-4 pt-2 border-t border-white/10">
-                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                        <div className="space-y-4 border-t border-white/10 pt-2">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
                                 Additional info
                             </div>
 
@@ -1711,7 +1709,7 @@ export default function LibrarianBooksPage() {
                                         value={editBarcode}
                                         onChange={(e) => setEditBarcode(e.target.value)}
                                         placeholder="Required"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1724,7 +1722,7 @@ export default function LibrarianBooksPage() {
                                         value={editIsbn}
                                         onChange={(e) => setEditIsbn(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1737,7 +1735,7 @@ export default function LibrarianBooksPage() {
                                         value={editIssn}
                                         onChange={(e) => setEditIssn(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1750,7 +1748,7 @@ export default function LibrarianBooksPage() {
                                         value={editEdition}
                                         onChange={(e) => setEditEdition(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1763,7 +1761,7 @@ export default function LibrarianBooksPage() {
                                         value={editDimensions}
                                         onChange={(e) => setEditDimensions(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1776,7 +1774,7 @@ export default function LibrarianBooksPage() {
                                         value={editNotes}
                                         onChange={(e) => setEditNotes(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1789,7 +1787,7 @@ export default function LibrarianBooksPage() {
                                         value={editSeries}
                                         onChange={(e) => setEditSeries(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1802,15 +1800,15 @@ export default function LibrarianBooksPage() {
                                         value={editAddedEntries}
                                         onChange={(e) => setEditAddedEntries(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
                             </Field>
                         </div>
 
-                        <div className="space-y-4 pt-2 border-t border-white/10">
-                            <div className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                        <div className="space-y-4 border-t border-white/10 pt-2">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
                                 Copies & circulation
                             </div>
 
@@ -1851,12 +1849,12 @@ export default function LibrarianBooksPage() {
                                         }}
                                         className="space-y-2"
                                     >
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
                                                 <RadioGroupItem value="set" id="copies-mode-set" />
                                                 <Label
                                                     htmlFor="copies-mode-set"
-                                                    className="text-sm text-white/80 cursor-pointer"
+                                                    className="cursor-pointer text-sm text-white/80"
                                                 >
                                                     Set total copies
                                                 </Label>
@@ -1865,7 +1863,7 @@ export default function LibrarianBooksPage() {
                                                 <RadioGroupItem value="add" id="copies-mode-add" />
                                                 <Label
                                                     htmlFor="copies-mode-add"
-                                                    className="text-sm text-white/80 cursor-pointer"
+                                                    className="cursor-pointer text-sm text-white/80"
                                                 >
                                                     Add copies
                                                 </Label>
@@ -1878,7 +1876,7 @@ export default function LibrarianBooksPage() {
                                                     value={editNumberOfCopies}
                                                     onChange={(e) => setEditNumberOfCopies(e.target.value)}
                                                     placeholder="e.g., 5"
-                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    className="border-white/20 bg-slate-900/70 text-white"
                                                     inputMode="numeric"
                                                     autoComplete="off"
                                                 />
@@ -1892,7 +1890,7 @@ export default function LibrarianBooksPage() {
                                                     value={editCopiesToAdd}
                                                     onChange={(e) => setEditCopiesToAdd(e.target.value)}
                                                     placeholder="e.g., 2"
-                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    className="border-white/20 bg-slate-900/70 text-white"
                                                     inputMode="numeric"
                                                     autoComplete="off"
                                                 />
@@ -1916,7 +1914,7 @@ export default function LibrarianBooksPage() {
                                         value={editCopyNumber}
                                         onChange={(e) => setEditCopyNumber(e.target.value)}
                                         placeholder="Optional (positive number)"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         inputMode="numeric"
                                         autoComplete="off"
                                     />
@@ -1930,7 +1928,7 @@ export default function LibrarianBooksPage() {
                                         value={editVolumeNumber}
                                         onChange={(e) => setEditVolumeNumber(e.target.value)}
                                         placeholder="Optional"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         autoComplete="off"
                                     />
                                 </FieldContent>
@@ -1947,7 +1945,7 @@ export default function LibrarianBooksPage() {
                                         }}
                                         className="space-y-2"
                                     >
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                             {LIBRARY_AREA_OPTIONS.map((opt) => {
                                                 const id = `edit-lib-area-${opt}`;
                                                 return (
@@ -1958,7 +1956,7 @@ export default function LibrarianBooksPage() {
                                                         <RadioGroupItem value={opt} id={id} />
                                                         <Label
                                                             htmlFor={id}
-                                                            className="text-sm text-white/80 cursor-pointer"
+                                                            className="cursor-pointer text-sm text-white/80"
                                                         >
                                                             {formatLibraryAreaLabel(opt)}
                                                         </Label>
@@ -1973,7 +1971,7 @@ export default function LibrarianBooksPage() {
                                                 />
                                                 <Label
                                                     htmlFor="edit-lib-area-others"
-                                                    className="text-sm text-white/80 cursor-pointer"
+                                                    className="cursor-pointer text-sm text-white/80"
                                                 >
                                                     Others (please specify)
                                                 </Label>
@@ -1986,7 +1984,7 @@ export default function LibrarianBooksPage() {
                                                     value={editLibraryAreaOther}
                                                     onChange={(e) => setEditLibraryAreaOther(e.target.value)}
                                                     placeholder="Please specify (e.g., archives)"
-                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    className="border-white/20 bg-slate-900/70 text-white"
                                                     autoComplete="off"
                                                 />
                                             </div>
@@ -2004,7 +2002,7 @@ export default function LibrarianBooksPage() {
                                         value={editBorrowDuration}
                                         onChange={(e) => setEditBorrowDuration(e.target.value)}
                                         placeholder="e.g., 7"
-                                        className="bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 text-white"
                                         inputMode="numeric"
                                         autoComplete="off"
                                     />
@@ -2029,11 +2027,11 @@ export default function LibrarianBooksPage() {
                         </div>
                     </div>
 
-                    <DialogFooterUI className="flex flex-col sm:flex-row sm:justify-end gap-2">
+                    <DialogFooterUI className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                         <Button
                             type="button"
                             variant="outline"
-                            className="border-white/20 text-white hover:text-white hover:bg-black/10 w-full sm:w-auto"
+                            className="w-full border-white/20 text-white hover:bg-black/10 hover:text-white sm:w-auto"
                             onClick={() => {
                                 setEditOpen(false);
                                 resetEditForm();
@@ -2044,7 +2042,7 @@ export default function LibrarianBooksPage() {
                         </Button>
                         <Button
                             type="button"
-                            className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white w-full sm:w-auto"
+                            className="w-full cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 sm:w-auto"
                             onClick={handleUpdateBook}
                             disabled={editing}
                         >
@@ -2061,7 +2059,7 @@ export default function LibrarianBooksPage() {
                 </DialogContent>
             </Dialog>
 
-            <Card className="bg-slate-800/60 border-white/10">
+            <Card className="border-white/10 bg-slate-800/60">
                 <CardHeader className="pb-2">
                     <div className="flex flex-col gap-3">
                         <div className="flex flex-col gap-1">
@@ -2072,14 +2070,14 @@ export default function LibrarianBooksPage() {
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(260px,1fr)_190px_190px_220px_auto]">
-                            <div className="relative min-w-0">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="relative min-w-0 md:col-span-2 xl:col-span-3">
                                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     placeholder="Search keyword, call no., accession, title, author, publisher, subjects, inventory…"
-                                    className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                                    className="border-white/20 bg-slate-900/70 pl-9 text-white"
                                     autoComplete="off"
                                 />
                             </div>
@@ -2088,13 +2086,13 @@ export default function LibrarianBooksPage() {
                                 value={libraryAreaFilter}
                                 onValueChange={(value) => setLibraryAreaFilter(value)}
                             >
-                                <SelectTrigger className="w-full bg-slate-900/70 border-white/20 text-white">
+                                <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
                                     <div className="flex items-center gap-2 truncate">
                                         <Filter className="h-4 w-4 text-white/60" />
                                         <SelectValue placeholder="Library area" />
                                     </div>
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                <SelectContent className="border-white/10 bg-slate-900 text-white">
                                     <SelectItem value="all">All library areas</SelectItem>
                                     {libraryAreaChoices.map((area) => (
                                         <SelectItem key={area} value={area}>
@@ -2110,13 +2108,13 @@ export default function LibrarianBooksPage() {
                                     setAvailabilityFilter(value as CatalogAvailabilityFilter)
                                 }
                             >
-                                <SelectTrigger className="w-full bg-slate-900/70 border-white/20 text-white">
+                                <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
                                     <div className="flex items-center gap-2 truncate">
                                         <Filter className="h-4 w-4 text-white/60" />
                                         <SelectValue placeholder="Availability" />
                                     </div>
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                <SelectContent className="border-white/10 bg-slate-900 text-white">
                                     <SelectItem value="all">All availability</SelectItem>
                                     <SelectItem value="available">Available only</SelectItem>
                                     <SelectItem value="unavailable">Unavailable only</SelectItem>
@@ -2127,13 +2125,13 @@ export default function LibrarianBooksPage() {
                                 value={sortOption}
                                 onValueChange={(value) => setSortOption(value as CatalogSortOption)}
                             >
-                                <SelectTrigger className="w-full bg-slate-900/70 border-white/20 text-white">
+                                <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
                                     <div className="flex items-center gap-2 truncate">
                                         <ArrowUpDown className="h-4 w-4 text-white/60" />
                                         <SelectValue placeholder="Sort books" />
                                     </div>
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                                <SelectContent className="border-white/10 bg-slate-900 text-white">
                                     <SelectItem value="catalog">Catalog order</SelectItem>
                                     <SelectItem value="title_asc">Title (A–Z)</SelectItem>
                                     <SelectItem value="title_desc">Title (Z–A)</SelectItem>
@@ -2150,16 +2148,16 @@ export default function LibrarianBooksPage() {
                                 </SelectContent>
                             </Select>
 
-                            <div className="flex-col-1 items-center gap-2">
+                            <div className="flex flex-col gap-2 xl:col-span-3 sm:flex-row sm:flex-wrap">
                                 <BooksExcelPreviewDialog books={filteredBooks} />
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    className="border-white/20 mt-2 text-white/90 hover:bg-white/10"
+                                    className="border-white/20 text-white/90 hover:bg-white/10"
                                     onClick={clearCatalogControls}
                                     disabled={!hasCatalogControlsApplied}
                                 >
-                                    <X className="h-4 w-4 mr-2" />
+                                    <X className="mr-2 h-4 w-4" />
                                     Clear
                                 </Button>
                             </div>

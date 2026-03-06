@@ -586,11 +586,11 @@ export default function LibrarianIncomePage() {
                         </span>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex-col-1 gap-2">
                         <Button
                             type="button"
                             variant="outline"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            className="border-white/20 m-1 text-white/90 hover:bg-white/10"
                             onClick={handleOpenExportPreview}
                             disabled={loading || filtered.length === 0}
                         >
@@ -601,7 +601,7 @@ export default function LibrarianIncomePage() {
                         <Button
                             type="button"
                             variant="outline"
-                            className="border-emerald-400/40 text-emerald-100 hover:bg-emerald-500/10"
+                            className="border-emerald-400/40 m-1 text-emerald-100 hover:bg-emerald-500/10"
                             onClick={handleQuickPrint}
                             disabled={loading || filtered.length === 0}
                         >
@@ -613,7 +613,7 @@ export default function LibrarianIncomePage() {
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            className="border-white/20 m-1 text-white/90 hover:bg-white/10"
                             onClick={handleRefresh}
                             disabled={refreshing || loading}
                         >
