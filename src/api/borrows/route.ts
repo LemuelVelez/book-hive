@@ -22,9 +22,13 @@ export const BORROW_ROUTES = {
     extend: (id: string | number) =>
         api(`/borrow-records/${encodeURIComponent(String(id))}/extend`), // POST
 
-    // ✅ NEW: librarian/admin decision routes
+    // ✅ librarian/admin decision routes
     extendApprove: (id: string | number) =>
         api(`/borrow-records/${encodeURIComponent(String(id))}/extend/approve`), // POST
     extendDisapprove: (id: string | number) =>
         api(`/borrow-records/${encodeURIComponent(String(id))}/extend/disapprove`), // POST
+
+    // ✅ librarian/admin can request the borrower to return the book
+    requestReturn: (id: string | number) =>
+        api(`/borrow-records/${encodeURIComponent(String(id))}/request-return`), // POST
 } as const;

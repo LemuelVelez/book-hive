@@ -6,7 +6,7 @@ export type BorrowStatus =
     | "borrowed"
     | "pending" // legacy
     | "pending_pickup" // student reserved online, not yet picked up
-    | "pending_return" // student requested return; waiting for librarian
+    | "pending_return" // return has been requested and is awaiting librarian processing
     | "returned";
 
 export type ExtensionRequestStatus = "none" | "pending" | "approved" | "disapproved";
@@ -40,6 +40,12 @@ export type BorrowRecordDTO = {
     extensionDecidedAt?: string | null;
     extensionDecidedBy?: number | null;
     extensionDecisionNote?: string | null;
+
+    // ✅ Return request workflow info
+    returnRequestedAt?: string | null;
+    returnRequestedBy?: number | null;
+    returnRequestedByName?: string | null;
+    returnRequestNote?: string | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -131,7 +137,7 @@ export type CreateBorrowPayload = {
     dueDate: string; // YYYY-MM-DD
 
     /**
-     * ✅ NEW: how many copies to borrow in one action
+     * ✅ how many copies to borrow in one action
      * (Backend will create 1 borrow record per copy.)
      */
     quantity?: number;
@@ -152,6 +158,8 @@ export async function fetchBorrowRecords(): Promise<BorrowRecordDTO[]> {
 
 /**
  * List borrow records for the currently authenticated user (any role).
+ * This now includes librarian return-request metadata so student/faculty
+ * can see if a librarian requested them to return the book.
  */
 export async function fetchMyBorrowRecords(): Promise<BorrowRecordDTO[]> {
     type Resp = JsonOk<{ records: BorrowRecordDTO[] }>;
@@ -176,7 +184,7 @@ export async function createBorrowRecord(
  * - server computes dueDate based on per-book borrow_duration_days.
  * - starts in "pending_pickup".
  *
- * ✅ NEW: quantity lets the student reserve multiple copies (if available).
+ * ✅ quantity lets the student reserve multiple copies (if available).
  */
 export async function createSelfBorrow(
     bookId: string | number,
@@ -191,19 +199,21 @@ export async function createSelfBorrow(
 }
 
 /**
- * Student online action: request to return a book.
+ * Borrower action: request to return a book.
  * - Sets status to "pending_return"
  * - Does NOT change return_date
  * - The book remains unavailable until a librarian marks it as "returned".
  */
 export async function requestBorrowReturn(
-    id: string | number
+    id: string | number,
+    note?: string
 ): Promise<BorrowRecordDTO> {
     type Resp = JsonOk<{ record: BorrowRecordDTO }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.update(id), {
         method: "PATCH",
         body: {
             status: "pending_return",
+            ...(note && note.trim() ? { note: note.trim() } : {}),
         },
     });
     return res.record;
@@ -213,6 +223,31 @@ export type BorrowExtensionResponse = {
     record: BorrowRecordDTO;
     message?: string;
 };
+
+export type BorrowReturnRequestResponse = {
+    record: BorrowRecordDTO;
+    message?: string;
+};
+
+/**
+ * Librarian/Admin action: request that the borrower return the book.
+ * This uses the dedicated backend route:
+ * POST /api/borrow-records/:id/request-return
+ */
+export async function requestBorrowReturnByLibrarian(
+    id: string | number,
+    note?: string
+): Promise<BorrowReturnRequestResponse> {
+    type Resp = JsonOk<{ record: BorrowRecordDTO; message?: string }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.requestReturn(id), {
+        method: "POST",
+        body: {
+            ...(note && note.trim() ? { note: note.trim() } : {}),
+        },
+    });
+
+    return { record: res.record, message: res.message };
+}
 
 /**
  * ✅ Extension behavior (matches backend):
