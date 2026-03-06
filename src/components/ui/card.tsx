@@ -65,7 +65,7 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-content"
-      className={cn("min-h-0 min-w-0 overflow-x-auto overflow-y-auto px-6", className)}
+      className={cn("px-6", className)}
       {...props}
     />
   )
