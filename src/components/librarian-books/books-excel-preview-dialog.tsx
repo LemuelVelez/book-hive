@@ -298,7 +298,7 @@ export function BooksExcelPreviewDialog({ books }: BooksExcelPreviewDialogProps)
                 <Button
                     type="button"
                     variant="outline"
-                    className="border-white/20 text-white/90 hover:bg-white/10"
+                    className="border-white/20 mr-2 text-white/90 hover:bg-white/10"
                 >
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
                     Preview / Export Excel

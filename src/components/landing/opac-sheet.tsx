@@ -52,7 +52,6 @@ function tokenizeQuery(query: string): string[] {
 }
 
 function buildBookSearchText(b: BookDTO): string {
-    // Covers: keyword, acc no., title, call no., author, etc.
     const hay = [
         b.title,
         b.subtitle,
@@ -88,13 +87,10 @@ function buildBookSearchText(b: BookDTO): string {
 
 function matchesTokens(hay: string, tokens: string[]): boolean {
     if (tokens.length === 0) return true
-    // AND matching: every token must be found somewhere (more accurate “keyword search”)
     return tokens.every((t) => hay.includes(t))
 }
 
 function buildCatalogKey(b: BookDTO): string {
-    // Group similar catalog entries together so keyword searches show grouped titles
-    // Prefer callNumber+title+author; fallback to title+author; fallback to id
     const callNo = normalizeText(b.callNumber)
     const title = normalizeText(b.title)
     const author = normalizeText(b.author)
@@ -129,7 +125,6 @@ function groupToCatalog(list: BookDTO[]): CatalogGroup[] {
             existing.items.push(b)
             existing.availableAny = existing.availableAny || Boolean(b.available)
 
-            // Keep the "best" display values
             if (!existing.callNumber || existing.callNumber === "—") {
                 existing.callNumber = b.callNumber || existing.callNumber
             }
@@ -152,9 +147,9 @@ function groupToCatalog(list: BookDTO[]): CatalogGroup[] {
 
 function InfoRow({ label, value }: { label: string; value: unknown }) {
     return (
-        <div className="space-y-1">
+        <div className="space-y-1 rounded-xl border border-white/10 bg-slate-950/40 p-3">
             <div className="text-xs text-white/60">{label}</div>
-            <div className="text-sm text-white">{fmt(value)}</div>
+            <div className="wrap-break-word whitespace-normal text-sm text-white">{fmt(value)}</div>
         </div>
     )
 }
@@ -213,7 +208,6 @@ export function OpacSheet({
             list = list.filter((b) => matchesTokens(buildBookSearchText(b), tokens))
         }
 
-        // Sort to feel "catalog-like" even before grouping
         return [...list].sort((a, b) => {
             const callCmp = normalizeText(a.callNumber).localeCompare(normalizeText(b.callNumber), undefined, {
                 sensitivity: "base",
@@ -255,307 +249,361 @@ export function OpacSheet({
 
             <SheetContent
                 side="right"
-                className="w-full sm:max-w-lg bg-slate-950 border-white/10 text-white"
+                className="w-full sm:max-w-xl bg-slate-950 border-white/10 text-white p-0"
             >
-                <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                        <div className="text-lg font-semibold tracking-tight">OPAC</div>
-                        <div className="text-sm text-white/70">
-                            Browse the library catalog (no login required).
+                <div className="flex h-full min-h-0 flex-col overflow-hidden px-4 pb-4 pt-6 sm:px-6">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 space-y-1">
+                            <div className="text-lg font-semibold tracking-tight">OPAC</div>
+                            <div className="text-sm text-white/70">
+                                Browse the library catalog (no login required).
+                            </div>
+                        </div>
+
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="rounded-xl shrink-0"
+                            onClick={() => void load()}
+                            disabled={loading}
+                            aria-label="Refresh OPAC"
+                            title="Refresh"
+                        >
+                            <RefreshCw className={loading ? "h-5 w-5 animate-spin" : "h-5 w-5"} />
+                        </Button>
+                    </div>
+
+                    <Separator className="my-4 bg-white/10" />
+
+                    <div className="space-y-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+                            <Input
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Search keyword, title, author, acc no., call no., ISBN…"
+                                className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-white/40 rounded-xl"
+                                autoComplete="off"
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={availability === "all" ? "secondary" : "ghost"}
+                                    className="rounded-xl"
+                                    onClick={() => setAvailability("all")}
+                                >
+                                    All
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={availability === "available" ? "secondary" : "ghost"}
+                                    className="rounded-xl"
+                                    onClick={() => setAvailability("available")}
+                                >
+                                    Available
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={availability === "unavailable" ? "secondary" : "ghost"}
+                                    className="rounded-xl"
+                                    onClick={() => setAvailability("unavailable")}
+                                >
+                                    Unavailable
+                                </Button>
+                            </div>
+
+                            <div className="text-xs text-white/60 sm:ml-auto sm:text-right">{countLabel}</div>
                         </div>
                     </div>
 
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-xl"
-                        onClick={() => void load()}
-                        disabled={loading}
-                        aria-label="Refresh OPAC"
-                        title="Refresh"
-                    >
-                        <RefreshCw className={loading ? "h-5 w-5 animate-spin" : "h-5 w-5"} />
-                    </Button>
-                </div>
+                    <Separator className="my-4 bg-white/10" />
 
-                <Separator className="my-4 bg-white/10" />
-
-                <div className="space-y-3">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
-                        <Input
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search keyword, title, author, acc no., call no., ISBN…"
-                            className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-white/40 rounded-xl"
-                            autoComplete="off"
-                        />
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant={availability === "all" ? "secondary" : "ghost"}
-                            className="rounded-xl"
-                            onClick={() => setAvailability("all")}
-                        >
-                            All
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant={availability === "available" ? "secondary" : "ghost"}
-                            className="rounded-xl"
-                            onClick={() => setAvailability("available")}
-                        >
-                            Available
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant={availability === "unavailable" ? "secondary" : "ghost"}
-                            className="rounded-xl"
-                            onClick={() => setAvailability("unavailable")}
-                        >
-                            Unavailable
-                        </Button>
-
-                        <div className="ml-auto text-xs text-white/60">{countLabel}</div>
-                    </div>
-                </div>
-
-                <Separator className="my-4 bg-white/10" />
-
-                <ScrollArea className="h-[calc(100vh-240px)] pr-3">
-                    {loading ? (
-                        <div className="space-y-3">
-                            {Array.from({ length: 7 }).map((_, i) => (
-                                <Card key={i} className="bg-white/5 border-white/10 rounded-2xl">
-                                    <CardContent className="p-4 space-y-3">
-                                        <Skeleton className="h-4 w-3/4 bg-white/10" />
-                                        <Skeleton className="h-3 w-1/2 bg-white/10" />
-                                        <Skeleton className="h-3 w-2/3 bg-white/10" />
+                    <ScrollArea className="min-h-0 flex-1">
+                        <div className="space-y-3 pr-3">
+                            {loading ? (
+                                <div className="space-y-3">
+                                    {Array.from({ length: 7 }).map((_, i) => (
+                                        <Card key={i} className="bg-white/5 border-white/10 rounded-2xl">
+                                            <CardContent className="p-4 space-y-3">
+                                                <Skeleton className="h-4 w-3/4 bg-white/10" />
+                                                <Skeleton className="h-3 w-1/2 bg-white/10" />
+                                                <Skeleton className="h-3 w-2/3 bg-white/10" />
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            ) : error ? (
+                                <Card className="bg-white/5 border-white/10 rounded-2xl">
+                                    <CardContent className="p-5 space-y-3">
+                                        <div className="text-sm text-white/80">{error || "Something went wrong."}</div>
+                                        <Button className="rounded-xl" onClick={() => void load()}>
+                                            Retry
+                                        </Button>
                                     </CardContent>
                                 </Card>
-                            ))}
-                        </div>
-                    ) : error ? (
-                        <Card className="bg-white/5 border-white/10 rounded-2xl">
-                            <CardContent className="p-5 space-y-3">
-                                <div className="text-sm text-white/80">{error || "Something went wrong."}</div>
-                                <Button className="rounded-xl" onClick={() => void load()}>
-                                    Retry
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    ) : groupedCatalog.length === 0 ? (
-                        <Card className="bg-white/5 border-white/10 rounded-2xl">
-                            <CardContent className="p-5 space-y-2">
-                                <div className="font-medium">No titles found</div>
-                                <div className="text-sm text-white/70">
-                                    Try a different keyword (e.g., “cooking”) or switch filters.
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <Accordion type="multiple" className="space-y-3">
-                            {groupedCatalog.map((g) => {
-                                const primary = g.items[0]
+                            ) : groupedCatalog.length === 0 ? (
+                                <Card className="bg-white/5 border-white/10 rounded-2xl">
+                                    <CardContent className="p-5 space-y-2">
+                                        <div className="font-medium">No titles found</div>
+                                        <div className="text-sm text-white/70">
+                                            Try a different keyword (e.g., “cooking”) or switch filters.
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <Accordion type="multiple" className="space-y-3">
+                                    {groupedCatalog.map((g) => {
+                                        const primary = g.items[0]
 
-                                // Show counts if your API supplies them; otherwise fall back to grouped record count
-                                const hasCounts =
-                                    g.items.some((x) => typeof x.totalCopies === "number" || typeof x.numberOfCopies === "number") &&
-                                    (typeof primary.totalCopies === "number" || typeof primary.numberOfCopies === "number")
+                                        const hasCounts =
+                                            g.items.some(
+                                                (x) =>
+                                                    typeof x.totalCopies === "number" ||
+                                                    typeof x.numberOfCopies === "number"
+                                            ) &&
+                                            (typeof primary.totalCopies === "number" ||
+                                                typeof primary.numberOfCopies === "number")
 
-                                const availCount =
-                                    typeof primary.numberOfCopies === "number" ? primary.numberOfCopies : null
-                                const totalCount = typeof primary.totalCopies === "number" ? primary.totalCopies : null
+                                        const availCount =
+                                            typeof primary.numberOfCopies === "number" ? primary.numberOfCopies : null
+                                        const totalCount =
+                                            typeof primary.totalCopies === "number" ? primary.totalCopies : null
 
-                                return (
-                                    <AccordionItem
-                                        key={g.key}
-                                        value={g.key}
-                                        className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden"
-                                    >
-                                        <AccordionTrigger className="px-4 py-4 text-left hover:no-underline">
-                                            <div className="w-full">
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="min-w-0">
-                                                        <div className="font-semibold text-white truncate">
-                                                            {g.title}
-                                                        </div>
-                                                        <div className="text-sm text-white/70 truncate">
-                                                            {g.author}
-                                                            {g.publicationYear ? ` • ${g.publicationYear}` : ""}
-                                                            {g.callNumber && g.callNumber !== "—" ? ` • ${g.callNumber}` : ""}
-                                                        </div>
-                                                    </div>
+                                        const metaLine = [
+                                            g.author,
+                                            g.publicationYear ? String(g.publicationYear) : null,
+                                            g.callNumber && g.callNumber !== "—" ? g.callNumber : null,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(" • ")
 
-                                                    <div className="shrink-0 flex items-center gap-2">
-                                                        <Badge
-                                                            variant={g.availableAny ? "secondary" : "outline"}
-                                                            className="rounded-xl"
-                                                        >
-                                                            {g.availableAny ? "Available" : "Not available"}
-                                                        </Badge>
-
-                                                        {hasCounts && (availCount !== null || totalCount !== null) ? (
-                                                            <Badge variant="outline" className="rounded-xl">
-                                                                {availCount !== null ? `Avail: ${availCount}` : "Avail: —"}
-                                                                {totalCount !== null ? ` / ${totalCount}` : ""}
-                                                            </Badge>
-                                                        ) : (
-                                                            <Badge variant="outline" className="rounded-xl">
-                                                                {g.items.length} record{g.items.length === 1 ? "" : "s"}
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </AccordionTrigger>
-
-                                        <AccordionContent className="px-4 pb-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                <InfoRow label="Subtitle" value={primary.subtitle} />
-                                                <InfoRow label="Edition" value={primary.edition} />
-                                                <InfoRow label="ISBN" value={primary.isbn} />
-                                                <InfoRow label="ISSN" value={primary.issn} />
-                                                <InfoRow label="Accession No." value={primary.accessionNumber} />
-                                                <InfoRow label="Subjects" value={primary.subjects} />
-                                                <InfoRow label="Genre" value={primary.genre} />
-                                                <InfoRow label="Category" value={primary.category} />
-                                                <InfoRow label="Publisher" value={primary.publisher} />
-                                                <InfoRow label="Place of Publication" value={primary.placeOfPublication} />
-                                                <InfoRow label="Copyright Year" value={primary.copyrightYear} />
-                                                <InfoRow label="Call Number" value={primary.callNumber} />
-                                                <InfoRow label="Library Area" value={primary.libraryArea} />
-                                                <InfoRow label="Series" value={primary.series} />
-                                                <InfoRow label="Added Entries" value={primary.addedEntries} />
-                                            </div>
-
-                                            {g.items.length > 1 ? (
-                                                <div className="mt-4 space-y-3">
-                                                    <Separator className="bg-white/10" />
-                                                    <div className="text-sm font-medium text-white">Catalog records</div>
-                                                    <div className="space-y-2">
-                                                        {g.items.map((b) => (
-                                                            <div
-                                                                key={b.id}
-                                                                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2"
-                                                            >
-                                                                <div className="min-w-0">
-                                                                    <div className="text-sm text-white/90 truncate">
-                                                                        <span className="text-white/60">Acc No.:</span>{" "}
-                                                                        {fmt(b.accessionNumber)}
-                                                                        {b.barcode ? (
-                                                                            <>
-                                                                                {" "}
-                                                                                <span className="text-white/60">• Barcode:</span>{" "}
-                                                                                {fmt(b.barcode)}
-                                                                            </>
-                                                                        ) : null}
-                                                                    </div>
-                                                                    <div className="text-xs text-white/60 truncate">
-                                                                        {b.copyNumber ? `Copy: ${b.copyNumber}` : null}
-                                                                        {b.volumeNumber ? `${b.copyNumber ? " • " : ""}Vol: ${b.volumeNumber}` : null}
-                                                                        {b.libraryArea ? `${(b.copyNumber || b.volumeNumber) ? " • " : ""}${b.libraryArea}` : null}
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="shrink-0 flex items-center gap-2">
-                                                                    <Badge
-                                                                        variant={b.available ? "secondary" : "outline"}
-                                                                        className="rounded-xl"
-                                                                    >
-                                                                        {b.available ? "Available" : "Not available"}
-                                                                    </Badge>
-                                                                </div>
+                                        return (
+                                            <AccordionItem
+                                                key={g.key}
+                                                value={g.key}
+                                                className="rounded-2xl border border-white/10 bg-white/5"
+                                            >
+                                                <AccordionTrigger className="px-4 py-4 text-left hover:no-underline">
+                                                    <div className="flex w-full min-w-0 flex-col gap-3 pr-4">
+                                                        <div className="min-w-0 space-y-1">
+                                                            <div className="wrap-break-word whitespace-normal font-semibold text-white">
+                                                                {g.title}
                                                             </div>
-                                                        ))}
+                                                            <div className="wrap-break-word whitespace-normal text-sm text-white/70">
+                                                                {metaLine || "—"}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <Badge
+                                                                variant={g.availableAny ? "secondary" : "outline"}
+                                                                className="rounded-xl"
+                                                            >
+                                                                {g.availableAny ? "Available" : "Not available"}
+                                                            </Badge>
+
+                                                            {hasCounts && (availCount !== null || totalCount !== null) ? (
+                                                                <Badge variant="outline" className="rounded-xl">
+                                                                    {availCount !== null ? `Avail: ${availCount}` : "Avail: —"}
+                                                                    {totalCount !== null ? ` / ${totalCount}` : ""}
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="rounded-xl">
+                                                                    {g.items.length} record{g.items.length === 1 ? "" : "s"}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ) : null}
+                                                </AccordionTrigger>
 
-                                            {(primary.otherDetails || primary.notes) && (
-                                                <div className="mt-4 space-y-3">
-                                                    <Separator className="bg-white/10" />
-                                                    {primary.otherDetails ? (
-                                                        <div className="space-y-1">
-                                                            <div className="text-xs text-white/60">Other Details</div>
-                                                            <div className="text-sm text-white/80">{primary.otherDetails}</div>
+                                                <AccordionContent className="px-4 pb-4">
+                                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                        <InfoRow label="Subtitle" value={primary.subtitle} />
+                                                        <InfoRow label="Edition" value={primary.edition} />
+                                                        <InfoRow label="ISBN" value={primary.isbn} />
+                                                        <InfoRow label="ISSN" value={primary.issn} />
+                                                        <InfoRow label="Accession No." value={primary.accessionNumber} />
+                                                        <InfoRow label="Subjects" value={primary.subjects} />
+                                                        <InfoRow label="Genre" value={primary.genre} />
+                                                        <InfoRow label="Category" value={primary.category} />
+                                                        <InfoRow label="Publisher" value={primary.publisher} />
+                                                        <InfoRow
+                                                            label="Place of Publication"
+                                                            value={primary.placeOfPublication}
+                                                        />
+                                                        <InfoRow
+                                                            label="Copyright Year"
+                                                            value={primary.copyrightYear}
+                                                        />
+                                                        <InfoRow label="Call Number" value={primary.callNumber} />
+                                                        <InfoRow label="Library Area" value={primary.libraryArea} />
+                                                        <InfoRow label="Series" value={primary.series} />
+                                                        <InfoRow label="Added Entries" value={primary.addedEntries} />
+                                                    </div>
+
+                                                    {g.items.length > 1 ? (
+                                                        <div className="mt-4 space-y-3">
+                                                            <Separator className="bg-white/10" />
+                                                            <div className="text-sm font-medium text-white">
+                                                                Catalog records
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                {g.items.map((b) => (
+                                                                    <div
+                                                                        key={b.id}
+                                                                        className="flex flex-col gap-3 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-3"
+                                                                    >
+                                                                        <div className="min-w-0 space-y-1">
+                                                                            <div className="wrap-break-word whitespace-normal text-sm text-white/90">
+                                                                                <span className="text-white/60">
+                                                                                    Acc No.:
+                                                                                </span>{" "}
+                                                                                {fmt(b.accessionNumber)}
+                                                                                {b.barcode ? (
+                                                                                    <>
+                                                                                        {" "}
+                                                                                        <span className="text-white/60">
+                                                                                            • Barcode:
+                                                                                        </span>{" "}
+                                                                                        {fmt(b.barcode)}
+                                                                                    </>
+                                                                                ) : null}
+                                                                            </div>
+                                                                            <div className="wrap-break-word whitespace-normal text-xs text-white/60">
+                                                                                {b.copyNumber
+                                                                                    ? `Copy: ${b.copyNumber}`
+                                                                                    : null}
+                                                                                {b.volumeNumber
+                                                                                    ? `${b.copyNumber ? " • " : ""}Vol: ${b.volumeNumber}`
+                                                                                    : null}
+                                                                                {b.libraryArea
+                                                                                    ? `${b.copyNumber || b.volumeNumber ? " • " : ""}${b.libraryArea}`
+                                                                                    : null}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                            <Badge
+                                                                                variant={
+                                                                                    b.available ? "secondary" : "outline"
+                                                                                }
+                                                                                className="rounded-xl"
+                                                                            >
+                                                                                {b.available
+                                                                                    ? "Available"
+                                                                                    : "Not available"}
+                                                                            </Badge>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     ) : null}
-                                                    {primary.notes ? (
-                                                        <div className="space-y-1">
-                                                            <div className="text-xs text-white/60">Notes</div>
-                                                            <div className="text-sm text-white/80">{primary.notes}</div>
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-                                            )}
 
-                                            <div className="mt-5 flex flex-col sm:flex-row gap-2">
-                                                {!isAuthed ? (
-                                                    <SheetClose asChild>
+                                                    {(primary.otherDetails || primary.notes) && (
+                                                        <div className="mt-4 space-y-3">
+                                                            <Separator className="bg-white/10" />
+                                                            {primary.otherDetails ? (
+                                                                <div className="space-y-1">
+                                                                    <div className="text-xs text-white/60">
+                                                                        Other Details
+                                                                    </div>
+                                                                    <div className="wrap-break-word whitespace-normal text-sm text-white/80">
+                                                                        {primary.otherDetails}
+                                                                    </div>
+                                                                </div>
+                                                            ) : null}
+                                                            {primary.notes ? (
+                                                                <div className="space-y-1">
+                                                                    <div className="text-xs text-white/60">
+                                                                        Notes
+                                                                    </div>
+                                                                    <div className="wrap-break-word whitespace-normal text-sm text-white/80">
+                                                                        {primary.notes}
+                                                                    </div>
+                                                                </div>
+                                                            ) : null}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="mt-5 flex flex-col gap-2">
+                                                        {!isAuthed ? (
+                                                            <SheetClose asChild>
+                                                                <Button
+                                                                    className="rounded-xl w-full sm:w-auto"
+                                                                    onClick={() => {
+                                                                        toast("Login required", {
+                                                                            description:
+                                                                                "Please login to reserve or manage borrows.",
+                                                                        })
+                                                                        navigate("/auth")
+                                                                    }}
+                                                                >
+                                                                    Login to Reserve
+                                                                </Button>
+                                                            </SheetClose>
+                                                        ) : (
+                                                            <SheetClose asChild>
+                                                                <Button
+                                                                    className="rounded-xl w-full sm:w-auto"
+                                                                    onClick={() => navigate(booksHref)}
+                                                                >
+                                                                    Open Books Page
+                                                                </Button>
+                                                            </SheetClose>
+                                                        )}
+
                                                         <Button
-                                                            className="rounded-xl"
+                                                            variant="outline"
+                                                            className="rounded-xl border-white/15 bg-white/5 hover:bg-white/10 w-full sm:w-auto"
                                                             onClick={() => {
-                                                                toast("Login required", {
-                                                                    description: "Please login to reserve or manage borrows.",
-                                                                })
-                                                                navigate("/auth")
+                                                                const text = [
+                                                                    g.title ? `Title: ${g.title}` : null,
+                                                                    g.author ? `Author: ${g.author}` : null,
+                                                                    primary.isbn ? `ISBN: ${primary.isbn}` : null,
+                                                                    g.callNumber && g.callNumber !== "—"
+                                                                        ? `Call No.: ${g.callNumber}`
+                                                                        : null,
+                                                                ]
+                                                                    .filter(Boolean)
+                                                                    .join("\n")
+
+                                                                if (!text) {
+                                                                    toast("Nothing to copy")
+                                                                    return
+                                                                }
+
+                                                                void navigator.clipboard
+                                                                    .writeText(text)
+                                                                    .then(() =>
+                                                                        toast.success("Copied book info")
+                                                                    )
+                                                                    .catch(() =>
+                                                                        toast.error("Copy failed", {
+                                                                            description:
+                                                                                "Your browser blocked clipboard access.",
+                                                                        })
+                                                                    )
                                                             }}
                                                         >
-                                                            Login to Reserve
+                                                            Copy Info
                                                         </Button>
-                                                    </SheetClose>
-                                                ) : (
-                                                    <SheetClose asChild>
-                                                        <Button className="rounded-xl" onClick={() => navigate(booksHref)}>
-                                                            Open Books Page
-                                                        </Button>
-                                                    </SheetClose>
-                                                )}
-
-                                                <Button
-                                                    variant="outline"
-                                                    className="rounded-xl border-white/15 bg-white/5 hover:bg-white/10"
-                                                    onClick={() => {
-                                                        const text = [
-                                                            g.title ? `Title: ${g.title}` : null,
-                                                            g.author ? `Author: ${g.author}` : null,
-                                                            primary.isbn ? `ISBN: ${primary.isbn}` : null,
-                                                            g.callNumber && g.callNumber !== "—" ? `Call No.: ${g.callNumber}` : null,
-                                                        ]
-                                                            .filter(Boolean)
-                                                            .join("\n")
-
-                                                        if (!text) {
-                                                            toast("Nothing to copy")
-                                                            return
-                                                        }
-
-                                                        void navigator.clipboard
-                                                            .writeText(text)
-                                                            .then(() => toast.success("Copied book info"))
-                                                            .catch(() =>
-                                                                toast.error("Copy failed", {
-                                                                    description: "Your browser blocked clipboard access.",
-                                                                })
-                                                            )
-                                                    }}
-                                                >
-                                                    Copy Info
-                                                </Button>
-                                            </div>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                )
-                            })}
-                        </Accordion>
-                    )}
-                </ScrollArea>
+                                                    </div>
+                                                </AccordionContent>
+                                            </AccordionItem>
+                                        )
+                                    })}
+                                </Accordion>
+                            )}
+                        </div>
+                    </ScrollArea>
+                </div>
             </SheetContent>
         </Sheet>
     )

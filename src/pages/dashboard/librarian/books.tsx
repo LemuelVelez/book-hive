@@ -2150,12 +2150,12 @@ export default function LibrarianBooksPage() {
                                 </SelectContent>
                             </Select>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex-col-1 items-center gap-2">
                                 <BooksExcelPreviewDialog books={filteredBooks} />
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    className="border-white/20 text-white/90 hover:bg-white/10"
+                                    className="border-white/20 mt-2 text-white/90 hover:bg-white/10"
                                     onClick={clearCatalogControls}
                                     disabled={!hasCatalogControlsApplied}
                                 >
