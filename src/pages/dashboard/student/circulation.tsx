@@ -39,6 +39,7 @@ import {
   Clock3,
   CheckCircle2,
   AlertTriangle,
+  BellRing,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -451,6 +452,15 @@ export default function StudentCirculationPage() {
             </span>{" "}
             tag indicates an unpaid fine.
           </p>
+
+          <p className="mt-1 text-[11px] text-white/60">
+            The{" "}
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200 border border-rose-400/40">
+              <BellRing className="h-3 w-3" />
+              Return requested by librarian
+            </span>{" "}
+            tag means the librarian has asked you to bring back the physical book.
+          </p>
         </CardHeader>
 
         <CardContent className="space-y-3">
@@ -609,6 +619,14 @@ export default function StudentCirculationPage() {
                               const extensionPending =
                                 isBorrowed && reqStatus === "pending";
 
+                              const hasLibrarianReturnRequest =
+                                !isReturned &&
+                                isBorrowed &&
+                                Boolean(record.returnRequestedAt);
+
+                              const librarianRequesterName =
+                                record.returnRequestedByName?.trim() || "Librarian";
+
                               return (
                                 <TableRow
                                   key={record.id}
@@ -671,6 +689,27 @@ export default function StudentCirculationPage() {
                                           Extension disapproved: {fmtDateTime(decidedAt)}
                                         </span>
                                       )}
+
+                                      {hasLibrarianReturnRequest && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200 border border-rose-400/40 w-fit">
+                                          <BellRing className="h-3 w-3" />
+                                          Return requested by librarian
+                                        </span>
+                                      )}
+
+                                      {hasLibrarianReturnRequest && (
+                                        <span className="text-[10px] text-white/60">
+                                          Requested by {librarianRequesterName} on{" "}
+                                          {fmtDateTime(record.returnRequestedAt)}
+                                        </span>
+                                      )}
+
+                                      {hasLibrarianReturnRequest &&
+                                        record.returnRequestNote?.trim() && (
+                                          <span className="text-[10px] text-white/60">
+                                            Note: {record.returnRequestNote.trim()}
+                                          </span>
+                                        )}
                                     </div>
                                   </TableCell>
 
@@ -691,6 +730,13 @@ export default function StudentCirculationPage() {
                                         <span className="inline-flex items-center gap-1">
                                           <Clock3 className="h-3 w-3" />
                                           Pending
+                                        </span>
+                                      </Badge>
+                                    ) : hasLibrarianReturnRequest ? (
+                                      <Badge className="bg-rose-500/80 hover:bg-rose-500 text-white border-rose-400/80">
+                                        <span className="inline-flex items-center gap-1">
+                                          <BellRing className="h-3 w-3" />
+                                          Return requested
                                         </span>
                                       </Badge>
                                     ) : isOverdue ? (
@@ -793,6 +839,26 @@ export default function StudentCirculationPage() {
                                   >
                                     {isBorrowed ? (
                                       <div className="flex w-full flex-col gap-2 items-stretch">
+                                        {hasLibrarianReturnRequest && (
+                                          <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-left text-[11px] text-rose-100">
+                                            <div className="inline-flex items-center gap-1 font-semibold">
+                                              <BellRing className="h-3.5 w-3.5" />
+                                              Librarian requested this book to be returned
+                                            </div>
+                                            <div className="mt-1 text-rose-100/90">
+                                              Requested by {librarianRequesterName}
+                                              {record.returnRequestedAt
+                                                ? ` • ${fmtDateTime(record.returnRequestedAt)}`
+                                                : ""}
+                                            </div>
+                                            {record.returnRequestNote?.trim() && (
+                                              <div className="mt-1 text-rose-100/85">
+                                                Note: {record.returnRequestNote.trim()}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
                                         <AlertDialog>
                                           <AlertDialogTrigger asChild>
                                             <Button
@@ -809,6 +875,8 @@ export default function StudentCirculationPage() {
                                                   <Loader2 className="h-4 w-4 animate-spin" />
                                                   Sending…
                                                 </span>
+                                              ) : hasLibrarianReturnRequest ? (
+                                                "Respond with return request"
                                               ) : (
                                                 "Request return"
                                               )}
@@ -848,6 +916,26 @@ export default function StudentCirculationPage() {
                                                 <span className="text-white/60">Due date:</span>{" "}
                                                 {fmtDate(record.dueDate)}
                                               </p>
+
+                                              {hasLibrarianReturnRequest && (
+                                                <div className="mt-2 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+                                                  <div className="font-semibold">
+                                                    Librarian return request
+                                                  </div>
+                                                  <div className="mt-1">
+                                                    Requested by {librarianRequesterName}
+                                                    {record.returnRequestedAt
+                                                      ? ` • ${fmtDateTime(record.returnRequestedAt)}`
+                                                      : ""}
+                                                  </div>
+                                                  {record.returnRequestNote?.trim() && (
+                                                    <div className="mt-1">
+                                                      Note: {record.returnRequestNote.trim()}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
+
                                               {finalFineAmount > 0 && (
                                                 <p className="text-red-300">
                                                   Estimated fine if returned today:{" "}
