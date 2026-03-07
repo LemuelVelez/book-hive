@@ -58,9 +58,7 @@ export default function StudentBooksTable({
             container.hasPointerCapture?.(dragState.pointerId)
         ) {
             try {
-                container.releasePointerCapture(
-                    pointerId ?? dragState.pointerId
-                );
+                container.releasePointerCapture(pointerId ?? dragState.pointerId);
             } catch {
                 // ignore release failures
             }
@@ -126,18 +124,22 @@ export default function StudentBooksTable({
     );
 
     return (
-        <div
-            ref={containerRef}
-            className={`hidden overflow-x-auto rounded-md md:block ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"
-                }`}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={(e) => endDrag(e.pointerId)}
-            onPointerCancel={(e) => endDrag(e.pointerId)}
-            onClickCapture={handleClickCapture}
-            onDragStart={(e) => e.preventDefault()}
-        >
-            <Table className="min-w-[1500px]">
+        <div className="hidden md:block">
+            <Table
+                ref={containerRef}
+                className="min-w-[1500px]"
+                containerClassName={`rounded-md ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"
+                    }`}
+                containerProps={{
+                    onPointerDown: handlePointerDown,
+                    onPointerMove: handlePointerMove,
+                    onPointerUp: (e) => endDrag(e.pointerId),
+                    onPointerCancel: (e) => endDrag(e.pointerId),
+                    onClickCapture: handleClickCapture,
+                    onDragStart: (e) => e.preventDefault(),
+                    style: { touchAction: "pan-y" },
+                }}
+            >
                 <TableCaption className="text-xs text-white/60">
                     Showing {rows.length} {rows.length === 1 ? "book" : "books"}. Drag
                     left or right anywhere on the table to scroll horizontally.

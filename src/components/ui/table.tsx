@@ -1,43 +1,70 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
-  return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
-    >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
-    </div>
-  )
-}
+type TableProps = React.ComponentPropsWithoutRef<"table"> & {
+  containerClassName?: string;
+  containerProps?: React.ComponentPropsWithoutRef<"div">;
+};
 
-function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
+const Table = React.forwardRef<HTMLDivElement, TableProps>(
+  ({ className, containerClassName, containerProps, ...props }, ref) => {
+    const { className: containerPropsClassName, ...restContainerProps } =
+      containerProps ?? {};
+
+    return (
+      <div
+        ref={ref}
+        data-slot="table-container"
+        className={cn(
+          "relative w-full overflow-x-auto",
+          containerClassName,
+          containerPropsClassName
+        )}
+        {...restContainerProps}
+      >
+        <table
+          data-slot="table"
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      </div>
+    );
+  }
+);
+
+Table.displayName = "Table";
+
+function TableHeader({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"thead">) {
   return (
     <thead
       data-slot="table-header"
       className={cn("[&_tr]:border-b", className)}
       {...props}
     />
-  )
+  );
 }
 
-function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
+function TableBody({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"tbody">) {
   return (
     <tbody
       data-slot="table-body"
       className={cn("[&_tr:last-child]:border-0", className)}
       {...props}
     />
-  )
+  );
 }
 
-function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
+function TableFooter({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"tfoot">) {
   return (
     <tfoot
       data-slot="table-footer"
@@ -47,10 +74,13 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
       )}
       {...props}
     />
-  )
+  );
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+function TableRow({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"tr">) {
   return (
     <tr
       data-slot="table-row"
@@ -60,10 +90,13 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
       )}
       {...props}
     />
-  )
+  );
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableHead({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"th">) {
   return (
     <th
       data-slot="table-head"
@@ -73,10 +106,13 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
       )}
       {...props}
     />
-  )
+  );
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"td">) {
   return (
     <td
       data-slot="table-cell"
@@ -86,20 +122,20 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableCaption({
   className,
   ...props
-}: React.ComponentProps<"caption">) {
+}: React.ComponentPropsWithoutRef<"caption">) {
   return (
     <caption
       data-slot="table-caption"
       className={cn("text-muted-foreground mt-4 text-sm", className)}
       {...props}
     />
-  )
+  );
 }
 
 export {
@@ -111,4 +147,4 @@ export {
   TableRow,
   TableCell,
   TableCaption,
-}
+};
