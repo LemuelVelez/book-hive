@@ -33,6 +33,17 @@ type StudentBooksTableProps = {
     onBorrow: (book: BookWithStatus, copiesRequested: number) => Promise<boolean>;
 };
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+    const element = target instanceof HTMLElement ? target : null;
+    if (!element) return false;
+
+    return Boolean(
+        element.closest(
+            'button, a, input, textarea, select, option, label, [role="button"], [data-no-drag-scroll="true"]'
+        )
+    );
+}
+
 export default function StudentBooksTable({
     rows,
     borrowBusyId,
@@ -66,6 +77,7 @@ export default function StudentBooksTable({
 
         dragState.active = false;
         dragState.pointerId = -1;
+        dragState.dragged = false;
         setIsDragging(false);
     }, []);
 
@@ -74,6 +86,7 @@ export default function StudentBooksTable({
             const container = containerRef.current;
             if (!container) return;
 
+            if (isInteractiveTarget(e.target)) return;
             if (e.pointerType === "mouse" && e.button !== 0) return;
             if (container.scrollWidth <= container.clientWidth) return;
 
@@ -114,6 +127,7 @@ export default function StudentBooksTable({
 
     const handleClickCapture = React.useCallback(
         (e: React.MouseEvent<HTMLDivElement>) => {
+            if (isInteractiveTarget(e.target)) return;
             if (!dragStateRef.current.dragged) return;
 
             e.preventDefault();
@@ -135,6 +149,9 @@ export default function StudentBooksTable({
                     onPointerMove: handlePointerMove,
                     onPointerUp: (e) => endDrag(e.pointerId),
                     onPointerCancel: (e) => endDrag(e.pointerId),
+                    onPointerLeave: (e) => {
+                        if (e.pointerType === "mouse") endDrag(e.pointerId);
+                    },
                     onClickCapture: handleClickCapture,
                     onDragStart: (e) => e.preventDefault(),
                     style: { touchAction: "pan-y" },

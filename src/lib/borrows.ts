@@ -55,6 +55,12 @@ type FetchInit = Omit<RequestInit, "body" | "credentials"> & {
     asFormData?: boolean;
 };
 
+type BorrowCreateResponse = JsonOk<{
+    record?: BorrowRecordDTO | null;
+    records?: BorrowRecordDTO[] | null;
+    createdCount?: number;
+}>;
+
 function getErrorMessage(e: unknown): string {
     if (!e) return "";
     if (typeof e === "string") return e;
@@ -67,6 +73,24 @@ function getErrorMessage(e: unknown): string {
     } catch {
         return "";
     }
+}
+
+function normalizeCreatedBorrowRecords(payload: {
+    record?: BorrowRecordDTO | null;
+    records?: BorrowRecordDTO[] | null;
+}): BorrowRecordDTO[] {
+    if (Array.isArray(payload.records) && payload.records.length > 0) {
+        return payload.records.filter(
+            (item): item is BorrowRecordDTO =>
+                Boolean(item && typeof item === "object" && typeof item.id === "string")
+        );
+    }
+
+    if (payload.record && typeof payload.record === "object") {
+        return [payload.record];
+    }
+
+    return [];
 }
 
 async function requestJSON<T = unknown>(
@@ -170,12 +194,17 @@ export async function fetchMyBorrowRecords(): Promise<BorrowRecordDTO[]> {
 export async function createBorrowRecord(
     payload: CreateBorrowPayload
 ): Promise<BorrowRecordDTO> {
-    type Resp = JsonOk<{ record: BorrowRecordDTO; records?: BorrowRecordDTO[]; createdCount?: number }>;
-    const res = await requestJSON<Resp>(BORROW_ROUTES.create, {
+    const res = await requestJSON<BorrowCreateResponse>(BORROW_ROUTES.create, {
         method: "POST",
         body: payload,
     });
-    return res.record;
+
+    const created = normalizeCreatedBorrowRecords(res);
+    if (created.length === 0) {
+        throw new Error("Borrow request succeeded but no created borrow record was returned.");
+    }
+
+    return created[0];
 }
 
 /**
@@ -190,12 +219,38 @@ export async function createSelfBorrow(
     bookId: string | number,
     quantity: number = 1
 ): Promise<BorrowRecordDTO> {
-    type Resp = JsonOk<{ record: BorrowRecordDTO; records?: BorrowRecordDTO[]; createdCount?: number }>;
-    const res = await requestJSON<Resp>(BORROW_ROUTES.createSelf, {
+    const res = await requestJSON<BorrowCreateResponse>(BORROW_ROUTES.createSelf, {
         method: "POST",
         body: { bookId, quantity },
     });
-    return res.record;
+
+    const created = normalizeCreatedBorrowRecords(res);
+    if (created.length === 0) {
+        throw new Error("Borrow request succeeded but no created borrow record was returned.");
+    }
+
+    return created[0];
+}
+
+/**
+ * Student self-service borrow that always returns all created records.
+ * This is useful when the backend creates multiple borrow rows for one request.
+ */
+export async function createSelfBorrowRecords(
+    bookId: string | number,
+    quantity: number = 1
+): Promise<BorrowRecordDTO[]> {
+    const res = await requestJSON<BorrowCreateResponse>(BORROW_ROUTES.createSelf, {
+        method: "POST",
+        body: { bookId, quantity },
+    });
+
+    const created = normalizeCreatedBorrowRecords(res);
+    if (created.length === 0) {
+        throw new Error("Borrow request succeeded but no created borrow record was returned.");
+    }
+
+    return created;
 }
 
 /**

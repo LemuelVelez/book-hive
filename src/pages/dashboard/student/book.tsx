@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import { fetchBooks, type BookDTO } from "@/lib/books";
 import {
     fetchMyBorrowRecords,
-    createSelfBorrow,
+    createSelfBorrowRecords,
     type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -368,33 +368,28 @@ export default function StudentBooksPage() {
         setBorrowBusyId(book.id);
 
         try {
-            const created: BorrowRecordDTO[] = [];
-
-            for (let i = 0; i < requestedCopies; i += 1) {
-                try {
-                    const record = await createSelfBorrow(book.id, 1);
-                    created.push(record);
-                } catch (err: any) {
-                    if (created.length === 0) throw err;
-
-                    const msg = err?.message || "Some copies could not be borrowed.";
-                    toast.warning("Partial borrow completed", {
-                        description: `Borrowed ${created.length} of ${requestedCopies} copies. ${msg}`,
-                    });
-                    break;
-                }
-            }
+            const created = await createSelfBorrowRecords(book.id, requestedCopies);
 
             if (created.length === 0) {
+                toast.error("Borrow failed", {
+                    description:
+                        "The borrow request did not return any created record. Please try again.",
+                });
                 return false;
             }
 
             const due = fmtDate(created[0]?.dueDate);
 
-            toast.success("Borrow request submitted", {
-                description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"
-                    } now pending pickup. Earliest due date: ${due}.`,
-            });
+            if (created.length < requestedCopies) {
+                toast.warning("Partial borrow completed", {
+                    description: `Borrowed ${created.length} of ${requestedCopies} copies of "${book.title}". Earliest due date: ${due}.`,
+                });
+            } else {
+                toast.success("Borrow request submitted", {
+                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"
+                        } now pending pickup. Earliest due date: ${due}.`,
+                });
+            }
 
             setMyRecords((prev) => [...created.slice().reverse(), ...prev]);
 

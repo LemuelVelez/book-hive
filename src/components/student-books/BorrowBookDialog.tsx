@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     AlertDialog,
-    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
@@ -43,6 +42,20 @@ export default function BorrowBookDialog({
     const safeMaxCopies = Math.max(1, maxCopies);
     const safeQty = clampInt(qty, 1, safeMaxCopies);
 
+    const stopPointerPropagation = React.useCallback(
+        (e: React.PointerEvent<HTMLElement>) => {
+            e.stopPropagation();
+        },
+        []
+    );
+
+    const stopMousePropagation = React.useCallback(
+        (e: React.MouseEvent<HTMLElement>) => {
+            e.stopPropagation();
+        },
+        []
+    );
+
     React.useEffect(() => {
         if (!open) {
             setQty(1);
@@ -55,7 +68,10 @@ export default function BorrowBookDialog({
     }, [open, qty, safeQty]);
 
     async function handleConfirm(e: React.MouseEvent<HTMLButtonElement>) {
-        e.preventDefault();
+        e.stopPropagation();
+
+        if (busy || maxCopies <= 0) return;
+
         const ok = await onConfirm(book, safeQty);
 
         if (ok) {
@@ -68,6 +84,8 @@ export default function BorrowBookDialog({
         <AlertDialog
             open={open}
             onOpenChange={(nextOpen) => {
+                if (busy && !nextOpen) return;
+
                 setOpen(nextOpen);
                 if (!nextOpen) {
                     setQty(1);
@@ -78,6 +96,9 @@ export default function BorrowBookDialog({
                 <Button
                     type="button"
                     size="sm"
+                    data-no-drag-scroll="true"
+                    onPointerDown={stopPointerPropagation}
+                    onClick={stopMousePropagation}
                     className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
                     disabled={busy || maxCopies <= 0}
                 >
@@ -85,7 +106,12 @@ export default function BorrowBookDialog({
                 </Button>
             </AlertDialogTrigger>
 
-            <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
+            <AlertDialogContent
+                data-no-drag-scroll="true"
+                onPointerDownCapture={stopPointerPropagation}
+                onClick={stopMousePropagation}
+                className="border-white/10 bg-slate-900 text-white"
+            >
                 <AlertDialogHeader>
                     <AlertDialogTitle>Confirm borrow</AlertDialogTitle>
                     <AlertDialogDescription className="text-white/70">
@@ -146,10 +172,13 @@ export default function BorrowBookDialog({
                                 type="button"
                                 size="icon"
                                 variant="outline"
+                                data-no-drag-scroll="true"
+                                onPointerDown={stopPointerPropagation}
+                                onClick={(e) => {
+                                    stopMousePropagation(e);
+                                    setQty((value) => clampInt(value - 1, 1, safeMaxCopies));
+                                }}
                                 className="border-white/20 text-white hover:bg-white/10"
-                                onClick={() =>
-                                    setQty((value) => clampInt(value - 1, 1, safeMaxCopies))
-                                }
                                 disabled={busy || safeQty <= 1}
                                 aria-label="Decrease copies"
                             >
@@ -167,6 +196,9 @@ export default function BorrowBookDialog({
                                         )
                                     )
                                 }
+                                onPointerDown={stopPointerPropagation}
+                                onClick={stopMousePropagation}
+                                data-no-drag-scroll="true"
                                 inputMode="numeric"
                                 className="h-9 w-16 border-white/20 bg-slate-900/70 text-center text-white"
                                 aria-label="Copies to borrow"
@@ -177,10 +209,13 @@ export default function BorrowBookDialog({
                                 type="button"
                                 size="icon"
                                 variant="outline"
+                                data-no-drag-scroll="true"
+                                onPointerDown={stopPointerPropagation}
+                                onClick={(e) => {
+                                    stopMousePropagation(e);
+                                    setQty((value) => clampInt(value + 1, 1, safeMaxCopies));
+                                }}
                                 className="border-white/20 text-white hover:bg-white/10"
-                                onClick={() =>
-                                    setQty((value) => clampInt(value + 1, 1, safeMaxCopies))
-                                }
                                 disabled={busy || safeQty >= safeMaxCopies}
                                 aria-label="Increase copies"
                             >
@@ -203,16 +238,22 @@ export default function BorrowBookDialog({
 
                 <AlertDialogFooter>
                     <AlertDialogCancel
+                        data-no-drag-scroll="true"
+                        onPointerDown={stopPointerPropagation}
+                        onClick={stopMousePropagation}
                         className="border-white/20 text-white hover:bg-black/20"
                         disabled={busy}
                     >
                         Cancel
                     </AlertDialogCancel>
 
-                    <AlertDialogAction
+                    <Button
+                        type="button"
+                        data-no-drag-scroll="true"
+                        onPointerDown={stopPointerPropagation}
+                        onClick={handleConfirm}
                         className="bg-purple-600 text-white hover:bg-purple-700"
                         disabled={busy || maxCopies <= 0}
-                        onClick={handleConfirm}
                     >
                         {busy ? (
                             <span className="inline-flex items-center gap-2">
@@ -225,7 +266,7 @@ export default function BorrowBookDialog({
                         ) : (
                             "Confirm borrow"
                         )}
-                    </AlertDialogAction>
+                    </Button>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
