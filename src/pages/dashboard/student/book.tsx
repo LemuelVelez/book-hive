@@ -4,16 +4,6 @@ import DashboardLayout from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-    Table,
-    TableBody,
-    TableCaption,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
     Select,
@@ -27,12 +17,6 @@ import {
     RefreshCcw,
     Loader2,
     Search,
-    CheckCircle2,
-    CircleOff,
-    Clock3,
-    AlertTriangle,
-    Plus,
-    Minus,
     ArrowUpDown,
     Filter,
     X,
@@ -46,17 +30,23 @@ import {
     type BorrowRecordDTO,
 } from "@/lib/borrows";
 
+import type { BookWithStatus } from "@/components/student-books/types";
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+    buildCatalogSortKey,
+    compareNullableNumber,
+    compareText,
+    fmtDate,
+    fmtLibraryArea,
+    getRemainingCopies,
+    getSubjects,
+    isBorrowable,
+    matchesAllTokens,
+    normalizeSearchText,
+    sortRecordsNewestFirst,
+    tokenizeSearch,
+} from "@/components/student-books/utils";
+import StudentBooksTable from "@/components/student-books/StudentBooksTable";
+import StudentBooksCardList from "@/components/student-books/StudentBooksCardList";
 
 type FilterMode =
     | "all"
@@ -77,192 +67,6 @@ type CatalogSortOption =
     | "pub_year_desc"
     | "pub_year_asc";
 
-type BookWithStatus = BookDTO & {
-    myStatus: "never" | "active" | "returned";
-    activeRecords: BorrowRecordDTO[];
-    lastReturnedRecord?: BorrowRecordDTO | null;
-    lastRecord?: BorrowRecordDTO | null;
-};
-
-/**
- * Format a date string as YYYY-MM-DD in the *local* timezone.
- * This avoids the off-by-one day bug from using toISOString() / UTC.
- */
-function fmtDate(d?: string | null) {
-    if (!d) return "—";
-    try {
-        const date = new Date(d);
-        if (Number.isNaN(date.getTime())) return d;
-        return date.toLocaleDateString("en-CA");
-    } catch {
-        return d;
-    }
-}
-
-function peso(n: number) {
-    if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00";
-    try {
-        return new Intl.NumberFormat("en-PH", {
-            style: "currency",
-            currency: "PHP",
-            maximumFractionDigits: 2,
-        }).format(n);
-    } catch {
-        return `₱${n.toFixed(2)}`;
-    }
-}
-
-/**
- * Compute how many full days a book is overdue based on due date and today
- * in the local timezone. Returns 0 if not overdue or if the date is invalid.
- */
-function computeOverdueDays(d?: string | null) {
-    if (!d) return 0;
-    const due = new Date(d);
-    if (Number.isNaN(due.getTime())) return 0;
-
-    const now = new Date();
-    const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-    const todayLocal = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-    );
-
-    const diffMs = todayLocal.getTime() - dueLocal.getTime();
-    const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    return rawDays > 0 ? rawDays : 0;
-}
-
-function fmtLibraryArea(area?: BookDTO["libraryArea"] | null) {
-    if (!area) return "—";
-
-    if (String(area) === "maritime") return "—";
-
-    const map: Record<string, string> = {
-        filipiniana: "Filipiniana",
-        general_circulation: "General Circulation",
-        periodicals: "Periodicals",
-        thesis_dissertations: "Thesis & Dissertations",
-        rizaliana: "Rizaliana",
-        special_collection: "Special Collection",
-        fil_gen_reference: "Fil/Gen Reference",
-        general_reference: "General Reference",
-        fiction: "Fiction",
-    };
-    return map[String(area)] ?? "—";
-}
-
-function fmtDurationDays(days?: number | null) {
-    if (days === null || days === undefined) return "—";
-    if (typeof days !== "number" || Number.isNaN(days) || days <= 0) return "—";
-    return `${days} day${days === 1 ? "" : "s"}`;
-}
-
-function clampInt(n: number, min: number, max: number) {
-    const v = Math.floor(Number(n));
-    if (!Number.isFinite(v)) return min;
-    return Math.min(max, Math.max(min, v));
-}
-
-function getSubjects(book: Pick<BookDTO, "subjects" | "genre" | "category">) {
-    const v =
-        (typeof book.subjects === "string" && book.subjects.trim()) ||
-        (typeof book.genre === "string" && book.genre.trim()) ||
-        (typeof book.category === "string" && book.category.trim()) ||
-        "";
-    return v || "—";
-}
-
-function getRemainingCopies(book: BookDTO): number {
-    if (typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)) {
-        return Math.max(0, Math.floor(book.numberOfCopies));
-    }
-    return book.available ? 1 : 0;
-}
-
-function isBorrowable(book: BookDTO): boolean {
-    return Boolean(book.available) && getRemainingCopies(book) > 0;
-}
-
-function sortRecordsNewestFirst(records: BorrowRecordDTO[]) {
-    return [...records].sort((a, b) => {
-        const ad = new Date(a.borrowDate).getTime();
-        const bd = new Date(b.borrowDate).getTime();
-        if (Number.isFinite(ad) && Number.isFinite(bd)) return bd - ad;
-        return String(b.id).localeCompare(String(a.id));
-    });
-}
-
-function minDateStr(records: BorrowRecordDTO[], key: "dueDate" | "borrowDate") {
-    if (records.length === 0) return null;
-    let min: { t: number; s: string } | null = null;
-    for (const r of records) {
-        const raw = r[key];
-        const t = new Date(raw).getTime();
-        if (!Number.isFinite(t)) continue;
-        if (!min || t < min.t) min = { t, s: raw };
-    }
-    return min ? min.s : records[0]?.[key] ?? null;
-}
-
-function normalizeSearchText(value: unknown): string {
-    if (value === null || value === undefined) return "";
-    if (Array.isArray(value)) return value.map(normalizeSearchText).filter(Boolean).join(" ");
-    if (typeof value === "string") return value.trim().toLowerCase().replace(/\s+/g, " ");
-    return String(value).trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function tokenizeSearch(query: string): string[] {
-    return normalizeSearchText(query).split(/\s+/).map((t) => t.trim()).filter(Boolean);
-}
-
-function matchesAllTokens(hay: string, tokens: string[]): boolean {
-    if (tokens.length === 0) return true;
-    return tokens.every((t) => hay.includes(t));
-}
-
-function compareText(a: unknown, b: unknown) {
-    const av = normalizeSearchText(a);
-    const bv = normalizeSearchText(b);
-
-    if (!av && !bv) return 0;
-    if (!av) return 1;
-    if (!bv) return -1;
-
-    return av.localeCompare(bv, undefined, { sensitivity: "base" });
-}
-
-function compareNullableNumber(
-    a: number | null | undefined,
-    b: number | null | undefined,
-    direction: "asc" | "desc" = "asc"
-) {
-    const av = typeof a === "number" && Number.isFinite(a) ? a : null;
-    const bv = typeof b === "number" && Number.isFinite(b) ? b : null;
-
-    if (av === null && bv === null) return 0;
-    if (av === null) return 1;
-    if (bv === null) return -1;
-
-    return direction === "asc" ? av - bv : bv - av;
-}
-
-function buildCatalogSortKey(b: BookDTO): string {
-    return [
-        normalizeSearchText(b.callNumber),
-        normalizeSearchText(b.accessionNumber),
-        normalizeSearchText(b.title),
-        normalizeSearchText(getSubjects(b)),
-        normalizeSearchText(
-            typeof b.publicationYear === "number" ? String(b.publicationYear) : ""
-        ),
-        normalizeSearchText(b.author),
-    ]
-        .filter(Boolean)
-        .join("|");
-}
-
 export default function StudentBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([]);
     const [myRecords, setMyRecords] = React.useState<BorrowRecordDTO[]>([]);
@@ -278,17 +82,16 @@ export default function StudentBooksPage() {
     const [sortOption, setSortOption] = React.useState<CatalogSortOption>("catalog");
     const [borrowBusyId, setBorrowBusyId] = React.useState<string | null>(null);
 
-    const [borrowDialogBookId, setBorrowDialogBookId] = React.useState<string | null>(null);
-    const [borrowCopies, setBorrowCopies] = React.useState<number>(1);
-
     const loadAll = React.useCallback(async () => {
         setError(null);
         setLoading(true);
+
         try {
             const [booksData, myRecordsData] = await Promise.all([
                 fetchBooks(),
                 fetchMyBorrowRecords(),
             ]);
+
             setBooks(booksData);
             setMyRecords(myRecordsData);
         } catch (err: any) {
@@ -360,7 +163,7 @@ export default function StudentBooksPage() {
                 filtered = filtered.filter((b) => b.activeRecords.length > 0);
                 break;
             case "history":
-                filtered = filtered.filter((b) => (b.lastRecord ? true : false));
+                filtered = filtered.filter((b) => Boolean(b.lastRecord));
                 break;
             case "all":
             default:
@@ -544,24 +347,30 @@ export default function StudentBooksPage() {
         libraryAreaFilter !== "all" ||
         sortOption !== "catalog";
 
-    async function handleBorrow(book: BookWithStatus, copiesRequested = 1) {
+    async function handleBorrow(
+        book: BookWithStatus,
+        copiesRequested = 1
+    ): Promise<boolean> {
         const remaining = getRemainingCopies(book);
 
         if (!isBorrowable(book) || remaining <= 0) {
             toast.info("Book is not available right now.", {
                 description: "There are no remaining copies to borrow.",
             });
-            return;
+            return false;
         }
 
-        const requestedCopies = clampInt(copiesRequested, 1, remaining);
+        const requestedCopies = Math.min(
+            Math.max(Math.floor(Number(copiesRequested) || 1, 1), remaining),
+            remaining
+        );
 
         setBorrowBusyId(book.id);
 
         try {
             const created: BorrowRecordDTO[] = [];
 
-            for (let i = 0; i < requestedCopies; i++) {
+            for (let i = 0; i < requestedCopies; i += 1) {
                 try {
                     const record = await createSelfBorrow(book.id, 1);
                     created.push(record);
@@ -576,7 +385,9 @@ export default function StudentBooksPage() {
                 }
             }
 
-            if (created.length === 0) return;
+            if (created.length === 0) {
+                return false;
+            }
 
             const due = fmtDate(created[0]?.dueDate);
 
@@ -597,11 +408,14 @@ export default function StudentBooksPage() {
             } catch {
                 // ignore refresh failure
             }
+
+            return true;
         } catch (err: any) {
             const msg =
                 err?.message ||
                 "Could not borrow this book right now. Please try again later.";
             toast.error("Borrow failed", { description: msg });
+            return false;
         } finally {
             setBorrowBusyId(null);
         }
@@ -610,7 +424,7 @@ export default function StudentBooksPage() {
     return (
         <DashboardLayout title="Browse Books">
             <div className="w-full overflow-x-hidden">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-2">
                         <BookOpen className="h-5 w-5" aria-hidden="true" />
                         <div>
@@ -624,7 +438,7 @@ export default function StudentBooksPage() {
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <Button
                             type="button"
                             variant="outline"
@@ -647,7 +461,7 @@ export default function StudentBooksPage() {
                     </div>
                 </div>
 
-                <Card className="bg-slate-800/60 border-white/10">
+                <Card className="border-white/10 bg-slate-800/60">
                     <CardHeader className="pb-2">
                         <div className="flex flex-col gap-3">
                             <div className="flex flex-col gap-1">
@@ -668,7 +482,7 @@ export default function StudentBooksPage() {
                                         placeholder="Search call no., accession no., title, subject, publication year, author…"
                                         autoComplete="off"
                                         aria-label="Search books"
-                                        className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                                        className="border-white/20 bg-slate-900/70 pl-9 text-white"
                                     />
                                 </div>
 
@@ -676,7 +490,7 @@ export default function StudentBooksPage() {
                                     value={libraryAreaFilter}
                                     onValueChange={(value) => setLibraryAreaFilter(value)}
                                 >
-                                    <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
+                                    <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                                         <div className="flex items-center gap-2 truncate">
                                             <Filter className="h-4 w-4 text-white/60" />
                                             <SelectValue placeholder="Library area" />
@@ -698,7 +512,7 @@ export default function StudentBooksPage() {
                                         setAvailabilityFilter(value as CatalogAvailabilityFilter)
                                     }
                                 >
-                                    <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
+                                    <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                                         <div className="flex items-center gap-2 truncate">
                                             <Filter className="h-4 w-4 text-white/60" />
                                             <SelectValue placeholder="Availability" />
@@ -715,7 +529,7 @@ export default function StudentBooksPage() {
                                     value={filterMode}
                                     onValueChange={(value) => setFilterMode(value as FilterMode)}
                                 >
-                                    <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
+                                    <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                                         <div className="flex items-center gap-2 truncate">
                                             <Filter className="h-4 w-4 text-white/60" />
                                             <SelectValue placeholder="My books" />
@@ -734,7 +548,7 @@ export default function StudentBooksPage() {
                                     value={sortOption}
                                     onValueChange={(value) => setSortOption(value as CatalogSortOption)}
                                 >
-                                    <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
+                                    <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                                         <div className="flex items-center gap-2 truncate">
                                             <ArrowUpDown className="h-4 w-4 text-white/60" />
                                             <SelectValue placeholder="Sort books" />
@@ -804,1083 +618,17 @@ export default function StudentBooksPage() {
                             </div>
                         ) : (
                             <>
-                                <div className="hidden md:block overflow-x-auto">
-                                    <Table className="min-w-[1500px]">
-                                        <TableCaption className="text-xs text-white/60">
-                                            Showing {rows.length}{" "}
-                                            {rows.length === 1 ? "book" : "books"}. You can borrow
-                                            multiple copies as long as there are remaining copies.
-                                        </TableCaption>
-                                        <TableHeader>
-                                            <TableRow className="border-white/10">
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Call no.
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Acc. no.
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Title
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Sub.
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Pub. year
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Author
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    ISBN
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Area
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Availability
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    Due date
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
-                                                    My status
-                                                </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70 text-right">
-                                                    Action
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-
-                                        <TableBody>
-                                            {rows.map((book) => {
-                                                const remaining = getRemainingCopies(book);
-                                                const borrowableNow = isBorrowable(book);
-
-                                                const activeRecords = book.activeRecords || [];
-                                                const pendingPickupRecords = activeRecords.filter(
-                                                    (r) =>
-                                                        r.status === "pending" ||
-                                                        r.status === "pending_pickup"
-                                                );
-                                                const borrowedRecords = activeRecords.filter(
-                                                    (r) => r.status === "borrowed"
-                                                );
-                                                const pendingReturnRecords = activeRecords.filter(
-                                                    (r) => r.status === "pending_return"
-                                                );
-
-                                                const totalFine = activeRecords.reduce(
-                                                    (sum, r) =>
-                                                        sum + (typeof r.fine === "number" ? r.fine : 0),
-                                                    0
-                                                );
-
-                                                const earliestDueRaw = minDateStr(activeRecords, "dueDate");
-                                                const earliestDue = earliestDueRaw ? fmtDate(earliestDueRaw) : "—";
-
-                                                const overdueDaysMax =
-                                                    borrowedRecords.length > 0
-                                                        ? Math.max(
-                                                            0,
-                                                            ...borrowedRecords.map((r) =>
-                                                                computeOverdueDays(r.dueDate)
-                                                            )
-                                                        )
-                                                        : 0;
-
-                                                const hasOverdue = overdueDaysMax > 0;
-
-                                                const dueCell =
-                                                    activeRecords.length === 0
-                                                        ? "—"
-                                                        : activeRecords.length === 1
-                                                            ? earliestDue
-                                                            : `${earliestDue} (+${activeRecords.length - 1} more)`;
-
-                                                const maxCopies = remaining;
-                                                const isThisDialog = borrowDialogBookId === book.id;
-                                                const qty = isThisDialog
-                                                    ? clampInt(borrowCopies, 1, Math.max(1, maxCopies))
-                                                    : 1;
-
-                                                const borrowBtnLabel =
-                                                    activeRecords.length > 0 ? "Borrow more" : "Borrow";
-
-                                                return (
-                                                    <TableRow
-                                                        key={book.id}
-                                                        className="border-white/5 hover:bg-white/5 transition-colors"
-                                                    >
-                                                        <TableCell className="text-sm whitespace-nowrap">
-                                                            {book.callNumber || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm whitespace-nowrap">
-                                                            {book.accessionNumber || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm font-medium min-w-[220px]">
-                                                            <div className="flex flex-col">
-                                                                <span>{book.title}</span>
-                                                                {book.subtitle ? (
-                                                                    <span className="text-xs text-white/60">
-                                                                        {book.subtitle}
-                                                                    </span>
-                                                                ) : null}
-                                                            </div>
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm whitespace-nowrap">
-                                                            {getSubjects(book)}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm whitespace-nowrap">
-                                                            {book.publicationYear || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm min-w-[180px]">
-                                                            {book.author || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm whitespace-nowrap">
-                                                            {book.isbn || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm whitespace-nowrap">
-                                                            {book.libraryArea ? (
-                                                                fmtLibraryArea(book.libraryArea)
-                                                            ) : (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-xs whitespace-nowrap">
-                                                            <Badge
-                                                                variant={borrowableNow ? "default" : "outline"}
-                                                                className={
-                                                                    borrowableNow
-                                                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                                        : "border-red-400/70 text-red-200 hover:bg-red-500/10"
-                                                                }
-                                                            >
-                                                                {borrowableNow ? (
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <CheckCircle2
-                                                                            className="h-3 w-3"
-                                                                            aria-hidden="true"
-                                                                        />
-                                                                        Available{" "}
-                                                                        <span className="opacity-80">
-                                                                            ({remaining} left)
-                                                                        </span>
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <CircleOff
-                                                                            className="h-3 w-3"
-                                                                            aria-hidden="true"
-                                                                        />
-                                                                        Unavailable
-                                                                    </span>
-                                                                )}
-                                                            </Badge>
-                                                        </TableCell>
-
-                                                        <TableCell className="text-sm whitespace-nowrap">
-                                                            {dueCell === "—" ? (
-                                                                <span className="opacity-50">—</span>
-                                                            ) : (
-                                                                dueCell
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-xs min-w-60">
-                                                            {activeRecords.length === 0 && book.myStatus === "never" && (
-                                                                <span className="text-white/60">
-                                                                    Not yet borrowed
-                                                                </span>
-                                                            )}
-
-                                                            {activeRecords.length > 0 && (
-                                                                <div className="space-y-1">
-                                                                    {pendingPickupRecords.length > 0 && (
-                                                                        <div className="inline-flex items-center gap-1 text-amber-200">
-                                                                            <Clock3
-                                                                                className="h-3 w-3 shrink-0"
-                                                                                aria-hidden="true"
-                                                                            />
-                                                                            <span>
-                                                                                Pending pickup ×{pendingPickupRecords.length}
-                                                                                {" · "}
-                                                                                Earliest due:{" "}
-                                                                                <span className="font-medium">
-                                                                                    {earliestDue}
-                                                                                </span>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && !hasOverdue && (
-                                                                        <div className="inline-flex items-center gap-1 text-amber-200">
-                                                                            <Clock3
-                                                                                className="h-3 w-3 shrink-0"
-                                                                                aria-hidden="true"
-                                                                            />
-                                                                            <span>
-                                                                                Borrowed ×{borrowedRecords.length}
-                                                                                {" · "}
-                                                                                Earliest due:{" "}
-                                                                                <span className="font-medium">
-                                                                                    {earliestDue}
-                                                                                </span>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && hasOverdue && (
-                                                                        <div className="inline-flex items-center gap-1 text-red-300">
-                                                                            <AlertTriangle
-                                                                                className="h-3 w-3 shrink-0"
-                                                                                aria-hidden="true"
-                                                                            />
-                                                                            <span>
-                                                                                Overdue ×{borrowedRecords.length}
-                                                                                {" · "}
-                                                                                Max overdue:{" "}
-                                                                                <span className="font-semibold">
-                                                                                    {overdueDaysMax} day
-                                                                                    {overdueDaysMax === 1 ? "" : "s"}
-                                                                                </span>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {pendingReturnRecords.length > 0 && (
-                                                                        <div className="text-white/70">
-                                                                            Return requested ×{pendingReturnRecords.length}
-                                                                        </div>
-                                                                    )}
-
-                                                                    {totalFine > 0 && (
-                                                                        <div className="text-red-300">
-                                                                            Fine total: {peso(totalFine)}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-
-                                                            {activeRecords.length === 0 &&
-                                                                book.myStatus === "returned" &&
-                                                                book.lastReturnedRecord && (
-                                                                    <span className="inline-flex items-center gap-1 text-white/70">
-                                                                        <CheckCircle2
-                                                                            className="h-3 w-3 text-emerald-300 shrink-0"
-                                                                            aria-hidden="true"
-                                                                        />
-                                                                        <span>
-                                                                            Returned · Last returned:{" "}
-                                                                            <span className="font-medium">
-                                                                                {fmtDate(book.lastReturnedRecord.returnDate)}
-                                                                            </span>
-                                                                        </span>
-                                                                    </span>
-                                                                )}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-right align-top whitespace-nowrap">
-                                                            {borrowableNow ? (
-                                                                <AlertDialog
-                                                                    onOpenChange={(open) => {
-                                                                        if (open) {
-                                                                            setBorrowDialogBookId(book.id);
-                                                                            setBorrowCopies(1);
-                                                                        } else {
-                                                                            setBorrowDialogBookId(null);
-                                                                            setBorrowCopies(1);
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <AlertDialogTrigger asChild>
-                                                                        <Button
-                                                                            type="button"
-                                                                            size="sm"
-                                                                            className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                                                                            disabled={borrowBusyId === book.id || maxCopies <= 0}
-                                                                        >
-                                                                            {borrowBtnLabel}
-                                                                        </Button>
-                                                                    </AlertDialogTrigger>
-
-                                                                    <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                                        <AlertDialogHeader>
-                                                                            <AlertDialogTitle>
-                                                                                Confirm borrow
-                                                                            </AlertDialogTitle>
-                                                                            <AlertDialogDescription className="text-white/70">
-                                                                                You are about to borrow{" "}
-                                                                                <span className="font-semibold text-white">
-                                                                                    “{book.title}”
-                                                                                </span>{" "}
-                                                                                by{" "}
-                                                                                <span className="font-semibold text-white">
-                                                                                    {book.author}
-                                                                                </span>
-                                                                                . Please confirm the details below.
-                                                                            </AlertDialogDescription>
-                                                                        </AlertDialogHeader>
-
-                                                                        <div className="mt-3 text-sm text-white/80 space-y-1">
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Call no.:
-                                                                                </span>{" "}
-                                                                                {book.callNumber || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Accession #:
-                                                                                </span>{" "}
-                                                                                {book.accessionNumber || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Library area:
-                                                                                </span>{" "}
-                                                                                {fmtLibraryArea(book.libraryArea)}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    ISBN:
-                                                                                </span>{" "}
-                                                                                {book.isbn || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Edition:
-                                                                                </span>{" "}
-                                                                                {book.edition || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Publisher:
-                                                                                </span>{" "}
-                                                                                {book.publisher || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Subjects:
-                                                                                </span>{" "}
-                                                                                {getSubjects(book)}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Publication year:
-                                                                                </span>{" "}
-                                                                                {book.publicationYear || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Default loan duration:
-                                                                                </span>{" "}
-                                                                                {fmtDurationDays(book.borrowDurationDays)}
-                                                                            </p>
-
-                                                                            <div className="pt-3">
-                                                                                <div className="text-xs font-medium text-white/80 mb-1">
-                                                                                    Copies to borrow
-                                                                                </div>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <Button
-                                                                                        type="button"
-                                                                                        size="icon"
-                                                                                        variant="outline"
-                                                                                        className="border-white/20 text-white hover:bg-white/10"
-                                                                                        onClick={() =>
-                                                                                            setBorrowCopies((v) =>
-                                                                                                clampInt(v - 1, 1, Math.max(1, maxCopies))
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            borrowBusyId === book.id ||
-                                                                                            !isThisDialog ||
-                                                                                            qty <= 1
-                                                                                        }
-                                                                                        aria-label="Decrease copies"
-                                                                                    >
-                                                                                        <Minus className="h-4 w-4" aria-hidden="true" />
-                                                                                    </Button>
-
-                                                                                    <Input
-                                                                                        value={String(qty)}
-                                                                                        onChange={(e) =>
-                                                                                            setBorrowCopies(
-                                                                                                clampInt(
-                                                                                                    Number(e.target.value),
-                                                                                                    1,
-                                                                                                    Math.max(1, maxCopies)
-                                                                                                )
-                                                                                            )
-                                                                                        }
-                                                                                        inputMode="numeric"
-                                                                                        className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
-                                                                                        aria-label="Copies to borrow"
-                                                                                        disabled={borrowBusyId === book.id || !isThisDialog}
-                                                                                    />
-
-                                                                                    <Button
-                                                                                        type="button"
-                                                                                        size="icon"
-                                                                                        variant="outline"
-                                                                                        className="border-white/20 text-white hover:bg-white/10"
-                                                                                        onClick={() =>
-                                                                                            setBorrowCopies((v) =>
-                                                                                                clampInt(v + 1, 1, Math.max(1, maxCopies))
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            borrowBusyId === book.id ||
-                                                                                            !isThisDialog ||
-                                                                                            qty >= maxCopies
-                                                                                        }
-                                                                                        aria-label="Increase copies"
-                                                                                    >
-                                                                                        <Plus className="h-4 w-4" aria-hidden="true" />
-                                                                                    </Button>
-
-                                                                                    <span className="text-xs text-white/60">
-                                                                                        Max {maxCopies}
-                                                                                    </span>
-                                                                                </div>
-                                                                                <p className="text-[11px] text-white/60 mt-1">
-                                                                                    Remaining copies available right now: {maxCopies}.
-                                                                                </p>
-                                                                            </div>
-
-                                                                            <p className="text-xs text-white/60 mt-2">
-                                                                                The due date will be set automatically
-                                                                                based on the library policy. Any overdue
-                                                                                days may incur fines.
-                                                                            </p>
-                                                                        </div>
-
-                                                                        <AlertDialogFooter>
-                                                                            <AlertDialogCancel
-                                                                                className="border-white/20 text-white hover:bg-black/20"
-                                                                                disabled={borrowBusyId === book.id}
-                                                                            >
-                                                                                Cancel
-                                                                            </AlertDialogCancel>
-                                                                            <AlertDialogAction
-                                                                                className="bg-purple-600 hover:bg-purple-700 text-white"
-                                                                                disabled={borrowBusyId === book.id || maxCopies <= 0}
-                                                                                onClick={() => void handleBorrow(book, qty)}
-                                                                            >
-                                                                                {borrowBusyId === book.id ? (
-                                                                                    <span className="inline-flex items-center gap-2">
-                                                                                        <Loader2
-                                                                                            className="h-4 w-4 animate-spin"
-                                                                                            aria-hidden="true"
-                                                                                        />
-                                                                                        Borrowing…
-                                                                                    </span>
-                                                                                ) : (
-                                                                                    "Confirm borrow"
-                                                                                )}
-                                                                            </AlertDialogAction>
-                                                                        </AlertDialogFooter>
-                                                                    </AlertDialogContent>
-                                                                </AlertDialog>
-                                                            ) : activeRecords.length > 0 ? (
-                                                                <span className="inline-flex flex-col items-end text-xs text-amber-200">
-                                                                    {pendingPickupRecords.length > 0 && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1">
-                                                                                <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                                Pending pickup ×{pendingPickupRecords.length}
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Go to the librarian to receive the physical book.
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && !hasOverdue && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1">
-                                                                                <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                                Borrowed ×{borrowedRecords.length}
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Earliest due on{" "}
-                                                                                <span className="font-semibold">{earliestDue}</span>.
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && hasOverdue && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1 text-red-300">
-                                                                                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                                                                                Overdue
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Max overdue by{" "}
-                                                                                <span className="font-semibold">
-                                                                                    {overdueDaysMax} day{overdueDaysMax === 1 ? "" : "s"}
-                                                                                </span>
-                                                                                .
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-
-                                                                    {pendingReturnRecords.length > 0 && (
-                                                                        <span className="text-white/60">
-                                                                            Return requested ×{pendingReturnRecords.length}
-                                                                        </span>
-                                                                    )}
-                                                                </span>
-                                                            ) : (
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    disabled
-                                                                    className="border-white/20 text-white/60"
-                                                                >
-                                                                    Not available
-                                                                </Button>
-                                                            )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-
-                                <div className="md:hidden space-y-3 mt-2">
-                                    {rows.map((book) => {
-                                        const remaining = getRemainingCopies(book);
-                                        const borrowableNow = isBorrowable(book);
-
-                                        const activeRecords = book.activeRecords || [];
-                                        const pendingPickupRecords = activeRecords.filter(
-                                            (r) =>
-                                                r.status === "pending" ||
-                                                r.status === "pending_pickup"
-                                        );
-                                        const borrowedRecords = activeRecords.filter(
-                                            (r) => r.status === "borrowed"
-                                        );
-                                        const pendingReturnRecords = activeRecords.filter(
-                                            (r) => r.status === "pending_return"
-                                        );
-
-                                        const earliestDueRaw = minDateStr(activeRecords, "dueDate");
-                                        const earliestDue = earliestDueRaw ? fmtDate(earliestDueRaw) : "—";
-
-                                        const overdueDaysMax =
-                                            borrowedRecords.length > 0
-                                                ? Math.max(
-                                                    0,
-                                                    ...borrowedRecords.map((r) =>
-                                                        computeOverdueDays(r.dueDate)
-                                                    )
-                                                )
-                                                : 0;
-
-                                        const hasOverdue = overdueDaysMax > 0;
-
-                                        const dueCell =
-                                            activeRecords.length === 0
-                                                ? "—"
-                                                : activeRecords.length === 1
-                                                    ? earliestDue
-                                                    : `${earliestDue} (+${activeRecords.length - 1} more)`;
-
-                                        const maxCopies = remaining;
-
-                                        const isThisDialog = borrowDialogBookId === book.id;
-                                        const qty = isThisDialog
-                                            ? clampInt(borrowCopies, 1, Math.max(1, maxCopies))
-                                            : 1;
-
-                                        const borrowBtnLabel =
-                                            activeRecords.length > 0 ? "Borrow more" : "Borrow";
-
-                                        return (
-                                            <div
-                                                key={book.id}
-                                                className="rounded-lg border border-white/10 bg-slate-900/80 p-3 space-y-3"
-                                            >
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="min-w-0">
-                                                        <div className="text-sm font-semibold text-white wrap-break-word">
-                                                            {book.title}
-                                                        </div>
-                                                        {book.subtitle ? (
-                                                            <div className="text-[11px] text-white/60 wrap-break-word">
-                                                                {book.subtitle}
-                                                            </div>
-                                                        ) : null}
-                                                        <div className="text-[11px] text-white/60 wrap-break-word">
-                                                            {book.author || "—"}
-                                                        </div>
-                                                    </div>
-                                                    <Badge
-                                                        variant={borrowableNow ? "default" : "outline"}
-                                                        className={
-                                                            borrowableNow
-                                                                ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                                : "border-red-400/70 text-red-200 hover:bg-red-500/10"
-                                                        }
-                                                    >
-                                                        {borrowableNow ? (
-                                                            <span className="inline-flex items-center gap-1">
-                                                                <CheckCircle2
-                                                                    className="h-3 w-3"
-                                                                    aria-hidden="true"
-                                                                />
-                                                                Available{" "}
-                                                                <span className="opacity-80">
-                                                                    ({remaining} left)
-                                                                </span>
-                                                            </span>
-                                                        ) : (
-                                                            <span className="inline-flex items-center gap-1">
-                                                                <CircleOff
-                                                                    className="h-3 w-3"
-                                                                    aria-hidden="true"
-                                                                />
-                                                                Unavailable
-                                                            </span>
-                                                        )}
-                                                    </Badge>
-                                                </div>
-
-                                                <div className="text-[11px] text-white/70">
-                                                    {activeRecords.length === 0 && book.myStatus === "never" && (
-                                                        <span>Not yet borrowed</span>
-                                                    )}
-
-                                                    {activeRecords.length > 0 && (
-                                                        <>
-                                                            {pendingPickupRecords.length > 0 && (
-                                                                <span>
-                                                                    <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                        <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                        Pending pickup ×{pendingPickupRecords.length}
-                                                                    </span>
-                                                                    <br />
-                                                                    Earliest due:{" "}
-                                                                    <span className="font-medium">{earliestDue}</span>
-                                                                </span>
-                                                            )}
-
-                                                            {borrowedRecords.length > 0 && !hasOverdue && (
-                                                                <span>
-                                                                    <span className="inline-flex items-center gap-1 text-amber-200">
-                                                                        <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                        Borrowed ×{borrowedRecords.length}
-                                                                    </span>
-                                                                    <br />
-                                                                    Earliest due:{" "}
-                                                                    <span className="font-medium">{earliestDue}</span>
-                                                                </span>
-                                                            )}
-
-                                                            {borrowedRecords.length > 0 && hasOverdue && (
-                                                                <span>
-                                                                    <span className="inline-flex items-center gap-1 text-red-300">
-                                                                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                                                                        Overdue
-                                                                    </span>
-                                                                    <br />
-                                                                    Max overdue by{" "}
-                                                                    <span className="font-semibold">
-                                                                        {overdueDaysMax} day{overdueDaysMax === 1 ? "" : "s"}
-                                                                    </span>
-                                                                    .
-                                                                </span>
-                                                            )}
-
-                                                            {pendingReturnRecords.length > 0 && (
-                                                                <>
-                                                                    <br />
-                                                                    <span className="text-white/60">
-                                                                        Return requested ×{pendingReturnRecords.length}
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                        </>
-                                                    )}
-
-                                                    {activeRecords.length === 0 &&
-                                                        book.myStatus === "returned" &&
-                                                        book.lastReturnedRecord && (
-                                                            <span>
-                                                                <span className="inline-flex items-center gap-1 text-emerald-200">
-                                                                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                                                                    Returned
-                                                                </span>
-                                                                <br />
-                                                                Last returned:{" "}
-                                                                <span className="font-medium">
-                                                                    {fmtDate(book.lastReturnedRecord.returnDate)}
-                                                                </span>
-                                                            </span>
-                                                        )}
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-white/70">
-                                                    <div>
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            Call no.
-                                                        </div>
-                                                        <div className="text-xs wrap-break-word">
-                                                            {book.callNumber || <span className="opacity-50">—</span>}
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            Acc. no.
-                                                        </div>
-                                                        <div className="text-xs wrap-break-word">
-                                                            {book.accessionNumber || <span className="opacity-50">—</span>}
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            Sub.
-                                                        </div>
-                                                        <div className="text-xs wrap-break-word">
-                                                            {getSubjects(book)}
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            Pub. year
-                                                        </div>
-                                                        <div className="text-xs">
-                                                            {book.publicationYear || <span className="opacity-50">—</span>}
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            ISBN
-                                                        </div>
-                                                        <div className="text-xs wrap-break-word">
-                                                            {book.isbn || <span className="opacity-50">—</span>}
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            Area
-                                                        </div>
-                                                        <div className="text-xs wrap-break-word">
-                                                            {fmtLibraryArea(book.libraryArea)}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="col-span-2">
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            Due date
-                                                        </div>
-                                                        <div className="text-xs">
-                                                            {dueCell === "—" ? (
-                                                                <span className="opacity-50">—</span>
-                                                            ) : (
-                                                                dueCell
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="col-span-2">
-                                                        <div className="text-[10px] uppercase text-white/40">
-                                                            Loan duration
-                                                        </div>
-                                                        <div className="text-xs">
-                                                            {fmtDurationDays(book.borrowDurationDays)}
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex justify-end pt-1">
-                                                    {borrowableNow ? (
-                                                        <AlertDialog
-                                                            onOpenChange={(open) => {
-                                                                if (open) {
-                                                                    setBorrowDialogBookId(book.id);
-                                                                    setBorrowCopies(1);
-                                                                } else {
-                                                                    setBorrowDialogBookId(null);
-                                                                    setBorrowCopies(1);
-                                                                }
-                                                            }}
-                                                        >
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                                                                    disabled={borrowBusyId === book.id || maxCopies <= 0}
-                                                                >
-                                                                    {borrowBtnLabel}
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-
-                                                            <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>
-                                                                        Confirm borrow
-                                                                    </AlertDialogTitle>
-                                                                    <AlertDialogDescription className="text-white/70">
-                                                                        You are about to borrow{" "}
-                                                                        <span className="font-semibold text-white">
-                                                                            “{book.title}”
-                                                                        </span>{" "}
-                                                                        by{" "}
-                                                                        <span className="font-semibold text-white">
-                                                                            {book.author}
-                                                                        </span>
-                                                                        . Please confirm the details below.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-
-                                                                <div className="mt-3 text-sm text-white/80 space-y-1">
-                                                                    <p>
-                                                                        <span className="text-white/60">
-                                                                            Call no.:
-                                                                        </span>{" "}
-                                                                        {book.callNumber || "—"}
-                                                                    </p>
-                                                                    <p>
-                                                                        <span className="text-white/60">
-                                                                            Accession #:
-                                                                        </span>{" "}
-                                                                        {book.accessionNumber || "—"}
-                                                                    </p>
-                                                                    <p>
-                                                                        <span className="text-white/60">
-                                                                            Library area:
-                                                                        </span>{" "}
-                                                                        {fmtLibraryArea(book.libraryArea)}
-                                                                    </p>
-                                                                    <p>
-                                                                        <span className="text-white/60">ISBN:</span>{" "}
-                                                                        {book.isbn || "—"}
-                                                                    </p>
-                                                                    <p>
-                                                                        <span className="text-white/60">Edition:</span>{" "}
-                                                                        {book.edition || "—"}
-                                                                    </p>
-                                                                    <p>
-                                                                        <span className="text-white/60">
-                                                                            Subjects:
-                                                                        </span>{" "}
-                                                                        {getSubjects(book)}
-                                                                    </p>
-                                                                    <p>
-                                                                        <span className="text-white/60">
-                                                                            Publication year:
-                                                                        </span>{" "}
-                                                                        {book.publicationYear || "—"}
-                                                                    </p>
-                                                                    <p>
-                                                                        <span className="text-white/60">
-                                                                            Default loan duration:
-                                                                        </span>{" "}
-                                                                        {fmtDurationDays(book.borrowDurationDays)}
-                                                                    </p>
-
-                                                                    <div className="pt-3">
-                                                                        <div className="text-xs font-medium text-white/80 mb-1">
-                                                                            Copies to borrow
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <Button
-                                                                                type="button"
-                                                                                size="icon"
-                                                                                variant="outline"
-                                                                                className="border-white/20 text-white hover:bg-white/10"
-                                                                                onClick={() =>
-                                                                                    setBorrowCopies((v) =>
-                                                                                        clampInt(v - 1, 1, Math.max(1, maxCopies))
-                                                                                    )
-                                                                                }
-                                                                                disabled={
-                                                                                    borrowBusyId === book.id ||
-                                                                                    !isThisDialog ||
-                                                                                    qty <= 1
-                                                                                }
-                                                                                aria-label="Decrease copies"
-                                                                            >
-                                                                                <Minus className="h-4 w-4" aria-hidden="true" />
-                                                                            </Button>
-
-                                                                            <Input
-                                                                                value={String(qty)}
-                                                                                onChange={(e) =>
-                                                                                    setBorrowCopies(
-                                                                                        clampInt(
-                                                                                            Number(e.target.value),
-                                                                                            1,
-                                                                                            Math.max(1, maxCopies)
-                                                                                        )
-                                                                                    )
-                                                                                }
-                                                                                inputMode="numeric"
-                                                                                className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
-                                                                                aria-label="Copies to borrow"
-                                                                                disabled={borrowBusyId === book.id || !isThisDialog}
-                                                                            />
-
-                                                                            <Button
-                                                                                type="button"
-                                                                                size="icon"
-                                                                                variant="outline"
-                                                                                className="border-white/20 text-white hover:bg-white/10"
-                                                                                onClick={() =>
-                                                                                    setBorrowCopies((v) =>
-                                                                                        clampInt(v + 1, 1, Math.max(1, maxCopies))
-                                                                                    )
-                                                                                }
-                                                                                disabled={
-                                                                                    borrowBusyId === book.id ||
-                                                                                    !isThisDialog ||
-                                                                                    qty >= maxCopies
-                                                                                }
-                                                                                aria-label="Increase copies"
-                                                                            >
-                                                                                <Plus className="h-4 w-4" aria-hidden="true" />
-                                                                            </Button>
-
-                                                                            <span className="text-xs text-white/60">
-                                                                                Max {maxCopies}
-                                                                            </span>
-                                                                        </div>
-                                                                        <p className="text-[11px] text-white/60 mt-1">
-                                                                            Remaining copies available right now: {maxCopies}.
-                                                                        </p>
-                                                                    </div>
-
-                                                                    <p className="text-xs text-white/60 mt-2">
-                                                                        The due date will be set automatically based
-                                                                        on the library policy. Any overdue days may
-                                                                        incur fines.
-                                                                    </p>
-                                                                </div>
-
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel
-                                                                        className="border-white/20 text-white hover:bg-black/20"
-                                                                        disabled={borrowBusyId === book.id}
-                                                                    >
-                                                                        Cancel
-                                                                    </AlertDialogCancel>
-                                                                    <AlertDialogAction
-                                                                        className="bg-purple-600 hover:bg-purple-700 text-white"
-                                                                        disabled={borrowBusyId === book.id || maxCopies <= 0}
-                                                                        onClick={() => void handleBorrow(book, qty)}
-                                                                    >
-                                                                        {borrowBusyId === book.id ? (
-                                                                            <span className="inline-flex items-center gap-2">
-                                                                                <Loader2
-                                                                                    className="h-4 w-4 animate-spin"
-                                                                                    aria-hidden="true"
-                                                                                />
-                                                                                Borrowing…
-                                                                            </span>
-                                                                        ) : (
-                                                                            "Confirm borrow"
-                                                                        )}
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    ) : activeRecords.length > 0 ? (
-                                                        <span className="inline-flex flex-col items-end text-xs text-amber-200">
-                                                            {pendingPickupRecords.length > 0 && (
-                                                                <>
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                        Pending pickup ×{pendingPickupRecords.length}
-                                                                    </span>
-                                                                    <span className="text-white/60">
-                                                                        Go to the librarian to receive the physical
-                                                                        book.
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                            {borrowedRecords.length > 0 && !hasOverdue && (
-                                                                <>
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                        Borrowed ×{borrowedRecords.length}
-                                                                    </span>
-                                                                    <span className="text-white/60">
-                                                                        Earliest due on{" "}
-                                                                        <span className="font-semibold">
-                                                                            {earliestDue}
-                                                                        </span>
-                                                                        .
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                            {borrowedRecords.length > 0 && hasOverdue && (
-                                                                <>
-                                                                    <span className="inline-flex items-center gap-1 text-red-300">
-                                                                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                                                                        Overdue
-                                                                    </span>
-                                                                    <span className="text-white/60">
-                                                                        Max overdue by{" "}
-                                                                        <span className="font-semibold">
-                                                                            {overdueDaysMax} day
-                                                                            {overdueDaysMax === 1 ? "" : "s"}
-                                                                        </span>
-                                                                        .
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                            {pendingReturnRecords.length > 0 && (
-                                                                <span className="text-white/60">
-                                                                    Return requested ×{pendingReturnRecords.length}
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                    ) : (
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            disabled
-                                                            className="border-white/20 text-white/60"
-                                                        >
-                                                            Not available
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                <StudentBooksTable
+                                    rows={rows}
+                                    borrowBusyId={borrowBusyId}
+                                    onBorrow={handleBorrow}
+                                />
+
+                                <StudentBooksCardList
+                                    rows={rows}
+                                    borrowBusyId={borrowBusyId}
+                                    onBorrow={handleBorrow}
+                                />
                             </>
                         )}
                     </CardContent>
