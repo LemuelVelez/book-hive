@@ -36,6 +36,8 @@ type BooksCatalogTableProps = {
     cellScrollbarClasses: string;
 };
 
+const DRAG_THRESHOLD_PX = 5;
+
 function AvailabilityBadge({ borrowable }: { borrowable: boolean }) {
     return (
         <Badge
@@ -146,6 +148,26 @@ function getLoanDaysLabel(book: BookDTO) {
     return "—";
 }
 
+function isInteractiveTarget(target: EventTarget | null) {
+    if (!(target instanceof HTMLElement)) return false;
+
+    return Boolean(
+        target.closest(
+            [
+                "button",
+                "a",
+                "input",
+                "select",
+                "textarea",
+                "[role='button']",
+                "[role='link']",
+                "[role='menuitem']",
+                "[data-no-drag-scroll='true']",
+            ].join(", ")
+        )
+    );
+}
+
 export function BooksCatalogTable({
     books,
     onEdit,
@@ -153,6 +175,111 @@ export function BooksCatalogTable({
     cellScrollbarClasses,
 }: BooksCatalogTableProps) {
     const wrapCellClass = `align-top whitespace-normal break-words text-sm leading-5 text-white/80 ${cellScrollbarClasses}`;
+
+    const tableScrollRef = React.useRef<HTMLDivElement | null>(null);
+    const suppressClickRef = React.useRef(false);
+    const dragStateRef = React.useRef({
+        pointerId: null as number | null,
+        isPointerDown: false,
+        startX: 0,
+        startScrollLeft: 0,
+    });
+    const [isDragging, setIsDragging] = React.useState(false);
+
+    const endDrag = React.useCallback(() => {
+        const container = tableScrollRef.current;
+        const dragState = dragStateRef.current;
+
+        if (
+            container &&
+            dragState.pointerId !== null &&
+            typeof container.hasPointerCapture === "function" &&
+            container.hasPointerCapture(dragState.pointerId)
+        ) {
+            try {
+                container.releasePointerCapture(dragState.pointerId);
+            } catch {
+                // no-op
+            }
+        }
+
+        dragState.pointerId = null;
+        dragState.isPointerDown = false;
+        dragState.startX = 0;
+        dragState.startScrollLeft = 0;
+        setIsDragging(false);
+    }, []);
+
+    React.useEffect(() => {
+        return () => {
+            endDrag();
+        };
+    }, [endDrag]);
+
+    const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.pointerType === "touch") return;
+        if (event.button !== 0) return;
+        if (isInteractiveTarget(event.target)) return;
+
+        const container = tableScrollRef.current;
+        if (!container) return;
+
+        dragStateRef.current.pointerId = event.pointerId;
+        dragStateRef.current.isPointerDown = true;
+        dragStateRef.current.startX = event.clientX;
+        dragStateRef.current.startScrollLeft = container.scrollLeft;
+        suppressClickRef.current = false;
+        setIsDragging(false);
+
+        if (typeof container.setPointerCapture === "function") {
+            try {
+                container.setPointerCapture(event.pointerId);
+            } catch {
+                // no-op
+            }
+        }
+    };
+
+    const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+        const container = tableScrollRef.current;
+        const dragState = dragStateRef.current;
+
+        if (!container || !dragState.isPointerDown) return;
+
+        const deltaX = event.clientX - dragState.startX;
+
+        if (!isDragging && Math.abs(deltaX) < DRAG_THRESHOLD_PX) {
+            return;
+        }
+
+        if (!isDragging) {
+            setIsDragging(true);
+        }
+
+        suppressClickRef.current = true;
+        container.scrollLeft = dragState.startScrollLeft - deltaX;
+        event.preventDefault();
+    };
+
+    const handleClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+        if (!suppressClickRef.current) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClickRef.current = false;
+    };
+
+    const handlePointerUp = () => {
+        endDrag();
+    };
+
+    const handlePointerCancel = () => {
+        endDrag();
+    };
+
+    const handleLostPointerCapture = () => {
+        endDrag();
+    };
 
     return (
         <div className="space-y-4">
@@ -268,7 +395,17 @@ export function BooksCatalogTable({
             </div>
 
             <div className="hidden sm:block">
-                <div className="overflow-x-auto cursor-grab active:cursor-grabbing">
+                <div
+                    ref={tableScrollRef}
+                    className={`overflow-x-auto ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"}`}
+                    style={{ touchAction: "pan-y" }}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerCancel}
+                    onLostPointerCapture={handleLostPointerCapture}
+                    onClickCapture={handleClickCapture}
+                >
                     <Table className="min-w-[1580px] table-fixed">
                         <TableCaption className="text-xs text-white/60">
                             Showing {books.length}{" "}
