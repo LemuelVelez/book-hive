@@ -361,7 +361,7 @@ export default function StudentBooksPage() {
         }
 
         const requestedCopies = Math.min(
-            Math.max(Math.floor(Number(copiesRequested) || 1, 1), remaining),
+            Math.max(Math.floor(Number(copiesRequested) || 1), 1),
             remaining
         );
 
