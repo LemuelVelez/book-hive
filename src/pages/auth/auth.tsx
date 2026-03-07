@@ -9,10 +9,6 @@ import {
     Mail,
     User,
     IdCard,
-    Loader2,
-    Paperclip,
-    HelpCircle,
-    MessageSquare,
 } from "lucide-react";
 
 // UI primitives
@@ -43,16 +39,6 @@ import {
     FieldError,
     FieldLabel,
 } from "@/components/ui/field";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter as DialogFooterUI,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 import {
@@ -60,7 +46,6 @@ import {
     register as apiRegister,
     resendVerifyEmail as apiResendVerifyEmail,
     checkStudentIdAvailability,
-    // submitSupportTicket,
 } from "@/lib/authentication";
 import {
     dashboardForRole,
@@ -192,19 +177,6 @@ export default function AuthPage() {
     const [customProgram, setCustomProgram] = useState("");
     const [customYearLevel, setCustomYearLevel] = useState("");
 
-    // Support dialog state
-    const [supportOpen, setSupportOpen] = useState(false);
-    const [supName, setSupName] = useState("");
-    const [supEmail, setSupEmail] = useState("");
-    const [supCategory, setSupCategory] = useState("Login issue");
-    const [supSubject, setSupSubject] = useState("");
-    const [supMessage, setSupMessage] = useState("");
-    const [supFile, setSupFile] = useState<File | null>(null);
-    const [supSubmitting /* , setSupSubmitting */] = useState(false);
-    const [supError, setSupError] = useState<string>("");
-    const [supSuccess, setSupSuccess] = useState<string>("");
-    const [consent, setConsent] = useState(false);
-
     // Redirect handling
     const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"));
     const bootRedirectedRef = useRef(false); // ensure we only auto-redirect once
@@ -248,17 +220,6 @@ export default function AuthPage() {
             noop(err);
         }
     }, []);
-
-    // Autofill support dialog name from registration full name
-    useEffect(() => {
-        if (!supName && fullName) setSupName(fullName.trim());
-    }, [fullName, supName]);
-
-    // Autofill support dialog email from whichever tab is active
-    useEffect(() => {
-        const candidate = (activeTab === "login" ? email : regEmail).trim();
-        if (!supEmail && candidate) setSupEmail(candidate);
-    }, [activeTab, email, regEmail, supEmail]);
 
     // -------------
     // Handlers
@@ -561,27 +522,6 @@ export default function AuthPage() {
     const availablePrograms =
         college && college !== "Others" ? COLLEGES[college] ?? [] : [];
 
-    // Reset support dialog fields to defaults
-    const resetSupport = () => {
-        setSupSubject("");
-        setSupMessage("");
-        setSupCategory("Login issue");
-        setSupFile(null);
-        setConsent(false);
-        setSupError("");
-        setSupSuccess("");
-    };
-
-    // POST: /api/support/ticket — currently disabled, show "under development"
-    const submitSupport = async () => {
-        const msg = "Contact Support is under development. Coming soon.";
-        setSupError("");
-        setSupSuccess(msg);
-        toast.info("Under development", { description: msg });
-
-        // (Full implementation is commented out)
-    };
-
     // -------------------------
     // Render
     // -------------------------
@@ -737,7 +677,6 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        // ✅ perfectly centered Eye / EyeOff
                                                         className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                         onClick={() =>
                                                             setShowPassword(
@@ -801,286 +740,6 @@ export default function AuthPage() {
                                         </Button>
                                     </div>
                                 </CardContent>
-
-                                {/* Support entry lives in the card footer to keep it near actions */}
-                                <CardFooter className="flex justify-center border-t border-white/10">
-                                    <Dialog
-                                        open={supportOpen}
-                                        onOpenChange={(o) => {
-                                            setSupportOpen(o);
-                                            if (!o) resetSupport();
-                                        }}
-                                    >
-                                        <div className="text-sm text-gray-300 flex items-center gap-2">
-                                            <span>Need help?</span>
-                                            <DialogTrigger asChild>
-                                                <button
-                                                    type="button"
-                                                    className="text-purple-300 hover:text-purple-200 underline decoration-1 underline-offset-[3px] bg-transparent border-0 cursor-pointer inline-flex items-center gap-1"
-                                                >
-                                                    <HelpCircle
-                                                        className="h-4 w-4"
-                                                        aria-hidden
-                                                    />
-                                                    <span>
-                                                        Contact support
-                                                    </span>
-                                                </button>
-                                            </DialogTrigger>
-                                        </div>
-
-                                        {/* Dialog is kept narrow on mobile with capped height and custom scrollbar */}
-                                        <DialogContent className="support-scroll w-[92vw] sm:w-auto max-h-[80dvh] sm:max-h-[70dvh] overflow-y-auto bg-slate-900 text-white border-white/10 p-4 sm:p-6">
-                                            <DialogHeader>
-                                                <DialogTitle className="text-white flex items-center gap-2">
-                                                    <MessageSquare className="h-5 w-5" />
-                                                    Contact support
-                                                </DialogTitle>
-                                                <DialogDescription className="text-white/70">
-                                                    Tell us what’s going on.
-                                                    We’ll email you once we’ve
-                                                    checked your ticket.
-                                                </DialogDescription>
-                                            </DialogHeader>
-
-                                            {/* Submission status */}
-                                            {supSuccess ? (
-                                                <Alert className="bg-emerald-500/15 border-emerald-500/40 text-emerald-200">
-                                                    <AlertDescription>
-                                                        {supSuccess}
-                                                    </AlertDescription>
-                                                </Alert>
-                                            ) : supError ? (
-                                                <Alert className="bg-red-500/15 border-red-500/40 text-red-200">
-                                                    <AlertDescription>
-                                                        {supError}
-                                                    </AlertDescription>
-                                                </Alert>
-                                            ) : null}
-
-                                            {/* Form body */}
-                                            <div className="grid gap-4 py-2">
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="sup-name">
-                                                            Your name
-                                                        </Label>
-                                                        <Input
-                                                            id="sup-name"
-                                                            value={supName}
-                                                            onChange={(e) =>
-                                                                setSupName(
-                                                                    e.target
-                                                                        .value
-                                                                )
-                                                            }
-                                                            placeholder="Juan Dela Cruz"
-                                                            className="bg-slate-900/70 border-white/10 text-white"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="sup-email">
-                                                            Email
-                                                        </Label>
-                                                        <Input
-                                                            id="sup-email"
-                                                            type="email"
-                                                            value={supEmail}
-                                                            onChange={(e) =>
-                                                                setSupEmail(
-                                                                    e.target
-                                                                        .value
-                                                                )
-                                                            }
-                                                            placeholder="you@example.com"
-                                                            className="bg-slate-900/70 border-white/10 text-white"
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="sup-category">
-                                                        Category
-                                                    </Label>
-                                                    <Select
-                                                        value={supCategory}
-                                                        onValueChange={
-                                                            setSupCategory
-                                                        }
-                                                    >
-                                                        <SelectTrigger
-                                                            id="sup-category"
-                                                            className="bg-slate-900/70 border-white/10 text-white"
-                                                        >
-                                                            <SelectValue placeholder="Select a category" />
-                                                        </SelectTrigger>
-                                                        <SelectContent className="bg-slate-900 text-white border-white/10">
-                                                            <SelectItem value="Login issue">
-                                                                Login issue
-                                                            </SelectItem>
-                                                            <SelectItem value="Registration issue">
-                                                                Registration
-                                                                issue
-                                                            </SelectItem>
-                                                            <SelectItem value="Borrowing/Reservation">
-                                                                Borrowing /
-                                                                Reservation
-                                                            </SelectItem>
-                                                            <SelectItem value="Account settings">
-                                                                Account
-                                                                settings
-                                                            </SelectItem>
-                                                            <SelectItem value="Bug report">
-                                                                Bug report
-                                                            </SelectItem>
-                                                            <SelectItem value="Feature request">
-                                                                Feature request
-                                                            </SelectItem>
-                                                            <SelectItem value="Other">
-                                                                Other
-                                                            </SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="sup-subject">
-                                                        Subject
-                                                    </Label>
-                                                    <Input
-                                                        id="sup-subject"
-                                                        value={supSubject}
-                                                        onChange={(e) =>
-                                                            setSupSubject(
-                                                                e.target.value
-                                                            )
-                                                        }
-                                                        placeholder="Short summary (e.g., Can't log in)"
-                                                        className="bg-slate-900/70 border-white/10 text-white"
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="sup-message">
-                                                        Details
-                                                    </Label>
-                                                    <Textarea
-                                                        id="sup-message"
-                                                        value={supMessage}
-                                                        onChange={(e) =>
-                                                            setSupMessage(
-                                                                e.target.value
-                                                            )
-                                                        }
-                                                        placeholder="Describe the issue and the steps to reproduce it…"
-                                                        className="min-h-[120px] bg-slate-900/70 border-white/10 text-white"
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label
-                                                        htmlFor="sup-file"
-                                                        className="inline-flex items-center gap-2"
-                                                    >
-                                                        <Paperclip className="h-4 w-4" />
-                                                        Attach screenshot
-                                                        (optional)
-                                                    </Label>
-                                                    <Input
-                                                        id="sup-file"
-                                                        type="file"
-                                                        accept=".png,.jpg,.jpeg,.gif,.pdf"
-                                                        onChange={(e) =>
-                                                            setSupFile(
-                                                                e.target.files?.[0] ??
-                                                                null
-                                                            )
-                                                        }
-                                                        className="bg-slate-900/70 border-white/10 text-white file:text-white"
-                                                    />
-                                                    {supFile && (
-                                                        <p className="text-xs text-white/60">
-                                                            Selected:{" "}
-                                                            {supFile.name}
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex items-start gap-2">
-                                                    <Checkbox
-                                                        id="sup-consent"
-                                                        checked={consent}
-                                                        onCheckedChange={(v) =>
-                                                            setConsent(
-                                                                v === true
-                                                            )
-                                                        }
-                                                    />
-                                                    <Label
-                                                        htmlFor="sup-consent"
-                                                        className="text-sm text-white/80"
-                                                    >
-                                                        You may contact me about
-                                                        this ticket and store
-                                                        the information I
-                                                        provided for support.
-                                                    </Label>
-                                                </div>
-
-                                                <div className="text-xs text-white/50">
-                                                    Tip: Including your Student
-                                                    ID and program helps us
-                                                    resolve account-specific
-                                                    issues faster.
-                                                </div>
-                                            </div>
-
-                                            {/* Footer with secondary help and actions */}
-                                            <DialogFooterUI className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
-                                                <div className="text-xs text-white/60">
-                                                    Or email us at{" "}
-                                                    <a
-                                                        className="underline hover:text-white"
-                                                        href="mailto:support@example.com"
-                                                    >
-                                                        support@example.com
-                                                    </a>
-                                                </div>
-                                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        onClick={() => {
-                                                            setSupportOpen(
-                                                                false
-                                                            );
-                                                            resetSupport();
-                                                        }}
-                                                        className="border-white/15 bg-black/50 text:white hover:text-white hover:bg:black/10 w-full sm:w-auto"
-                                                        disabled={supSubmitting}
-                                                    >
-                                                        Cancel
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        onClick={submitSupport}
-                                                        disabled={supSubmitting}
-                                                        className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 w-full sm:w-auto"
-                                                    >
-                                                        {supSubmitting ? (
-                                                            <span className="inline-flex items-center gap-2">
-                                                                <Loader2 className="h-4 w-4 animate-spin" />{" "}
-                                                                Sending…
-                                                            </span>
-                                                        ) : (
-                                                            "Send ticket"
-                                                        )}
-                                                    </Button>
-                                                </div>
-                                            </DialogFooterUI>
-                                        </DialogContent>
-                                    </Dialog>
-                                </CardFooter>
                             </Card>
                         </TabsContent>
 
@@ -1549,7 +1208,6 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        // ✅ centered Eye / EyeOff
                                                         className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                         onClick={() =>
                                                             setShowRegPassword(
@@ -1608,7 +1266,6 @@ export default function AuthPage() {
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        // ✅ centered Eye / EyeOff
                                                         className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 text-white/70 hover:text-white"
                                                         onClick={() =>
                                                             setShowRegConfirm(
@@ -1633,7 +1290,6 @@ export default function AuthPage() {
                                                 </div>
                                             </FieldContent>
 
-                                            {/* Real-time mismatch hint */}
                                             {regPassword !==
                                                 confirmPassword &&
                                                 confirmPassword.length > 0 && (
