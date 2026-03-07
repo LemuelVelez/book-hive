@@ -256,6 +256,26 @@ function buildCatalogSortKey(book: BookDTO): string {
         .join("|")
 }
 
+function shouldIgnoreHorizontalDrag(target: EventTarget | null) {
+    if (!(target instanceof Element)) return false
+
+    return Boolean(
+        target.closest(
+            [
+                "button",
+                "a",
+                "input",
+                "textarea",
+                "select",
+                "[role='button']",
+                "[role='link']",
+                "[data-state]",
+                "[data-radix-collection-item]",
+            ].join(",")
+        )
+    )
+}
+
 export default function FacultyBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([])
     const [myRecords, setMyRecords] = React.useState<BorrowRecordDTO[]>([])
@@ -275,6 +295,78 @@ export default function FacultyBooksPage() {
         null
     )
     const [borrowCopies, setBorrowCopies] = React.useState<number>(1)
+
+    const tableScrollRef = React.useRef<HTMLDivElement | null>(null)
+    const tableDragPointerIdRef = React.useRef<number | null>(null)
+    const tableDragStartXRef = React.useRef(0)
+    const tableDragStartScrollLeftRef = React.useRef(0)
+    const [isTableDragging, setIsTableDragging] = React.useState(false)
+
+    const stopTableDrag = React.useCallback(() => {
+        const el = tableScrollRef.current
+        const pointerId = tableDragPointerIdRef.current
+
+        if (el && pointerId !== null) {
+            try {
+                el.releasePointerCapture(pointerId)
+            } catch {
+                // noop
+            }
+        }
+
+        tableDragPointerIdRef.current = null
+        setIsTableDragging(false)
+    }, [])
+
+    const handleTablePointerDown = React.useCallback(
+        (e: React.PointerEvent<HTMLDivElement>) => {
+            const el = tableScrollRef.current
+            if (!el) return
+            if (e.pointerType === "mouse" && e.button !== 0) return
+            if (shouldIgnoreHorizontalDrag(e.target)) return
+
+            tableDragPointerIdRef.current = e.pointerId
+            tableDragStartXRef.current = e.clientX
+            tableDragStartScrollLeftRef.current = el.scrollLeft
+
+            try {
+                el.setPointerCapture(e.pointerId)
+            } catch {
+                // noop
+            }
+
+            setIsTableDragging(true)
+        },
+        []
+    )
+
+    const handleTablePointerMove = React.useCallback(
+        (e: React.PointerEvent<HTMLDivElement>) => {
+            const el = tableScrollRef.current
+            if (!el) return
+            if (!isTableDragging) return
+            if (tableDragPointerIdRef.current !== e.pointerId) return
+
+            const deltaX = e.clientX - tableDragStartXRef.current
+            el.scrollLeft = tableDragStartScrollLeftRef.current - deltaX
+            e.preventDefault()
+        },
+        [isTableDragging]
+    )
+
+    const handleTablePointerUp = React.useCallback(
+        (e: React.PointerEvent<HTMLDivElement>) => {
+            if (tableDragPointerIdRef.current !== e.pointerId) return
+            stopTableDrag()
+        },
+        [stopTableDrag]
+    )
+
+    React.useEffect(() => {
+        return () => {
+            stopTableDrag()
+        }
+    }, [stopTableDrag])
 
     const loadAll = React.useCallback(async () => {
         setError(null)
@@ -803,7 +895,25 @@ export default function FacultyBooksPage() {
                             </div>
                         ) : (
                             <>
-                                <div className="hidden md:block overflow-x-auto">
+                                <div className="mb-2 hidden md:flex items-center justify-between gap-2 text-[11px] text-white/60">
+                                    <span>
+                                        Drag the table left or right to view more columns.
+                                    </span>
+                                    <span>
+                                        You can still use the horizontal scrollbar if needed.
+                                    </span>
+                                </div>
+
+                                <div
+                                    ref={tableScrollRef}
+                                    className={`hidden md:block overflow-x-auto rounded-md ${isTableDragging ? "cursor-grabbing select-none" : "cursor-grab"
+                                        }`}
+                                    onPointerDown={handleTablePointerDown}
+                                    onPointerMove={handleTablePointerMove}
+                                    onPointerUp={handleTablePointerUp}
+                                    onPointerCancel={stopTableDrag}
+                                    onLostPointerCapture={stopTableDrag}
+                                >
                                     <Table className="min-w-[1380px]">
                                         <TableCaption className="text-xs text-white/60">
                                             Showing {rows.length} {rows.length === 1 ? "book" : "books"}.
