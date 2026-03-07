@@ -1004,15 +1004,6 @@ export default function LibrarianBooksPage() {
         });
     }, [books, search, availabilityFilter, libraryAreaFilter, sortOption]);
 
-    const cellScrollbarClasses =
-        "overflow-x-auto whitespace-nowrap " +
-        "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
-        "[&::-webkit-scrollbar]:h-1.5 " +
-        "[&::-webkit-scrollbar-track]:bg-transparent " +
-        "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
-        "[&::-webkit-scrollbar-thumb]:rounded-full " +
-        "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
-
     return (
         <DashboardLayout title="Books Management">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -2187,7 +2178,7 @@ export default function LibrarianBooksPage() {
                             books={filteredBooks}
                             onEdit={openEditDialog}
                             onDelete={handleDelete}
-                            cellScrollbarClasses={cellScrollbarClasses}
+                            cellScrollbarClasses=""
                         />
                     )}
                 </CardContent>
