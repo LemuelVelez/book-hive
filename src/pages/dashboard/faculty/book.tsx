@@ -33,6 +33,9 @@ import {
     AlertTriangle,
     Plus,
     Minus,
+    ArrowUpDown,
+    Filter,
+    X,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -62,6 +65,21 @@ type FilterMode =
     | "borrowedByMe"
     | "history"
 
+type AvailabilityFilter = "all" | "available" | "unavailable"
+
+type FacultySortOption =
+    | "catalog"
+    | "call_no_asc"
+    | "call_no_desc"
+    | "accession_asc"
+    | "accession_desc"
+    | "title_asc"
+    | "title_desc"
+    | "author_asc"
+    | "author_desc"
+    | "pub_year_desc"
+    | "pub_year_asc"
+
 type BookWithStatus = BookDTO & {
     myStatus: "never" | "active" | "returned"
     activeRecords: BorrowRecordDTO[]
@@ -78,7 +96,6 @@ function fmtDate(d?: string | null) {
     try {
         const date = new Date(d)
         if (Number.isNaN(date.getTime())) return d
-        // en-CA locale => YYYY-MM-DD format (e.g., 2025-11-13)
         return date.toLocaleDateString("en-CA")
     } catch {
         return d
@@ -182,6 +199,63 @@ function minDateStr(records: BorrowRecordDTO[], key: "dueDate" | "borrowDate") {
     return min ? min.s : records[0]?.[key] ?? null
 }
 
+function normalizeSearchText(value: unknown): string {
+    if (value === null || value === undefined) return ""
+    if (Array.isArray(value)) return value.map(normalizeSearchText).filter(Boolean).join(" ")
+    if (typeof value === "string") return value.trim().toLowerCase().replace(/\s+/g, " ")
+    return String(value).trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+function tokenizeSearch(query: string): string[] {
+    return normalizeSearchText(query)
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+}
+
+function matchesAllTokens(hay: string, tokens: string[]): boolean {
+    if (tokens.length === 0) return true
+    return tokens.every((t) => hay.includes(t))
+}
+
+function compareText(a: unknown, b: unknown) {
+    const av = normalizeSearchText(a)
+    const bv = normalizeSearchText(b)
+
+    if (!av && !bv) return 0
+    if (!av) return 1
+    if (!bv) return -1
+
+    return av.localeCompare(bv, undefined, { sensitivity: "base" })
+}
+
+function compareNullableNumber(
+    a: number | null | undefined,
+    b: number | null | undefined,
+    direction: "asc" | "desc" = "asc"
+) {
+    const av = typeof a === "number" && Number.isFinite(a) ? a : null
+    const bv = typeof b === "number" && Number.isFinite(b) ? b : null
+
+    if (av === null && bv === null) return 0
+    if (av === null) return 1
+    if (bv === null) return -1
+
+    return direction === "asc" ? av - bv : bv - av
+}
+
+function buildCatalogSortKey(book: BookDTO): string {
+    return [
+        normalizeSearchText(book.callNumber),
+        normalizeSearchText(book.accessionNumber),
+        normalizeSearchText(book.title),
+        normalizeSearchText(book.subtitle),
+        normalizeSearchText(book.author),
+    ]
+        .filter(Boolean)
+        .join("|")
+}
+
 export default function FacultyBooksPage() {
     const [books, setBooks] = React.useState<BookDTO[]>([])
     const [myRecords, setMyRecords] = React.useState<BorrowRecordDTO[]>([])
@@ -191,12 +265,15 @@ export default function FacultyBooksPage() {
 
     const [search, setSearch] = React.useState("")
     const [filterMode, setFilterMode] = React.useState<FilterMode>("all")
+    const [availabilityFilter, setAvailabilityFilter] =
+        React.useState<AvailabilityFilter>("all")
+    const [sortOption, setSortOption] = React.useState<FacultySortOption>("catalog")
     const [borrowBusyId, setBorrowBusyId] = React.useState<string | null>(null)
 
     // ✅ copies-to-borrow state (shared; only one dialog open at a time)
-    const [borrowDialogBookId, setBorrowDialogBookId] = React.useState<
-        string | null
-    >(null)
+    const [borrowDialogBookId, setBorrowDialogBookId] = React.useState<string | null>(
+        null
+    )
     const [borrowCopies, setBorrowCopies] = React.useState<number>(1)
 
     const loadAll = React.useCallback(async () => {
@@ -231,12 +308,26 @@ export default function FacultyBooksPage() {
         }
     }
 
+    const clearCatalogControls = React.useCallback(() => {
+        setSearch("")
+        setFilterMode("all")
+        setAvailabilityFilter("all")
+        setSortOption("catalog")
+    }, [])
+
+    const hasCatalogControlsApplied =
+        search.trim().length > 0 ||
+        filterMode !== "all" ||
+        availabilityFilter !== "all" ||
+        sortOption !== "catalog"
+
     const rows: BookWithStatus[] = React.useMemo(() => {
-        const byBook: BookWithStatus[] = books.map((book) => {
+        const tokens = tokenizeSearch(search)
+
+        const withStatus: BookWithStatus[] = books.map((book) => {
             const recordsForBook = myRecords.filter((r) => r.bookId === book.id)
             const sorted = sortRecordsNewestFirst(recordsForBook)
 
-            // ✅ Active = anything not returned (borrowed / pending_pickup / pending_return / legacy pending)
             const activeRecords = sorted.filter(
                 (r) =>
                     r.status === "borrowed" ||
@@ -261,64 +352,180 @@ export default function FacultyBooksPage() {
             }
         })
 
-        let filtered = byBook
+        const filtered = withStatus.filter((book) => {
+            const borrowable = isBorrowable(book)
 
-        switch (filterMode) {
-            case "available":
-                filtered = filtered.filter((b) => isBorrowable(b))
-                break
-            case "unavailable":
-                filtered = filtered.filter((b) => !isBorrowable(b))
-                break
-            case "borrowedByMe":
-                filtered = filtered.filter((b) => b.activeRecords.length > 0)
-                break
-            case "history":
-                filtered = filtered.filter((b) => (b.lastRecord ? true : false))
-                break
-            case "all":
-            default:
-                break
-        }
+            switch (filterMode) {
+                case "available":
+                    if (!borrowable) return false
+                    break
+                case "unavailable":
+                    if (borrowable) return false
+                    break
+                case "borrowedByMe":
+                    if (book.activeRecords.length === 0) return false
+                    break
+                case "history":
+                    if (!book.lastRecord) return false
+                    break
+                case "all":
+                default:
+                    break
+            }
 
-        const q = search.trim().toLowerCase()
-        if (q) {
-            filtered = filtered.filter((b) => {
-                const haystack = [
-                    b.id,
-                    b.accessionNumber,
-                    b.title,
-                    b.subtitle,
-                    b.author,
-                    b.edition,
-                    b.isbn,
-                    b.issn,
-                    b.publisher,
-                    b.placeOfPublication,
-                    b.subjects,
-                    b.genre,
-                    b.category,
-                    b.series,
-                    b.callNumber,
-                    b.barcode,
-                    b.volumeNumber,
-                    String(getRemainingCopies(b)),
-                    String(typeof b.totalCopies === "number" ? b.totalCopies : ""),
-                    String(typeof b.borrowedCopies === "number" ? b.borrowedCopies : ""),
-                ]
-                    .filter(Boolean)
-                    .join(" ")
-                    .toLowerCase()
+            if (availabilityFilter === "available" && !borrowable) return false
+            if (availabilityFilter === "unavailable" && borrowable) return false
 
-                return haystack.includes(q)
-            })
-        }
+            if (tokens.length === 0) return true
 
-        // Sort by title A–Z for a stable order
-        return [...filtered].sort((a, b) =>
-            a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
-        )
-    }, [books, myRecords, filterMode, search])
+            const hay = [
+                book.callNumber,
+                book.accessionNumber,
+                book.title,
+                book.subtitle,
+                book.author,
+                book.isbn,
+                book.issn,
+                book.publisher,
+                book.placeOfPublication,
+                book.subjects,
+                book.genre,
+                book.category,
+                book.series,
+                book.barcode,
+                book.edition,
+                book.volumeNumber,
+                String(typeof book.publicationYear === "number" ? book.publicationYear : ""),
+                String(getRemainingCopies(book)),
+                String(typeof book.totalCopies === "number" ? book.totalCopies : ""),
+                String(typeof book.borrowedCopies === "number" ? book.borrowedCopies : ""),
+                borrowable ? "available" : "unavailable",
+                book.activeRecords.length > 0 ? "borrowed" : "",
+                book.myStatus,
+            ]
+                .map(normalizeSearchText)
+                .filter(Boolean)
+                .join(" ")
+
+            return matchesAllTokens(hay, tokens)
+        })
+
+        return [...filtered].sort((a, b) => {
+            switch (sortOption) {
+                case "call_no_asc":
+                    return (
+                        compareText(a.callNumber, b.callNumber) ||
+                        compareText(a.accessionNumber, b.accessionNumber) ||
+                        compareText(a.title, b.title) ||
+                        compareText(a.author, b.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "call_no_desc":
+                    return (
+                        compareText(b.callNumber, a.callNumber) ||
+                        compareText(b.accessionNumber, a.accessionNumber) ||
+                        compareText(b.title, a.title) ||
+                        compareText(b.author, a.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "accession_asc":
+                    return (
+                        compareText(a.accessionNumber, b.accessionNumber) ||
+                        compareText(a.callNumber, b.callNumber) ||
+                        compareText(a.title, b.title) ||
+                        compareText(a.author, b.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "accession_desc":
+                    return (
+                        compareText(b.accessionNumber, a.accessionNumber) ||
+                        compareText(b.callNumber, a.callNumber) ||
+                        compareText(b.title, a.title) ||
+                        compareText(b.author, a.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "title_asc":
+                    return (
+                        compareText(a.title, b.title) ||
+                        compareText(a.subtitle, b.subtitle) ||
+                        compareText(a.author, b.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "title_desc":
+                    return (
+                        compareText(b.title, a.title) ||
+                        compareText(b.subtitle, a.subtitle) ||
+                        compareText(b.author, a.author) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "author_asc":
+                    return (
+                        compareText(a.author, b.author) ||
+                        compareText(a.title, b.title) ||
+                        compareText(a.callNumber, b.callNumber) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "author_desc":
+                    return (
+                        compareText(b.author, a.author) ||
+                        compareText(b.title, a.title) ||
+                        compareText(b.callNumber, a.callNumber) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "pub_year_desc":
+                    return (
+                        compareNullableNumber(a.publicationYear, b.publicationYear, "desc") ||
+                        compareText(a.callNumber, b.callNumber) ||
+                        compareText(a.accessionNumber, b.accessionNumber) ||
+                        compareText(a.title, b.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "pub_year_asc":
+                    return (
+                        compareNullableNumber(a.publicationYear, b.publicationYear, "asc") ||
+                        compareText(a.callNumber, b.callNumber) ||
+                        compareText(a.accessionNumber, b.accessionNumber) ||
+                        compareText(a.title, b.title) ||
+                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                            sensitivity: "base",
+                        })
+                    )
+
+                case "catalog":
+                default:
+                    return buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                        sensitivity: "base",
+                    })
+            }
+        })
+    }, [books, myRecords, filterMode, availabilityFilter, sortOption, search])
 
     /**
      * ✅ UPDATED BEHAVIOR:
@@ -342,17 +549,13 @@ export default function FacultyBooksPage() {
         try {
             const created: BorrowRecordDTO[] = []
 
-            // Borrow copies one-by-one (works even if API supports 1 per call)
             for (let i = 0; i < requestedCopies; i++) {
                 try {
-                    // createSelfBorrow supports quantity, but calling 1-per-loop is the most compatible approach
                     const record = await createSelfBorrow(book.id, 1)
                     created.push(record)
                 } catch (err: any) {
-                    // If nothing succeeded, throw and show full error.
                     if (created.length === 0) throw err
 
-                    // Partial success: stop and inform user.
                     const msg = err?.message || "Some copies could not be borrowed."
                     toast.warning("Partial borrow completed", {
                         description: `Borrowed ${created.length} of ${requestedCopies} copies. ${msg}`,
@@ -370,7 +573,6 @@ export default function FacultyBooksPage() {
                     } of "${book.title}" ${created.length === 1 ? "is" : "are"} now pending pickup. Earliest due date: ${due}.`,
             })
 
-            // Optimistic add, then best-effort refresh to sync availability/copies.
             setMyRecords((prev) => [...created.slice().reverse(), ...prev])
 
             try {
@@ -381,7 +583,7 @@ export default function FacultyBooksPage() {
                 setBooks(booksLatest)
                 setMyRecords(myLatest)
             } catch {
-                // ignore refresh failure; optimistic state is already applied
+                // optimistic state already applied
             }
         } catch (err: any) {
             const msg =
@@ -393,22 +595,10 @@ export default function FacultyBooksPage() {
         }
     }
 
-    // Reusable scrollbar styling for dark, thin horizontal scrollbars
-    const cellScrollbarClasses =
-        "overflow-x-auto whitespace-nowrap " +
-        "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
-        "[&::-webkit-scrollbar]:h-1.5 " +
-        "[&::-webkit-scrollbar-track]:bg-transparent " +
-        "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
-        "[&::-webkit-scrollbar-thumb]:rounded-full " +
-        "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
-
     return (
         <DashboardLayout title="Browse Books">
-            {/* Prevent this page from creating a global horizontal scrollbar */}
             <div className="w-full overflow-x-hidden">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-2">
                         <BookOpen className="h-5 w-5" aria-hidden="true" />
                         <div>
@@ -417,12 +607,12 @@ export default function FacultyBooksPage() {
                             </h2>
                             <p className="text-xs text-white/70">
                                 Browse all books, see availability, and borrow as many copies as
-                                you need (while copies remain).
+                                you need while copies remain.
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <Button
                             type="button"
                             variant="outline"
@@ -442,15 +632,19 @@ export default function FacultyBooksPage() {
                     </div>
                 </div>
 
-                {/* Controls + table */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                            <CardTitle>Books you can borrow</CardTitle>
+                        <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-1">
+                                <CardTitle>Books you can borrow</CardTitle>
+                                <p className="text-xs text-white/70">
+                                    Showing {rows.length} of {books.length}{" "}
+                                    {books.length === 1 ? "book" : "books"}.
+                                </p>
+                            </div>
 
-                            <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
-                                {/* Search */}
-                                <div className="relative w-full md:w-64">
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+                                <div className="relative min-w-0 md:col-span-2 xl:col-span-4">
                                     <Search
                                         className="absolute left-3 top-2.5 h-4 w-4 text-white/50"
                                         aria-hidden="true"
@@ -459,41 +653,120 @@ export default function FacultyBooksPage() {
                                         type="search"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search by title, author, subjects, ISBN…"
+                                        placeholder="Search call no., accession, title, subtitle, author, ISBN, subjects…"
                                         autoComplete="off"
                                         aria-label="Search books"
                                         className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                     />
                                 </div>
 
-                                {/* Filter */}
-                                <div className="w-full md:w-[220px]">
-                                    <Select
-                                        value={filterMode}
-                                        onValueChange={(v) => setFilterMode(v as FilterMode)}
+                                <Select
+                                    value={filterMode}
+                                    onValueChange={(v) => setFilterMode(v as FilterMode)}
+                                >
+                                    <SelectTrigger
+                                        className="w-full bg-slate-900/70 border-white/20 text-white"
+                                        aria-label="Filter my books"
                                     >
-                                        <SelectTrigger
-                                            className="h-9 w-full bg-slate-900/70 border-white/20 text-white"
-                                            aria-label="Filter books"
-                                        >
-                                            <SelectValue placeholder="Filter books" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-slate-900 text-white border-white/10">
-                                            <SelectItem value="all">All books</SelectItem>
-                                            <SelectItem value="available">
-                                                Available only
-                                            </SelectItem>
-                                            <SelectItem value="unavailable">
-                                                Unavailable only
-                                            </SelectItem>
-                                            <SelectItem value="borrowedByMe">
-                                                Borrowed by me (active)
-                                            </SelectItem>
-                                            <SelectItem value="history">
-                                                My history (borrowed/returned)
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                        <div className="flex items-center gap-2 truncate">
+                                            <Filter className="h-4 w-4 text-white/60" />
+                                            <SelectValue placeholder="My records filter" />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-white border-white/10">
+                                        <SelectItem value="all">All books</SelectItem>
+                                        <SelectItem value="available">Available only</SelectItem>
+                                        <SelectItem value="unavailable">Unavailable only</SelectItem>
+                                        <SelectItem value="borrowedByMe">
+                                            Borrowed by me
+                                        </SelectItem>
+                                        <SelectItem value="history">
+                                            My history
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+
+                                <Select
+                                    value={availabilityFilter}
+                                    onValueChange={(v) => setAvailabilityFilter(v as AvailabilityFilter)}
+                                >
+                                    <SelectTrigger
+                                        className="w-full bg-slate-900/70 border-white/20 text-white"
+                                        aria-label="Availability filter"
+                                    >
+                                        <div className="flex items-center gap-2 truncate">
+                                            <Filter className="h-4 w-4 text-white/60" />
+                                            <SelectValue placeholder="Availability" />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-white border-white/10">
+                                        <SelectItem value="all">All availability</SelectItem>
+                                        <SelectItem value="available">Available only</SelectItem>
+                                        <SelectItem value="unavailable">Unavailable only</SelectItem>
+                                    </SelectContent>
+                                </Select>
+
+                                <Select
+                                    value={sortOption}
+                                    onValueChange={(v) => setSortOption(v as FacultySortOption)}
+                                >
+                                    <SelectTrigger
+                                        className="w-full bg-slate-900/70 border-white/20 text-white"
+                                        aria-label="Sort books"
+                                    >
+                                        <div className="flex items-center gap-2 truncate">
+                                            <ArrowUpDown className="h-4 w-4 text-white/60" />
+                                            <SelectValue placeholder="Sort books" />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-white border-white/10">
+                                        <SelectItem value="catalog">
+                                            Catalog order
+                                        </SelectItem>
+                                        <SelectItem value="call_no_asc">
+                                            Call no. (A–Z)
+                                        </SelectItem>
+                                        <SelectItem value="call_no_desc">
+                                            Call no. (Z–A)
+                                        </SelectItem>
+                                        <SelectItem value="accession_asc">
+                                            Accession no. (A–Z)
+                                        </SelectItem>
+                                        <SelectItem value="accession_desc">
+                                            Accession no. (Z–A)
+                                        </SelectItem>
+                                        <SelectItem value="title_asc">
+                                            Title (A–Z)
+                                        </SelectItem>
+                                        <SelectItem value="title_desc">
+                                            Title (Z–A)
+                                        </SelectItem>
+                                        <SelectItem value="author_asc">
+                                            Author (A–Z)
+                                        </SelectItem>
+                                        <SelectItem value="author_desc">
+                                            Author (Z–A)
+                                        </SelectItem>
+                                        <SelectItem value="pub_year_desc">
+                                            Publication year (Newest first)
+                                        </SelectItem>
+                                        <SelectItem value="pub_year_asc">
+                                            Publication year (Oldest first)
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+
+                                <div className="flex flex-col gap-2 md:col-span-2 xl:col-span-4 sm:flex-row sm:flex-wrap">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                        onClick={clearCatalogControls}
+                                        disabled={!hasCatalogControlsApplied}
+                                    >
+                                        <X className="mr-2 h-4 w-4" />
+                                        Clear
+                                    </Button>
                                 </div>
                             </div>
                         </div>
@@ -530,50 +803,48 @@ export default function FacultyBooksPage() {
                             </div>
                         ) : (
                             <>
-                                {/* DESKTOP / TABLET */}
                                 <div className="hidden md:block overflow-x-auto">
-                                    <Table className="min-w-full">
+                                    <Table className="min-w-[1380px]">
                                         <TableCaption className="text-xs text-white/60">
-                                            Showing {rows.length} {rows.length === 1 ? "book" : "books"}
-                                            . You can borrow multiple copies as long as there are
-                                            remaining copies.
+                                            Showing {rows.length} {rows.length === 1 ? "book" : "books"}.
+                                            Sorted and filtered catalog view for faculty borrowers.
                                         </TableCaption>
                                         <TableHeader>
                                             <TableRow className="border-white/10">
-                                                <TableHead className="w-[90px] text-xs font-semibold text-white/70">
-                                                    ID
-                                                </TableHead>
-                                                <TableHead className="w-[120px] text-xs font-semibold text-white/70">
-                                                    Accession #
-                                                </TableHead>
-                                                <TableHead className="w-[220px] text-xs font-semibold text-white/70">
-                                                    Title
-                                                </TableHead>
-                                                <TableHead className="w-[150px] text-xs font-semibold text-white/70">
-                                                    Author
-                                                </TableHead>
-                                                <TableHead className="w-[130px] text-xs font-semibold text-white/70">
-                                                    ISBN
-                                                </TableHead>
-                                                <TableHead className="w-[140px] text-xs font-semibold text-white/70">
+                                                <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
                                                     Call no.
                                                 </TableHead>
-                                                <TableHead className="w-[170px] text-xs font-semibold text-white/70">
-                                                    Subjects
+                                                <TableHead className="min-w-[130px] text-xs font-semibold text-white/70">
+                                                    Acc. no.
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
+                                                <TableHead className="min-w-[220px] text-xs font-semibold text-white/70">
+                                                    Title
+                                                </TableHead>
+                                                <TableHead className="min-w-[180px] text-xs font-semibold text-white/70">
+                                                    Sub.
+                                                </TableHead>
+                                                <TableHead className="min-w-[90px] text-xs font-semibold text-white/70">
                                                     Pub. year
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
+                                                <TableHead className="min-w-[170px] text-xs font-semibold text-white/70">
+                                                    Author
+                                                </TableHead>
+                                                <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
+                                                    ISBN
+                                                </TableHead>
+                                                <TableHead className="min-w-[180px] text-xs font-semibold text-white/70">
+                                                    Subjects
+                                                </TableHead>
+                                                <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
                                                     Availability
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70">
+                                                <TableHead className="min-w-[120px] text-xs font-semibold text-white/70">
                                                     Due date
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70 w-[260px]">
+                                                <TableHead className="min-w-[260px] text-xs font-semibold text-white/70">
                                                     My status
                                                 </TableHead>
-                                                <TableHead className="text-xs font-semibold text-white/70 text-right w-[230px]">
+                                                <TableHead className="min-w-[220px] text-right text-xs font-semibold text-white/70">
                                                     Action
                                                 </TableHead>
                                             </TableRow>
@@ -639,88 +910,53 @@ export default function FacultyBooksPage() {
                                                         key={book.id}
                                                         className="border-white/5 hover:bg-white/5 transition-colors"
                                                     >
-                                                        <TableCell className="text-xs opacity-80">
-                                                            {book.id}
-                                                        </TableCell>
-
-                                                        <TableCell
-                                                            className={
-                                                                "text-sm opacity-80 align-top w-[120px] max-w-[120px] pr-1 " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
-                                                            {book.accessionNumber || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell
-                                                            className={
-                                                                "text-sm font-medium align-top w-[180px] max-w-[180px] pr-1 " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
-                                                            <div className="flex flex-col">
-                                                                <span>{book.title}</span>
-                                                                {book.subtitle ? (
-                                                                    <span className="text-xs text-white/60">
-                                                                        {book.subtitle}
-                                                                    </span>
-                                                                ) : null}
-                                                            </div>
-                                                        </TableCell>
-
-                                                        <TableCell
-                                                            className={
-                                                                "text-sm opacity-90 align-top w-[140px] max-w-[140px] pr-1 " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
-                                                            {book.author}
-                                                        </TableCell>
-
-                                                        <TableCell
-                                                            className={
-                                                                "text-sm opacity-80 align-top w-[120px] max-w-[120px] pr-1 " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
-                                                            {book.isbn || <span className="opacity-50">—</span>}
-                                                        </TableCell>
-
-                                                        <TableCell
-                                                            className={
-                                                                "text-sm opacity-80 align-top w-[120px] max-w-[120px] pr-1 " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
+                                                        <TableCell className="align-top text-sm text-white/85 whitespace-normal wrap-break-word">
                                                             {book.callNumber || (
                                                                 <span className="opacity-50">—</span>
                                                             )}
                                                         </TableCell>
 
-                                                        <TableCell
-                                                            className={
-                                                                "text-sm opacity-80 align-top w-[150px] max-w-[150px] pr-1 " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
-                                                            {getSubjects(book)}
+                                                        <TableCell className="align-top text-sm text-white/85 whitespace-normal wrap-break-word">
+                                                            {book.accessionNumber || (
+                                                                <span className="opacity-50">—</span>
+                                                            )}
                                                         </TableCell>
 
-                                                        <TableCell className="text-sm opacity-80">
+                                                        <TableCell className="align-top">
+                                                            <div className="text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                                {book.title}
+                                                            </div>
+                                                        </TableCell>
+
+                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
+                                                            {book.subtitle || (
+                                                                <span className="opacity-50">—</span>
+                                                            )}
+                                                        </TableCell>
+
+                                                        <TableCell className="align-top text-sm text-white/80">
                                                             {book.publicationYear || (
                                                                 <span className="opacity-50">—</span>
                                                             )}
                                                         </TableCell>
 
-                                                        {/* Availability */}
-                                                        <TableCell
-                                                            className={
-                                                                "align-top w-[110px] max-w-[110px] pr-1 text-xs " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
+                                                        <TableCell className="align-top text-sm text-white/90 whitespace-normal wrap-break-word">
+                                                            {book.author || (
+                                                                <span className="opacity-50">—</span>
+                                                            )}
+                                                        </TableCell>
+
+                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
+                                                            {book.isbn || (
+                                                                <span className="opacity-50">—</span>
+                                                            )}
+                                                        </TableCell>
+
+                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
+                                                            {getSubjects(book)}
+                                                        </TableCell>
+
+                                                        <TableCell className="align-top text-xs">
                                                             <Badge
                                                                 variant={borrowableNow ? "default" : "outline"}
                                                                 className={
@@ -744,8 +980,7 @@ export default function FacultyBooksPage() {
                                                             </Badge>
                                                         </TableCell>
 
-                                                        {/* Due date */}
-                                                        <TableCell className="text-sm opacity-80">
+                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
                                                             {dueCell === "—" ? (
                                                                 <span className="opacity-50">—</span>
                                                             ) : (
@@ -753,13 +988,7 @@ export default function FacultyBooksPage() {
                                                             )}
                                                         </TableCell>
 
-                                                        {/* My status */}
-                                                        <TableCell
-                                                            className={
-                                                                "align-top w-[260px] max-w-[260px] pr-1 text-xs " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
+                                                        <TableCell className="align-top text-xs whitespace-normal wrap-break-word">
                                                             {activeRecords.length === 0 && book.myStatus === "never" && (
                                                                 <span className="text-white/60">Not yet borrowed</span>
                                                             )}
@@ -771,8 +1000,7 @@ export default function FacultyBooksPage() {
                                                                             <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
                                                                             <span>
                                                                                 Pending pickup ×{pendingPickupRecords.length}
-                                                                                {" · "}
-                                                                                Earliest due:{" "}
+                                                                                {" · "}Earliest due:{" "}
                                                                                 <span className="font-medium">{earliestDue}</span>
                                                                             </span>
                                                                         </div>
@@ -783,8 +1011,7 @@ export default function FacultyBooksPage() {
                                                                             <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
                                                                             <span>
                                                                                 Borrowed ×{borrowedRecords.length}
-                                                                                {" · "}
-                                                                                Earliest due:{" "}
+                                                                                {" · "}Earliest due:{" "}
                                                                                 <span className="font-medium">{earliestDue}</span>
                                                                             </span>
                                                                         </div>
@@ -795,8 +1022,7 @@ export default function FacultyBooksPage() {
                                                                             <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
                                                                             <span>
                                                                                 Overdue ×{borrowedRecords.length}
-                                                                                {" · "}
-                                                                                Max overdue:{" "}
+                                                                                {" · "}Max overdue:{" "}
                                                                                 <span className="font-semibold">
                                                                                     {overdueDaysMax} day{overdueDaysMax === 1 ? "" : "s"}
                                                                                 </span>
@@ -836,13 +1062,7 @@ export default function FacultyBooksPage() {
                                                                 )}
                                                         </TableCell>
 
-                                                        {/* Action */}
-                                                        <TableCell
-                                                            className={
-                                                                "text-right align-top w-[230px] max-w-[230px] " +
-                                                                cellScrollbarClasses
-                                                            }
-                                                        >
+                                                        <TableCell className="align-top text-right">
                                                             {borrowableNow ? (
                                                                 <AlertDialog
                                                                     onOpenChange={(open) => {
@@ -884,12 +1104,20 @@ export default function FacultyBooksPage() {
 
                                                                         <div className="mt-3 text-sm text-white/80 space-y-1">
                                                                             <p>
+                                                                                <span className="text-white/60">Call no.:</span>{" "}
+                                                                                {book.callNumber || "—"}
+                                                                            </p>
+                                                                            <p>
                                                                                 <span className="text-white/60">Accession #:</span>{" "}
                                                                                 {book.accessionNumber || "—"}
                                                                             </p>
                                                                             <p>
-                                                                                <span className="text-white/60">Call no.:</span>{" "}
-                                                                                {book.callNumber || "—"}
+                                                                                <span className="text-white/60">Subtitle:</span>{" "}
+                                                                                {book.subtitle || "—"}
+                                                                            </p>
+                                                                            <p>
+                                                                                <span className="text-white/60">Publication year:</span>{" "}
+                                                                                {book.publicationYear || "—"}
                                                                             </p>
                                                                             <p>
                                                                                 <span className="text-white/60">ISBN:</span>{" "}
@@ -908,17 +1136,12 @@ export default function FacultyBooksPage() {
                                                                                 {getSubjects(book)}
                                                                             </p>
                                                                             <p>
-                                                                                <span className="text-white/60">Publication year:</span>{" "}
-                                                                                {book.publicationYear || "—"}
-                                                                            </p>
-                                                                            <p>
                                                                                 <span className="text-white/60">
                                                                                     Default loan duration:
                                                                                 </span>{" "}
                                                                                 {fmtDurationDays(book.borrowDurationDays)}
                                                                             </p>
 
-                                                                            {/* Copies selector */}
                                                                             <div className="pt-3">
                                                                                 <div className="text-xs font-medium text-white/80 mb-1">
                                                                                     Copies to borrow
@@ -1024,7 +1247,7 @@ export default function FacultyBooksPage() {
                                                                     </AlertDialogContent>
                                                                 </AlertDialog>
                                                             ) : activeRecords.length > 0 ? (
-                                                                <span className="inline-flex flex-col items-end text-xs text-amber-200">
+                                                                <span className="inline-flex flex-col items-end text-xs text-amber-200 whitespace-normal wrap-break-word">
                                                                     {pendingPickupRecords.length > 0 && (
                                                                         <>
                                                                             <span className="inline-flex items-center gap-1">
@@ -1091,12 +1314,7 @@ export default function FacultyBooksPage() {
                                     </Table>
                                 </div>
 
-                                {/* MOBILE */}
                                 <div className="md:hidden space-y-3 mt-2">
-                                    <p className="text-[11px] text-white/60 px-1">
-                                        Swipe sideways inside each row to see full details.
-                                    </p>
-
                                     {rows.map((book) => {
                                         const remaining = getRemainingCopies(book)
                                         const borrowableNow = isBorrowable(book)
@@ -1138,23 +1356,29 @@ export default function FacultyBooksPage() {
                                         return (
                                             <div
                                                 key={book.id}
-                                                className="rounded-lg border border-white/10 bg-slate-900/80 p-3 space-y-2"
+                                                className="rounded-lg border border-white/10 bg-slate-900/80 p-3 space-y-3"
                                             >
                                                 <div className="flex items-start justify-between gap-2">
-                                                    <div>
-                                                        <div className="text-sm font-semibold text-white">{book.title}</div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-semibold text-white wrap-break-word">
+                                                            {book.title}
+                                                        </div>
                                                         {book.subtitle ? (
-                                                            <div className="text-[11px] text-white/60">{book.subtitle}</div>
+                                                            <div className="text-[11px] text-white/60 wrap-break-word">
+                                                                {book.subtitle}
+                                                            </div>
                                                         ) : null}
-                                                        <div className="text-[11px] text-white/60">{book.author}</div>
+                                                        <div className="text-[11px] text-white/60 wrap-break-word">
+                                                            {book.author}
+                                                        </div>
                                                     </div>
 
                                                     <Badge
                                                         variant={borrowableNow ? "default" : "outline"}
                                                         className={
                                                             borrowableNow
-                                                                ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                                : "border-red-400/70 text-red-200 hover:bg-red-500/10"
+                                                                ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80 shrink-0"
+                                                                : "border-red-400/70 text-red-200 hover:bg-red-500/10 shrink-0"
                                                         }
                                                     >
                                                         {borrowableNow ? (
@@ -1171,7 +1395,57 @@ export default function FacultyBooksPage() {
                                                     </Badge>
                                                 </div>
 
-                                                {/* Status summary */}
+                                                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-white/70">
+                                                    <div>
+                                                        <div className="uppercase text-white/40">Call no.</div>
+                                                        <div className="text-white/85 wrap-break-word">
+                                                            {book.callNumber || <span className="opacity-50">—</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <div className="uppercase text-white/40">Acc. no.</div>
+                                                        <div className="text-white/85 wrap-break-word">
+                                                            {book.accessionNumber || <span className="opacity-50">—</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <div className="uppercase text-white/40">Sub.</div>
+                                                        <div className="text-white/85 wrap-break-word">
+                                                            {book.subtitle || <span className="opacity-50">—</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <div className="uppercase text-white/40">Pub. year</div>
+                                                        <div className="text-white/85">
+                                                            {book.publicationYear || <span className="opacity-50">—</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <div className="uppercase text-white/40">ISBN</div>
+                                                        <div className="text-white/85 wrap-break-word">
+                                                            {book.isbn || <span className="opacity-50">—</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <div className="uppercase text-white/40">Subjects</div>
+                                                        <div className="text-white/85 wrap-break-word">
+                                                            {getSubjects(book)}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="col-span-2">
+                                                        <div className="uppercase text-white/40">Due date</div>
+                                                        <div className="text-white/85 wrap-break-word">
+                                                            {dueCell === "—" ? <span className="opacity-50">—</span> : dueCell}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
                                                 <div className="text-[11px] text-white/70">
                                                     {activeRecords.length === 0 && book.myStatus === "never" && (
                                                         <span>Not yet borrowed</span>
@@ -1244,62 +1518,6 @@ export default function FacultyBooksPage() {
                                                         )}
                                                 </div>
 
-                                                {/* Row-level horizontal scroll with details */}
-                                                <div className="overflow-x-auto">
-                                                    <div className="flex gap-4 min-w-[760px] text-[11px] text-white/70 pt-1">
-                                                        <div className="min-w-20">
-                                                            <div className="text-[10px] uppercase text-white/40">ID</div>
-                                                            <div className="font-mono text-xs">{book.id}</div>
-                                                        </div>
-
-                                                        <div className="min-w-[140px]">
-                                                            <div className="text-[10px] uppercase text-white/40">Accession #</div>
-                                                            <div className="text-xs">
-                                                                {book.accessionNumber || <span className="opacity-50">—</span>}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="min-w-[110px]">
-                                                            <div className="text-[10px] uppercase text-white/40">ISBN</div>
-                                                            <div className="text-xs">
-                                                                {book.isbn || <span className="opacity-50">—</span>}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="min-w-[140px]">
-                                                            <div className="text-[10px] uppercase text-white/40">Call no.</div>
-                                                            <div className="text-xs">
-                                                                {book.callNumber || <span className="opacity-50">—</span>}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="min-w-[150px]">
-                                                            <div className="text-[10px] uppercase text-white/40">Subjects</div>
-                                                            <div className="text-xs">{getSubjects(book)}</div>
-                                                        </div>
-
-                                                        <div className="min-w-[90px]">
-                                                            <div className="text-[10px] uppercase text-white/40">Pub. year</div>
-                                                            <div className="text-xs">
-                                                                {book.publicationYear || <span className="opacity-50">—</span>}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="min-w-[110px]">
-                                                            <div className="text-[10px] uppercase text-white/40">Due date</div>
-                                                            <div className="text-xs">
-                                                                {dueCell === "—" ? <span className="opacity-50">—</span> : dueCell}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="min-w-[150px]">
-                                                            <div className="text-[10px] uppercase text-white/40">Loan duration</div>
-                                                            <div className="text-xs">{fmtDurationDays(book.borrowDurationDays)}</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Actions */}
                                                 <div className="flex justify-end pt-1">
                                                     {borrowableNow ? (
                                                         <AlertDialog
@@ -1338,12 +1556,20 @@ export default function FacultyBooksPage() {
 
                                                                 <div className="mt-3 text-sm text-white/80 space-y-1">
                                                                     <p>
+                                                                        <span className="text-white/60">Call no.:</span>{" "}
+                                                                        {book.callNumber || "—"}
+                                                                    </p>
+                                                                    <p>
                                                                         <span className="text-white/60">Accession #:</span>{" "}
                                                                         {book.accessionNumber || "—"}
                                                                     </p>
                                                                     <p>
-                                                                        <span className="text-white/60">Call no.:</span>{" "}
-                                                                        {book.callNumber || "—"}
+                                                                        <span className="text-white/60">Subtitle:</span>{" "}
+                                                                        {book.subtitle || "—"}
+                                                                    </p>
+                                                                    <p>
+                                                                        <span className="text-white/60">Publication year:</span>{" "}
+                                                                        {book.publicationYear || "—"}
                                                                     </p>
                                                                     <p>
                                                                         <span className="text-white/60">ISBN:</span> {book.isbn || "—"}
@@ -1361,15 +1587,10 @@ export default function FacultyBooksPage() {
                                                                         {getSubjects(book)}
                                                                     </p>
                                                                     <p>
-                                                                        <span className="text-white/60">Publication year:</span>{" "}
-                                                                        {book.publicationYear || "—"}
-                                                                    </p>
-                                                                    <p>
                                                                         <span className="text-white/60">Default loan duration:</span>{" "}
                                                                         {fmtDurationDays(book.borrowDurationDays)}
                                                                     </p>
 
-                                                                    {/* Copies selector */}
                                                                     <div className="pt-3">
                                                                         <div className="text-xs font-medium text-white/80 mb-1">
                                                                             Copies to borrow
