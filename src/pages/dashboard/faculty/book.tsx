@@ -904,525 +904,526 @@ export default function FacultyBooksPage() {
                                     </span>
                                 </div>
 
-                                <div
+                                <Table
                                     ref={tableScrollRef}
-                                    className={`hidden md:block overflow-x-auto rounded-md ${isTableDragging ? "cursor-grabbing select-none" : "cursor-grab"
+                                    className="min-w-[1380px]"
+                                    containerClassName={`hidden md:block rounded-md ${isTableDragging ? "cursor-grabbing select-none" : "cursor-grab"
                                         }`}
-                                    onPointerDown={handleTablePointerDown}
-                                    onPointerMove={handleTablePointerMove}
-                                    onPointerUp={handleTablePointerUp}
-                                    onPointerCancel={stopTableDrag}
-                                    onLostPointerCapture={stopTableDrag}
+                                    containerProps={{
+                                        onPointerDown: handleTablePointerDown,
+                                        onPointerMove: handleTablePointerMove,
+                                        onPointerUp: handleTablePointerUp,
+                                        onPointerCancel: stopTableDrag,
+                                        onLostPointerCapture: stopTableDrag,
+                                    }}
                                 >
-                                    <Table className="min-w-[1380px]">
-                                        <TableCaption className="text-xs text-white/60">
-                                            Showing {rows.length} {rows.length === 1 ? "book" : "books"}.
-                                            Sorted and filtered catalog view for faculty borrowers.
-                                        </TableCaption>
-                                        <TableHeader>
-                                            <TableRow className="border-white/10">
-                                                <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
-                                                    Call no.
-                                                </TableHead>
-                                                <TableHead className="min-w-[130px] text-xs font-semibold text-white/70">
-                                                    Acc. no.
-                                                </TableHead>
-                                                <TableHead className="min-w-[220px] text-xs font-semibold text-white/70">
-                                                    Title
-                                                </TableHead>
-                                                <TableHead className="min-w-[180px] text-xs font-semibold text-white/70">
-                                                    Sub.
-                                                </TableHead>
-                                                <TableHead className="min-w-[90px] text-xs font-semibold text-white/70">
-                                                    Pub. year
-                                                </TableHead>
-                                                <TableHead className="min-w-[170px] text-xs font-semibold text-white/70">
-                                                    Author
-                                                </TableHead>
-                                                <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
-                                                    ISBN
-                                                </TableHead>
-                                                <TableHead className="min-w-[180px] text-xs font-semibold text-white/70">
-                                                    Subjects
-                                                </TableHead>
-                                                <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
-                                                    Availability
-                                                </TableHead>
-                                                <TableHead className="min-w-[120px] text-xs font-semibold text-white/70">
-                                                    Due date
-                                                </TableHead>
-                                                <TableHead className="min-w-[260px] text-xs font-semibold text-white/70">
-                                                    My status
-                                                </TableHead>
-                                                <TableHead className="min-w-[220px] text-right text-xs font-semibold text-white/70">
-                                                    Action
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
+                                    <TableCaption className="text-xs text-white/60">
+                                        Showing {rows.length} {rows.length === 1 ? "book" : "books"}.
+                                        Sorted and filtered catalog view for faculty borrowers.
+                                    </TableCaption>
+                                    <TableHeader>
+                                        <TableRow className="border-white/10">
+                                            <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
+                                                Call no.
+                                            </TableHead>
+                                            <TableHead className="min-w-[130px] text-xs font-semibold text-white/70">
+                                                Acc. no.
+                                            </TableHead>
+                                            <TableHead className="min-w-[220px] text-xs font-semibold text-white/70">
+                                                Title
+                                            </TableHead>
+                                            <TableHead className="min-w-[180px] text-xs font-semibold text-white/70">
+                                                Sub.
+                                            </TableHead>
+                                            <TableHead className="min-w-[90px] text-xs font-semibold text-white/70">
+                                                Pub. year
+                                            </TableHead>
+                                            <TableHead className="min-w-[170px] text-xs font-semibold text-white/70">
+                                                Author
+                                            </TableHead>
+                                            <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
+                                                ISBN
+                                            </TableHead>
+                                            <TableHead className="min-w-[180px] text-xs font-semibold text-white/70">
+                                                Subjects
+                                            </TableHead>
+                                            <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
+                                                Availability
+                                            </TableHead>
+                                            <TableHead className="min-w-[120px] text-xs font-semibold text-white/70">
+                                                Due date
+                                            </TableHead>
+                                            <TableHead className="min-w-[260px] text-xs font-semibold text-white/70">
+                                                My status
+                                            </TableHead>
+                                            <TableHead className="min-w-[220px] text-right text-xs font-semibold text-white/70">
+                                                Action
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
 
-                                        <TableBody>
-                                            {rows.map((book) => {
-                                                const remaining = getRemainingCopies(book)
-                                                const borrowableNow = isBorrowable(book)
+                                    <TableBody>
+                                        {rows.map((book) => {
+                                            const remaining = getRemainingCopies(book)
+                                            const borrowableNow = isBorrowable(book)
 
-                                                const activeRecords = book.activeRecords || []
-                                                const pendingPickupRecords = activeRecords.filter(
-                                                    (r) =>
-                                                        r.status === "pending" ||
-                                                        r.status === "pending_pickup"
-                                                )
-                                                const borrowedRecords = activeRecords.filter(
-                                                    (r) => r.status === "borrowed"
-                                                )
-                                                const pendingReturnRecords = activeRecords.filter(
-                                                    (r) => r.status === "pending_return"
-                                                )
+                                            const activeRecords = book.activeRecords || []
+                                            const pendingPickupRecords = activeRecords.filter(
+                                                (r) =>
+                                                    r.status === "pending" ||
+                                                    r.status === "pending_pickup"
+                                            )
+                                            const borrowedRecords = activeRecords.filter(
+                                                (r) => r.status === "borrowed"
+                                            )
+                                            const pendingReturnRecords = activeRecords.filter(
+                                                (r) => r.status === "pending_return"
+                                            )
 
-                                                const totalFine = activeRecords.reduce(
-                                                    (sum, r) =>
-                                                        sum + (typeof r.fine === "number" ? r.fine : 0),
-                                                    0
-                                                )
+                                            const totalFine = activeRecords.reduce(
+                                                (sum, r) =>
+                                                    sum + (typeof r.fine === "number" ? r.fine : 0),
+                                                0
+                                            )
 
-                                                const earliestDueRaw = minDateStr(activeRecords, "dueDate")
-                                                const earliestDue = earliestDueRaw ? fmtDate(earliestDueRaw) : "—"
+                                            const earliestDueRaw = minDateStr(activeRecords, "dueDate")
+                                            const earliestDue = earliestDueRaw ? fmtDate(earliestDueRaw) : "—"
 
-                                                const overdueDaysMax =
-                                                    borrowedRecords.length > 0
-                                                        ? Math.max(
-                                                            0,
-                                                            ...borrowedRecords.map((r) =>
-                                                                computeOverdueDays(r.dueDate)
-                                                            )
+                                            const overdueDaysMax =
+                                                borrowedRecords.length > 0
+                                                    ? Math.max(
+                                                        0,
+                                                        ...borrowedRecords.map((r) =>
+                                                            computeOverdueDays(r.dueDate)
                                                         )
-                                                        : 0
+                                                    )
+                                                    : 0
 
-                                                const hasOverdue = overdueDaysMax > 0
+                                            const hasOverdue = overdueDaysMax > 0
 
-                                                const dueCell =
-                                                    activeRecords.length === 0
-                                                        ? "—"
-                                                        : activeRecords.length === 1
-                                                            ? earliestDue
-                                                            : `${earliestDue} (+${activeRecords.length - 1} more)`
+                                            const dueCell =
+                                                activeRecords.length === 0
+                                                    ? "—"
+                                                    : activeRecords.length === 1
+                                                        ? earliestDue
+                                                        : `${earliestDue} (+${activeRecords.length - 1} more)`
 
-                                                const maxCopies = remaining
-                                                const isThisDialog = borrowDialogBookId === book.id
-                                                const qty = isThisDialog
-                                                    ? clampInt(borrowCopies, 1, Math.max(1, maxCopies))
-                                                    : 1
+                                            const maxCopies = remaining
+                                            const isThisDialog = borrowDialogBookId === book.id
+                                            const qty = isThisDialog
+                                                ? clampInt(borrowCopies, 1, Math.max(1, maxCopies))
+                                                : 1
 
-                                                const borrowBtnLabel =
-                                                    activeRecords.length > 0 ? "Borrow more" : "Borrow"
+                                            const borrowBtnLabel =
+                                                activeRecords.length > 0 ? "Borrow more" : "Borrow"
 
-                                                return (
-                                                    <TableRow
-                                                        key={book.id}
-                                                        className="border-white/5 hover:bg-white/5 transition-colors"
-                                                    >
-                                                        <TableCell className="align-top text-sm text-white/85 whitespace-normal wrap-break-word">
-                                                            {book.callNumber || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
+                                            return (
+                                                <TableRow
+                                                    key={book.id}
+                                                    className="border-white/5 hover:bg-white/5 transition-colors"
+                                                >
+                                                    <TableCell className="align-top text-sm text-white/85 whitespace-normal wrap-break-word">
+                                                        {book.callNumber || (
+                                                            <span className="opacity-50">—</span>
+                                                        )}
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top text-sm text-white/85 whitespace-normal wrap-break-word">
-                                                            {book.accessionNumber || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
+                                                    <TableCell className="align-top text-sm text-white/85 whitespace-normal wrap-break-word">
+                                                        {book.accessionNumber || (
+                                                            <span className="opacity-50">—</span>
+                                                        )}
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top">
-                                                            <div className="text-sm font-medium text-white whitespace-normal wrap-break-word">
-                                                                {book.title}
-                                                            </div>
-                                                        </TableCell>
+                                                    <TableCell className="align-top">
+                                                        <div className="text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                            {book.title}
+                                                        </div>
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
-                                                            {book.subtitle || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
+                                                    <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
+                                                        {book.subtitle || (
+                                                            <span className="opacity-50">—</span>
+                                                        )}
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top text-sm text-white/80">
-                                                            {book.publicationYear || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
+                                                    <TableCell className="align-top text-sm text-white/80">
+                                                        {book.publicationYear || (
+                                                            <span className="opacity-50">—</span>
+                                                        )}
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top text-sm text-white/90 whitespace-normal wrap-break-word">
-                                                            {book.author || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
+                                                    <TableCell className="align-top text-sm text-white/90 whitespace-normal wrap-break-word">
+                                                        {book.author || (
+                                                            <span className="opacity-50">—</span>
+                                                        )}
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
-                                                            {book.isbn || (
-                                                                <span className="opacity-50">—</span>
-                                                            )}
-                                                        </TableCell>
+                                                    <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
+                                                        {book.isbn || (
+                                                            <span className="opacity-50">—</span>
+                                                        )}
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
-                                                            {getSubjects(book)}
-                                                        </TableCell>
+                                                    <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
+                                                        {getSubjects(book)}
+                                                    </TableCell>
 
-                                                        <TableCell className="align-top text-xs">
-                                                            <Badge
-                                                                variant={borrowableNow ? "default" : "outline"}
-                                                                className={
-                                                                    borrowableNow
-                                                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                                        : "border-red-400/70 text-red-200 hover:bg-red-500/10"
-                                                                }
-                                                            >
-                                                                {borrowableNow ? (
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                                                                        Available{" "}
-                                                                        <span className="opacity-80">({remaining} left)</span>
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <CircleOff className="h-3 w-3" aria-hidden="true" />
-                                                                        Unavailable
-                                                                    </span>
-                                                                )}
-                                                            </Badge>
-                                                        </TableCell>
-
-                                                        <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
-                                                            {dueCell === "—" ? (
-                                                                <span className="opacity-50">—</span>
-                                                            ) : (
-                                                                dueCell
-                                                            )}
-                                                        </TableCell>
-
-                                                        <TableCell className="align-top text-xs whitespace-normal wrap-break-word">
-                                                            {activeRecords.length === 0 && book.myStatus === "never" && (
-                                                                <span className="text-white/60">Not yet borrowed</span>
-                                                            )}
-
-                                                            {activeRecords.length > 0 && (
-                                                                <div className="space-y-1">
-                                                                    {pendingPickupRecords.length > 0 && (
-                                                                        <div className="inline-flex items-center gap-1 text-amber-200">
-                                                                            <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
-                                                                            <span>
-                                                                                Pending pickup ×{pendingPickupRecords.length}
-                                                                                {" · "}Earliest due:{" "}
-                                                                                <span className="font-medium">{earliestDue}</span>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && !hasOverdue && (
-                                                                        <div className="inline-flex items-center gap-1 text-amber-200">
-                                                                            <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
-                                                                            <span>
-                                                                                Borrowed ×{borrowedRecords.length}
-                                                                                {" · "}Earliest due:{" "}
-                                                                                <span className="font-medium">{earliestDue}</span>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && hasOverdue && (
-                                                                        <div className="inline-flex items-center gap-1 text-red-300">
-                                                                            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
-                                                                            <span>
-                                                                                Overdue ×{borrowedRecords.length}
-                                                                                {" · "}Max overdue:{" "}
-                                                                                <span className="font-semibold">
-                                                                                    {overdueDaysMax} day{overdueDaysMax === 1 ? "" : "s"}
-                                                                                </span>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {pendingReturnRecords.length > 0 && (
-                                                                        <div className="text-white/70">
-                                                                            Return requested ×{pendingReturnRecords.length}
-                                                                        </div>
-                                                                    )}
-
-                                                                    {totalFine > 0 && (
-                                                                        <div className="text-red-300">
-                                                                            Fine total: {peso(totalFine)}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-
-                                                            {activeRecords.length === 0 &&
-                                                                book.myStatus === "returned" &&
-                                                                book.lastReturnedRecord && (
-                                                                    <span className="inline-flex items-center gap-1 text-white/70">
-                                                                        <CheckCircle2
-                                                                            className="h-3 w-3 text-emerald-300 shrink-0"
-                                                                            aria-hidden="true"
-                                                                        />
-                                                                        <span>
-                                                                            Returned · Last returned:{" "}
-                                                                            <span className="font-medium">
-                                                                                {fmtDate(book.lastReturnedRecord.returnDate)}
-                                                                            </span>
-                                                                        </span>
-                                                                    </span>
-                                                                )}
-                                                        </TableCell>
-
-                                                        <TableCell className="align-top text-right">
+                                                    <TableCell className="align-top text-xs">
+                                                        <Badge
+                                                            variant={borrowableNow ? "default" : "outline"}
+                                                            className={
+                                                                borrowableNow
+                                                                    ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
+                                                                    : "border-red-400/70 text-red-200 hover:bg-red-500/10"
+                                                            }
+                                                        >
                                                             {borrowableNow ? (
-                                                                <AlertDialog
-                                                                    onOpenChange={(open) => {
-                                                                        if (open) {
-                                                                            setBorrowDialogBookId(book.id)
-                                                                            setBorrowCopies(1)
-                                                                        } else {
-                                                                            setBorrowDialogBookId(null)
-                                                                            setBorrowCopies(1)
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <AlertDialogTrigger asChild>
-                                                                        <Button
-                                                                            type="button"
-                                                                            size="sm"
-                                                                            className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                                                                            disabled={borrowBusyId === book.id || maxCopies <= 0}
-                                                                        >
-                                                                            {borrowBtnLabel}
-                                                                        </Button>
-                                                                    </AlertDialogTrigger>
-
-                                                                    <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
-                                                                        <AlertDialogHeader>
-                                                                            <AlertDialogTitle>Confirm borrow</AlertDialogTitle>
-                                                                            <AlertDialogDescription className="text-white/70">
-                                                                                You are about to borrow{" "}
-                                                                                <span className="font-semibold text-white">
-                                                                                    “{book.title}”
-                                                                                </span>{" "}
-                                                                                by{" "}
-                                                                                <span className="font-semibold text-white">
-                                                                                    {book.author}
-                                                                                </span>
-                                                                                . Please confirm the details below.
-                                                                            </AlertDialogDescription>
-                                                                        </AlertDialogHeader>
-
-                                                                        <div className="mt-3 text-sm text-white/80 space-y-1">
-                                                                            <p>
-                                                                                <span className="text-white/60">Call no.:</span>{" "}
-                                                                                {book.callNumber || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">Accession #:</span>{" "}
-                                                                                {book.accessionNumber || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">Subtitle:</span>{" "}
-                                                                                {book.subtitle || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">Publication year:</span>{" "}
-                                                                                {book.publicationYear || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">ISBN:</span>{" "}
-                                                                                {book.isbn || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">Edition:</span>{" "}
-                                                                                {book.edition || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">Publisher:</span>{" "}
-                                                                                {book.publisher || "—"}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">Subjects:</span>{" "}
-                                                                                {getSubjects(book)}
-                                                                            </p>
-                                                                            <p>
-                                                                                <span className="text-white/60">
-                                                                                    Default loan duration:
-                                                                                </span>{" "}
-                                                                                {fmtDurationDays(book.borrowDurationDays)}
-                                                                            </p>
-
-                                                                            <div className="pt-3">
-                                                                                <div className="text-xs font-medium text-white/80 mb-1">
-                                                                                    Copies to borrow
-                                                                                </div>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <Button
-                                                                                        type="button"
-                                                                                        size="icon"
-                                                                                        variant="outline"
-                                                                                        className="border-white/20 text-white hover:bg-white/10"
-                                                                                        onClick={() =>
-                                                                                            setBorrowCopies((v) =>
-                                                                                                clampInt(v - 1, 1, Math.max(1, maxCopies))
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            borrowBusyId === book.id ||
-                                                                                            !isThisDialog ||
-                                                                                            qty <= 1
-                                                                                        }
-                                                                                        aria-label="Decrease copies"
-                                                                                    >
-                                                                                        <Minus className="h-4 w-4" aria-hidden="true" />
-                                                                                    </Button>
-
-                                                                                    <Input
-                                                                                        value={String(qty)}
-                                                                                        onChange={(e) =>
-                                                                                            setBorrowCopies(
-                                                                                                clampInt(
-                                                                                                    Number(e.target.value),
-                                                                                                    1,
-                                                                                                    Math.max(1, maxCopies)
-                                                                                                )
-                                                                                            )
-                                                                                        }
-                                                                                        inputMode="numeric"
-                                                                                        className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
-                                                                                        aria-label="Copies to borrow"
-                                                                                        disabled={borrowBusyId === book.id || !isThisDialog}
-                                                                                    />
-
-                                                                                    <Button
-                                                                                        type="button"
-                                                                                        size="icon"
-                                                                                        variant="outline"
-                                                                                        className="border-white/20 text-white hover:bg-white/10"
-                                                                                        onClick={() =>
-                                                                                            setBorrowCopies((v) =>
-                                                                                                clampInt(v + 1, 1, Math.max(1, maxCopies))
-                                                                                            )
-                                                                                        }
-                                                                                        disabled={
-                                                                                            borrowBusyId === book.id ||
-                                                                                            !isThisDialog ||
-                                                                                            qty >= maxCopies
-                                                                                        }
-                                                                                        aria-label="Increase copies"
-                                                                                    >
-                                                                                        <Plus className="h-4 w-4" aria-hidden="true" />
-                                                                                    </Button>
-
-                                                                                    <span className="text-xs text-white/60">
-                                                                                        Max {maxCopies}
-                                                                                    </span>
-                                                                                </div>
-                                                                                <p className="text-[11px] text-white/60 mt-1">
-                                                                                    Remaining copies available right now: {maxCopies}.
-                                                                                </p>
-                                                                            </div>
-
-                                                                            <p className="text-xs text-white/60 mt-2">
-                                                                                The due date will be set automatically based on the
-                                                                                library policy. Any overdue days may incur fines.
-                                                                            </p>
-                                                                        </div>
-
-                                                                        <AlertDialogFooter>
-                                                                            <AlertDialogCancel
-                                                                                className="border-white/20 text-white hover:bg-black/20"
-                                                                                disabled={borrowBusyId === book.id}
-                                                                            >
-                                                                                Cancel
-                                                                            </AlertDialogCancel>
-                                                                            <AlertDialogAction
-                                                                                className="bg-purple-600 hover:bg-purple-700 text-white"
-                                                                                disabled={borrowBusyId === book.id || maxCopies <= 0}
-                                                                                onClick={() => void handleBorrow(book, qty)}
-                                                                            >
-                                                                                {borrowBusyId === book.id ? (
-                                                                                    <span className="inline-flex items-center gap-2">
-                                                                                        <Loader2
-                                                                                            className="h-4 w-4 animate-spin"
-                                                                                            aria-hidden="true"
-                                                                                        />
-                                                                                        Borrowing…
-                                                                                    </span>
-                                                                                ) : (
-                                                                                    "Confirm borrow"
-                                                                                )}
-                                                                            </AlertDialogAction>
-                                                                        </AlertDialogFooter>
-                                                                    </AlertDialogContent>
-                                                                </AlertDialog>
-                                                            ) : activeRecords.length > 0 ? (
-                                                                <span className="inline-flex flex-col items-end text-xs text-amber-200 whitespace-normal wrap-break-word">
-                                                                    {pendingPickupRecords.length > 0 && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1">
-                                                                                <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                                Pending pickup ×{pendingPickupRecords.length}
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Go to the librarian to receive the physical book.
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && !hasOverdue && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1">
-                                                                                <Clock3 className="h-3 w-3" aria-hidden="true" />
-                                                                                Borrowed ×{borrowedRecords.length}
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Earliest due on{" "}
-                                                                                <span className="font-semibold">{earliestDue}</span>.
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-
-                                                                    {borrowedRecords.length > 0 && hasOverdue && (
-                                                                        <>
-                                                                            <span className="inline-flex items-center gap-1 text-red-300">
-                                                                                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                                                                                Overdue
-                                                                            </span>
-                                                                            <span className="text-white/60">
-                                                                                Max overdue by{" "}
-                                                                                <span className="font-semibold">
-                                                                                    {overdueDaysMax} day{overdueDaysMax === 1 ? "" : "s"}
-                                                                                </span>
-                                                                                .
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-
-                                                                    {pendingReturnRecords.length > 0 && (
-                                                                        <span className="text-white/60">
-                                                                            Return requested ×{pendingReturnRecords.length}
-                                                                        </span>
-                                                                    )}
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                                                    Available{" "}
+                                                                    <span className="opacity-80">({remaining} left)</span>
                                                                 </span>
                                                             ) : (
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    disabled
-                                                                    className="border-white/20 text-white/60"
-                                                                >
-                                                                    Not available
-                                                                </Button>
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    <CircleOff className="h-3 w-3" aria-hidden="true" />
+                                                                    Unavailable
+                                                                </span>
                                                             )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </TableBody>
-                                    </Table>
-                                </div>
+                                                        </Badge>
+                                                    </TableCell>
+
+                                                    <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
+                                                        {dueCell === "—" ? (
+                                                            <span className="opacity-50">—</span>
+                                                        ) : (
+                                                            dueCell
+                                                        )}
+                                                    </TableCell>
+
+                                                    <TableCell className="align-top text-xs whitespace-normal wrap-break-word">
+                                                        {activeRecords.length === 0 && book.myStatus === "never" && (
+                                                            <span className="text-white/60">Not yet borrowed</span>
+                                                        )}
+
+                                                        {activeRecords.length > 0 && (
+                                                            <div className="space-y-1">
+                                                                {pendingPickupRecords.length > 0 && (
+                                                                    <div className="inline-flex items-center gap-1 text-amber-200">
+                                                                        <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                                                        <span>
+                                                                            Pending pickup ×{pendingPickupRecords.length}
+                                                                            {" · "}Earliest due:{" "}
+                                                                            <span className="font-medium">{earliestDue}</span>
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+
+                                                                {borrowedRecords.length > 0 && !hasOverdue && (
+                                                                    <div className="inline-flex items-center gap-1 text-amber-200">
+                                                                        <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                                                        <span>
+                                                                            Borrowed ×{borrowedRecords.length}
+                                                                            {" · "}Earliest due:{" "}
+                                                                            <span className="font-medium">{earliestDue}</span>
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+
+                                                                {borrowedRecords.length > 0 && hasOverdue && (
+                                                                    <div className="inline-flex items-center gap-1 text-red-300">
+                                                                        <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                                                        <span>
+                                                                            Overdue ×{borrowedRecords.length}
+                                                                            {" · "}Max overdue:{" "}
+                                                                            <span className="font-semibold">
+                                                                                {overdueDaysMax} day{overdueDaysMax === 1 ? "" : "s"}
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+
+                                                                {pendingReturnRecords.length > 0 && (
+                                                                    <div className="text-white/70">
+                                                                        Return requested ×{pendingReturnRecords.length}
+                                                                    </div>
+                                                                )}
+
+                                                                {totalFine > 0 && (
+                                                                    <div className="text-red-300">
+                                                                        Fine total: {peso(totalFine)}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {activeRecords.length === 0 &&
+                                                            book.myStatus === "returned" &&
+                                                            book.lastReturnedRecord && (
+                                                                <span className="inline-flex items-center gap-1 text-white/70">
+                                                                    <CheckCircle2
+                                                                        className="h-3 w-3 text-emerald-300 shrink-0"
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                    <span>
+                                                                        Returned · Last returned:{" "}
+                                                                        <span className="font-medium">
+                                                                            {fmtDate(book.lastReturnedRecord.returnDate)}
+                                                                        </span>
+                                                                    </span>
+                                                                </span>
+                                                            )}
+                                                    </TableCell>
+
+                                                    <TableCell className="align-top text-right">
+                                                        {borrowableNow ? (
+                                                            <AlertDialog
+                                                                onOpenChange={(open) => {
+                                                                    if (open) {
+                                                                        setBorrowDialogBookId(book.id)
+                                                                        setBorrowCopies(1)
+                                                                    } else {
+                                                                        setBorrowDialogBookId(null)
+                                                                        setBorrowCopies(1)
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                                                                        disabled={borrowBusyId === book.id || maxCopies <= 0}
+                                                                    >
+                                                                        {borrowBtnLabel}
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+
+                                                                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Confirm borrow</AlertDialogTitle>
+                                                                        <AlertDialogDescription className="text-white/70">
+                                                                            You are about to borrow{" "}
+                                                                            <span className="font-semibold text-white">
+                                                                                “{book.title}”
+                                                                            </span>{" "}
+                                                                            by{" "}
+                                                                            <span className="font-semibold text-white">
+                                                                                {book.author}
+                                                                            </span>
+                                                                            . Please confirm the details below.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+
+                                                                    <div className="mt-3 text-sm text-white/80 space-y-1">
+                                                                        <p>
+                                                                            <span className="text-white/60">Call no.:</span>{" "}
+                                                                            {book.callNumber || "—"}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">Accession #:</span>{" "}
+                                                                            {book.accessionNumber || "—"}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">Subtitle:</span>{" "}
+                                                                            {book.subtitle || "—"}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">Publication year:</span>{" "}
+                                                                            {book.publicationYear || "—"}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">ISBN:</span>{" "}
+                                                                            {book.isbn || "—"}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">Edition:</span>{" "}
+                                                                            {book.edition || "—"}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">Publisher:</span>{" "}
+                                                                            {book.publisher || "—"}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">Subjects:</span>{" "}
+                                                                            {getSubjects(book)}
+                                                                        </p>
+                                                                        <p>
+                                                                            <span className="text-white/60">
+                                                                                Default loan duration:
+                                                                            </span>{" "}
+                                                                            {fmtDurationDays(book.borrowDurationDays)}
+                                                                        </p>
+
+                                                                        <div className="pt-3">
+                                                                            <div className="text-xs font-medium text-white/80 mb-1">
+                                                                                Copies to borrow
+                                                                            </div>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Button
+                                                                                    type="button"
+                                                                                    size="icon"
+                                                                                    variant="outline"
+                                                                                    className="border-white/20 text-white hover:bg-white/10"
+                                                                                    onClick={() =>
+                                                                                        setBorrowCopies((v) =>
+                                                                                            clampInt(v - 1, 1, Math.max(1, maxCopies))
+                                                                                        )
+                                                                                    }
+                                                                                    disabled={
+                                                                                        borrowBusyId === book.id ||
+                                                                                        !isThisDialog ||
+                                                                                        qty <= 1
+                                                                                    }
+                                                                                    aria-label="Decrease copies"
+                                                                                >
+                                                                                    <Minus className="h-4 w-4" aria-hidden="true" />
+                                                                                </Button>
+
+                                                                                <Input
+                                                                                    value={String(qty)}
+                                                                                    onChange={(e) =>
+                                                                                        setBorrowCopies(
+                                                                                            clampInt(
+                                                                                                Number(e.target.value),
+                                                                                                1,
+                                                                                                Math.max(1, maxCopies)
+                                                                                            )
+                                                                                        )
+                                                                                    }
+                                                                                    inputMode="numeric"
+                                                                                    className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
+                                                                                    aria-label="Copies to borrow"
+                                                                                    disabled={borrowBusyId === book.id || !isThisDialog}
+                                                                                />
+
+                                                                                <Button
+                                                                                    type="button"
+                                                                                    size="icon"
+                                                                                    variant="outline"
+                                                                                    className="border-white/20 text-white hover:bg-white/10"
+                                                                                    onClick={() =>
+                                                                                        setBorrowCopies((v) =>
+                                                                                            clampInt(v + 1, 1, Math.max(1, maxCopies))
+                                                                                        )
+                                                                                    }
+                                                                                    disabled={
+                                                                                        borrowBusyId === book.id ||
+                                                                                        !isThisDialog ||
+                                                                                        qty >= maxCopies
+                                                                                    }
+                                                                                    aria-label="Increase copies"
+                                                                                >
+                                                                                    <Plus className="h-4 w-4" aria-hidden="true" />
+                                                                                </Button>
+
+                                                                                <span className="text-xs text-white/60">
+                                                                                    Max {maxCopies}
+                                                                                </span>
+                                                                            </div>
+                                                                            <p className="text-[11px] text-white/60 mt-1">
+                                                                                Remaining copies available right now: {maxCopies}.
+                                                                            </p>
+                                                                        </div>
+
+                                                                        <p className="text-xs text-white/60 mt-2">
+                                                                            The due date will be set automatically based on the
+                                                                            library policy. Any overdue days may incur fines.
+                                                                        </p>
+                                                                    </div>
+
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel
+                                                                            className="border-white/20 text-white hover:bg-black/20"
+                                                                            disabled={borrowBusyId === book.id}
+                                                                        >
+                                                                            Cancel
+                                                                        </AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            className="bg-purple-600 hover:bg-purple-700 text-white"
+                                                                            disabled={borrowBusyId === book.id || maxCopies <= 0}
+                                                                            onClick={() => void handleBorrow(book, qty)}
+                                                                        >
+                                                                            {borrowBusyId === book.id ? (
+                                                                                <span className="inline-flex items-center gap-2">
+                                                                                    <Loader2
+                                                                                        className="h-4 w-4 animate-spin"
+                                                                                        aria-hidden="true"
+                                                                                    />
+                                                                                    Borrowing…
+                                                                                </span>
+                                                                            ) : (
+                                                                                "Confirm borrow"
+                                                                            )}
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        ) : activeRecords.length > 0 ? (
+                                                            <span className="inline-flex flex-col items-end text-xs text-amber-200 whitespace-normal wrap-break-word">
+                                                                {pendingPickupRecords.length > 0 && (
+                                                                    <>
+                                                                        <span className="inline-flex items-center gap-1">
+                                                                            <Clock3 className="h-3 w-3" aria-hidden="true" />
+                                                                            Pending pickup ×{pendingPickupRecords.length}
+                                                                        </span>
+                                                                        <span className="text-white/60">
+                                                                            Go to the librarian to receive the physical book.
+                                                                        </span>
+                                                                    </>
+                                                                )}
+
+                                                                {borrowedRecords.length > 0 && !hasOverdue && (
+                                                                    <>
+                                                                        <span className="inline-flex items-center gap-1">
+                                                                            <Clock3 className="h-3 w-3" aria-hidden="true" />
+                                                                            Borrowed ×{borrowedRecords.length}
+                                                                        </span>
+                                                                        <span className="text-white/60">
+                                                                            Earliest due on{" "}
+                                                                            <span className="font-semibold">{earliestDue}</span>.
+                                                                        </span>
+                                                                    </>
+                                                                )}
+
+                                                                {borrowedRecords.length > 0 && hasOverdue && (
+                                                                    <>
+                                                                        <span className="inline-flex items-center gap-1 text-red-300">
+                                                                            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                                                                            Overdue
+                                                                        </span>
+                                                                        <span className="text-white/60">
+                                                                            Max overdue by{" "}
+                                                                            <span className="font-semibold">
+                                                                                {overdueDaysMax} day{overdueDaysMax === 1 ? "" : "s"}
+                                                                            </span>
+                                                                            .
+                                                                        </span>
+                                                                    </>
+                                                                )}
+
+                                                                {pendingReturnRecords.length > 0 && (
+                                                                    <span className="text-white/60">
+                                                                        Return requested ×{pendingReturnRecords.length}
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                        ) : (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                disabled
+                                                                className="border-white/20 text-white/60"
+                                                            >
+                                                                Not available
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
 
                                 <div className="md:hidden space-y-3 mt-2">
                                     {rows.map((book) => {

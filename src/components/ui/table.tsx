@@ -9,18 +9,25 @@ type TableProps = React.ComponentPropsWithoutRef<"table"> & {
 
 const Table = React.forwardRef<HTMLDivElement, TableProps>(
   ({ className, containerClassName, containerProps, ...props }, ref) => {
-    const { className: containerPropsClassName, ...restContainerProps } =
-      containerProps ?? {};
+    const {
+      className: containerPropsClassName,
+      style: containerPropsStyle,
+      ...restContainerProps
+    } = containerProps ?? {};
 
     return (
       <div
         ref={ref}
         data-slot="table-container"
         className={cn(
-          "relative w-full overflow-x-auto",
+          "relative w-full overflow-x-auto touch-pan-x",
           containerClassName,
           containerPropsClassName
         )}
+        style={{
+          WebkitOverflowScrolling: "touch",
+          ...containerPropsStyle,
+        }}
         {...restContainerProps}
       >
         <table
