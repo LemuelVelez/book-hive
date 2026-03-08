@@ -767,13 +767,7 @@ export default function LibrarianBorrowRecordsPage() {
                                 .trim();
                               const extensionPending = reqStatus === "pending";
 
-                              const extensionCount = Number(
-                                rec.extensionCount ?? 0
-                              );
-                              const everRequestedExtension =
-                                reqStatus !== "none" && reqStatus !== "";
-                              const canEditDueDate =
-                                extensionCount > 0 || everRequestedExtension;
+                              const canEditDueDate = true;
 
                               const hasReturnRequest =
                                 !isReturned && Boolean(rec.returnRequestedAt);
@@ -916,11 +910,9 @@ export default function LibrarianBorrowRecordsPage() {
                                             className="border-white/25 text-xs text-white/80 inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                             disabled={!canEditDueDate}
                                             title={
-                                              canEditDueDate
-                                                ? extensionPending
-                                                  ? `Review extension request (+${FIXED_EXTENSION_DAYS} day) / Edit due date`
-                                                  : "Edit due date"
-                                                : "Disabled until the borrower requests an extension."
+                                              extensionPending
+                                                ? `Review extension request (+${FIXED_EXTENSION_DAYS} day) / Edit due date`
+                                                : "Edit due date"
                                             }
                                             onClick={() => openDueDialog(rec)}
                                           >
@@ -928,16 +920,16 @@ export default function LibrarianBorrowRecordsPage() {
                                             <span>Edit due date</span>
                                           </Button>
 
-                                          {!canEditDueDate ? (
-                                            <span className="text-[10px] text-white/50">
-                                              Needs extension request
-                                            </span>
-                                          ) : extensionPending ? (
+                                          {extensionPending ? (
                                             <span className="text-[10px] text-amber-200/80">
                                               Extension pending (+
                                               {FIXED_EXTENSION_DAYS}d)
                                             </span>
-                                          ) : null}
+                                          ) : (
+                                            <span className="text-[10px] text-white/50">
+                                              No extension request required
+                                            </span>
+                                          )}
                                         </div>
 
                                         {isBorrowed && (

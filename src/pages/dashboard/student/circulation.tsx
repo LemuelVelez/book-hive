@@ -40,6 +40,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   BellRing,
+  MessageSquareText,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -166,12 +168,71 @@ function LibrarianReturnRequestNotice({
       </div>
 
       {trimmedNote ? (
-        <div className="mt-1 whitespace-normal break-words leading-relaxed text-rose-50">
+        <div className="mt-1 whitespace-normal wrap-break-word leading-relaxed text-rose-50">
           <span className="font-semibold">Note:</span> {trimmedNote}
         </div>
       ) : (
         <div className="mt-1 text-rose-100/70">No note from librarian.</div>
       )}
+    </div>
+  );
+}
+
+function ExtensionDecisionNotice({
+  status,
+  decidedAt,
+  note,
+  className = "",
+}: {
+  status?: string | null;
+  decidedAt?: string | null;
+  note?: string | null;
+  className?: string;
+}) {
+  const trimmedNote = (note ?? "").trim();
+  const normalizedStatus = (status ?? "").toLowerCase().trim();
+
+  if (!trimmedNote) return null;
+
+  const isApproved = normalizedStatus === "approved";
+  const isDisapproved = normalizedStatus === "disapproved";
+
+  const toneClasses = isApproved
+    ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
+    : isDisapproved
+      ? "border-rose-400/30 bg-rose-500/10 text-rose-100"
+      : "border-sky-400/30 bg-sky-500/10 text-sky-100";
+
+  return (
+    <div
+      className={
+        "rounded-md px-3 py-2 text-left text-[11px] " +
+        toneClasses +
+        " " +
+        className
+      }
+    >
+      <div className="inline-flex items-center gap-1 font-semibold">
+        {isDisapproved ? (
+          <XCircle className="h-3.5 w-3.5" />
+        ) : (
+          <MessageSquareText className="h-3.5 w-3.5" />
+        )}
+        Extension decision note
+      </div>
+
+      <div className="mt-1">
+        {isApproved
+          ? "Approved"
+          : isDisapproved
+            ? "Disapproved"
+            : "Decision updated"}
+        {decidedAt ? ` • ${fmtDateTime(decidedAt)}` : ""}
+      </div>
+
+      <div className="mt-1 whitespace-normal wrap-break-word leading-relaxed">
+        <span className="font-semibold">Note:</span> {trimmedNote}
+      </div>
     </div>
   );
 }
@@ -245,6 +306,9 @@ export default function StudentCirculationPage() {
           r.status ?? "",
           r.returnRequestedByName ?? "",
           r.returnRequestNote ?? "",
+          r.extensionRequestStatus ?? "",
+          r.extensionRequestedReason ?? "",
+          r.extensionDecisionNote ?? "",
         ]
           .join(" ")
           .toLowerCase();
@@ -527,6 +591,12 @@ export default function StudentCirculationPage() {
             <span className="font-semibold text-rose-200">Librarian note</span>{" "}
             column so you can read it clearly.
           </p>
+
+          <p className="mt-1 text-[11px] text-white/60">
+            Any extension decision note is shown under the{" "}
+            <span className="font-semibold text-sky-200">Due</span> details so
+            you can see the librarian&apos;s approval or disapproval message.
+          </p>
         </CardHeader>
 
         <CardContent className="space-y-3">
@@ -696,6 +766,9 @@ export default function StudentCirculationPage() {
                               const reqAt = record.extensionRequestedAt ?? null;
                               const decidedAt =
                                 record.extensionDecidedAt ?? null;
+                              const extensionDecisionNote = (
+                                record.extensionDecisionNote ?? ""
+                              ).trim();
 
                               const extensionPending =
                                 isBorrowed && reqStatus === "pending";
@@ -766,20 +839,28 @@ export default function StudentCirculationPage() {
                                         </span>
                                       )}
 
-                                      {reqStatus === "approved" && reqAt && (
+                                      {reqStatus === "approved" && (
                                         <span className="text-[10px] text-white/60">
                                           Extension approved:{" "}
-                                          {fmtDateTime(reqAt)}
+                                          {fmtDateTime(decidedAt ?? reqAt)}
                                         </span>
                                       )}
 
-                                      {reqStatus === "disapproved" &&
-                                        decidedAt && (
-                                          <span className="text-[10px] text-white/60">
-                                            Extension disapproved:{" "}
-                                            {fmtDateTime(decidedAt)}
-                                          </span>
-                                        )}
+                                      {reqStatus === "disapproved" && (
+                                        <span className="text-[10px] text-white/60">
+                                          Extension disapproved:{" "}
+                                          {fmtDateTime(decidedAt ?? reqAt)}
+                                        </span>
+                                      )}
+
+                                      {extensionDecisionNote ? (
+                                        <ExtensionDecisionNotice
+                                          status={reqStatus}
+                                          decidedAt={decidedAt ?? reqAt}
+                                          note={extensionDecisionNote}
+                                          className="mt-1"
+                                        />
+                                      ) : null}
 
                                       {hasLibrarianReturnRequest && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200 border border-rose-400/40 w-fit">
@@ -1150,6 +1231,15 @@ export default function StudentCirculationPage() {
                                                       : "."}
                                                   </p>
                                                 )}
+
+                                                {extensionDecisionNote ? (
+                                                  <ExtensionDecisionNotice
+                                                    status={reqStatus}
+                                                    decidedAt={decidedAt ?? reqAt}
+                                                    note={extensionDecisionNote}
+                                                    className="mt-2"
+                                                  />
+                                                ) : null}
                                               </div>
 
                                               <div className="rounded-md border border-sky-300/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
