@@ -77,7 +77,7 @@ function fmtDate(d?: string | null) {
   try {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return d;
-    return date.toLocaleDateString("en-CA"); // 2025-11-13
+    return date.toLocaleDateString("en-CA");
   } catch {
     return d;
   }
@@ -132,6 +132,48 @@ function computeOverdueDays(dueDate?: string | null): number {
   const diffMs = todayLocal.getTime() - dueLocal.getTime();
   const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   return rawDays > 0 ? rawDays : 0;
+}
+
+function LibrarianReturnRequestNotice({
+  requesterName,
+  requestedAt,
+  note,
+  className = "",
+}: {
+  requesterName?: string | null;
+  requestedAt?: string | null;
+  note?: string | null;
+  className?: string;
+}) {
+  const displayRequesterName = (requesterName ?? "").trim() || "Librarian";
+  const trimmedNote = (note ?? "").trim();
+
+  return (
+    <div
+      className={
+        "rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-left text-[11px] text-rose-100 " +
+        className
+      }
+    >
+      <div className="inline-flex items-center gap-1 font-semibold">
+        <BellRing className="h-3.5 w-3.5" />
+        Librarian return request
+      </div>
+
+      <div className="mt-1 text-rose-100/90">
+        Requested by {displayRequesterName}
+        {requestedAt ? ` • ${fmtDateTime(requestedAt)}` : ""}
+      </div>
+
+      {trimmedNote ? (
+        <div className="mt-1 whitespace-normal break-words leading-relaxed text-rose-50">
+          <span className="font-semibold">Note:</span> {trimmedNote}
+        </div>
+      ) : (
+        <div className="mt-1 text-rose-100/70">No note from librarian.</div>
+      )}
+    </div>
+  );
 }
 
 export default function StudentCirculationPage() {
@@ -196,8 +238,17 @@ export default function StudentCirculationPage() {
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) => {
-        const haystack =
-          `${r.bookTitle ?? ""} ${r.bookId} ${r.studentName ?? ""}`.toLowerCase();
+        const haystack = [
+          r.bookTitle ?? "",
+          r.bookId ?? "",
+          r.studentName ?? "",
+          r.status ?? "",
+          r.returnRequestedByName ?? "",
+          r.returnRequestNote ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+
         return haystack.includes(q);
       });
     }
@@ -304,15 +355,17 @@ export default function StudentCirculationPage() {
       return;
     }
 
-    const currentReqStatus = (record.extensionRequestStatus ?? "none").toLowerCase();
+    const currentReqStatus = (
+      record.extensionRequestStatus ?? "none"
+    ).toLowerCase();
     if (currentReqStatus === "pending") {
       toast.info("Extension already requested", {
-        description: "You already have a pending extension request for this record.",
+        description:
+          "You already have a pending extension request for this record.",
       });
       return;
     }
 
-    // Fixed extension policy: exactly 1 day (not user-editable)
     const days = FIXED_EXTENSION_DAYS;
     const reason = (extendReasonById[record.id] ?? "").trim();
 
@@ -323,7 +376,9 @@ export default function StudentCirculationPage() {
 
       setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
-      const newReqStatus = (updated.extensionRequestStatus ?? "none").toLowerCase();
+      const newReqStatus = (
+        updated.extensionRequestStatus ?? "none"
+      ).toLowerCase();
 
       if (newReqStatus === "pending") {
         toast.success("Extension request submitted", {
@@ -337,11 +392,13 @@ export default function StudentCirculationPage() {
         });
       } else {
         toast.success("Extension processed", {
-          description: res.message || `Current due date: ${fmtDate(updated.dueDate)}`,
+          description:
+            res.message || `Current due date: ${fmtDate(updated.dueDate)}`,
         });
       }
     } catch (err: any) {
-      const msg = err?.message || "Could not request an extension. Please try again.";
+      const msg =
+        err?.message || "Could not request an extension. Please try again.";
       toast.error("Extension failed", { description: msg });
     } finally {
       setExtendBusyId(null);
@@ -349,7 +406,8 @@ export default function StudentCirculationPage() {
   }
 
   const wrapCellClasses = "whitespace-normal break-words";
-  const badgeWrapClasses = "max-w-full whitespace-normal break-words leading-tight text-right";
+  const badgeWrapClasses =
+    "max-w-full whitespace-normal break-words leading-tight text-right";
   const actionButtonBaseClasses =
     "w-full min-h-9 h-auto py-2 whitespace-normal break-words leading-tight text-center";
 
@@ -363,7 +421,8 @@ export default function StudentCirculationPage() {
               Borrowed books (circulation)
             </h2>
             <p className="text-xs text-white/70">
-              View your borrowed books, due dates, returns, extensions, and fines.
+              View your borrowed books, due dates, returns, extensions, and
+              fines.
             </p>
           </div>
         </div>
@@ -413,7 +472,7 @@ export default function StudentCirculationPage() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by title…"
+                  placeholder="Search by title, status, or note…"
                   className="pl-9 bg-slate-900/70 border-white/20 text-white"
                 />
               </div>
@@ -459,7 +518,14 @@ export default function StudentCirculationPage() {
               <BellRing className="h-3 w-3" />
               Return requested by librarian
             </span>{" "}
-            tag means the librarian has asked you to bring back the physical book.
+            tag means the librarian has asked you to bring back the physical
+            book.
+          </p>
+
+          <p className="mt-1 text-[11px] text-white/60">
+            Any librarian message is shown in the{" "}
+            <span className="font-semibold text-rose-200">Librarian note</span>{" "}
+            column so you can read it clearly.
           </p>
         </CardHeader>
 
@@ -564,6 +630,9 @@ export default function StudentCirculationPage() {
                               <TableHead className="text-xs font-semibold text-white/70">
                                 Status
                               </TableHead>
+                              <TableHead className="w-72 text-xs font-semibold text-white/70">
+                                Librarian note
+                              </TableHead>
                               <TableHead className="w-44 text-xs font-semibold text-white/70 text-right">
                                 ₱Fine
                               </TableHead>
@@ -581,9 +650,12 @@ export default function StudentCirculationPage() {
                                 record.status === "pending_pickup";
                               const isPendingReturn =
                                 record.status === "pending_return";
-                              const isLegacyPending = record.status === "pending";
+                              const isLegacyPending =
+                                record.status === "pending";
                               const isAnyPending =
-                                isPendingPickup || isPendingReturn || isLegacyPending;
+                                isPendingPickup ||
+                                isPendingReturn ||
+                                isLegacyPending;
 
                               const linkedFine = finesByBorrowId[record.id];
                               const linkedFineStatus = linkedFine
@@ -598,34 +670,49 @@ export default function StudentCirculationPage() {
                                 : fineAmountFromRecord;
 
                               const isActiveBorrow = isBorrowed || isAnyPending;
-                              const overdueDays = computeOverdueDays(record.dueDate);
-                              const isOverdue = isActiveBorrow && overdueDays > 0;
+                              const overdueDays = computeOverdueDays(
+                                record.dueDate
+                              );
+                              const isOverdue =
+                                isActiveBorrow && overdueDays > 0;
 
-                              const extensionCount = (record.extensionCount ?? 0) as number;
-                              const extensionTotalDays = (record.extensionTotalDays ?? 0) as number;
-                              const lastExtensionDays = record.lastExtensionDays ?? null;
-                              const lastExtendedAt = record.lastExtendedAt ?? null;
+                              const extensionCount = (record.extensionCount ??
+                                0) as number;
+                              const extensionTotalDays =
+                                (record.extensionTotalDays ?? 0) as number;
+                              const lastExtensionDays =
+                                record.lastExtensionDays ?? null;
+                              const lastExtendedAt =
+                                record.lastExtendedAt ?? null;
 
                               const reqStatus = (
                                 record.extensionRequestStatus ?? "none"
                               ).toLowerCase();
                               const reqDays =
-                                typeof record.extensionRequestedDays === "number"
+                                typeof record.extensionRequestedDays ===
+                                "number"
                                   ? record.extensionRequestedDays
                                   : null;
                               const reqAt = record.extensionRequestedAt ?? null;
-                              const decidedAt = record.extensionDecidedAt ?? null;
+                              const decidedAt =
+                                record.extensionDecidedAt ?? null;
 
                               const extensionPending =
                                 isBorrowed && reqStatus === "pending";
 
-                              const hasLibrarianReturnRequest =
-                                !isReturned &&
-                                isBorrowed &&
-                                Boolean(record.returnRequestedAt);
+                              const librarianRequestNote = (
+                                record.returnRequestNote ?? ""
+                              ).trim();
+
+                              const hasLibrarianReturnRequest = Boolean(
+                                record.returnRequestedAt ||
+                                  librarianRequestNote ||
+                                  record.returnRequestedByName
+                              );
 
                               const librarianRequesterName =
-                                record.returnRequestedByName?.trim() || "Librarian";
+                                record.returnRequestedByName?.trim() ||
+                                "Librarian";
 
                               return (
                                 <TableRow
@@ -655,7 +742,8 @@ export default function StudentCirculationPage() {
                                       {extensionCount > 0 && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200 border border-sky-300/30 w-fit">
                                           <span className="h-1.5 w-1.5 rounded-full bg-sky-200" />
-                                          Extended {extensionCount}× (+{extensionTotalDays}d)
+                                          Extended {extensionCount}× (+
+                                          {extensionTotalDays}d)
                                         </span>
                                       )}
 
@@ -680,15 +768,18 @@ export default function StudentCirculationPage() {
 
                                       {reqStatus === "approved" && reqAt && (
                                         <span className="text-[10px] text-white/60">
-                                          Extension approved: {fmtDateTime(reqAt)}
+                                          Extension approved:{" "}
+                                          {fmtDateTime(reqAt)}
                                         </span>
                                       )}
 
-                                      {reqStatus === "disapproved" && decidedAt && (
-                                        <span className="text-[10px] text-white/60">
-                                          Extension disapproved: {fmtDateTime(decidedAt)}
-                                        </span>
-                                      )}
+                                      {reqStatus === "disapproved" &&
+                                        decidedAt && (
+                                          <span className="text-[10px] text-white/60">
+                                            Extension disapproved:{" "}
+                                            {fmtDateTime(decidedAt)}
+                                          </span>
+                                        )}
 
                                       {hasLibrarianReturnRequest && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200 border border-rose-400/40 w-fit">
@@ -699,17 +790,14 @@ export default function StudentCirculationPage() {
 
                                       {hasLibrarianReturnRequest && (
                                         <span className="text-[10px] text-white/60">
-                                          Requested by {librarianRequesterName} on{" "}
-                                          {fmtDateTime(record.returnRequestedAt)}
+                                          Requested by {librarianRequesterName}
+                                          {record.returnRequestedAt
+                                            ? ` • ${fmtDateTime(
+                                                record.returnRequestedAt
+                                              )}`
+                                            : ""}
                                         </span>
                                       )}
-
-                                      {hasLibrarianReturnRequest &&
-                                        record.returnRequestNote?.trim() && (
-                                          <span className="text-[10px] text-white/60">
-                                            Note: {record.returnRequestNote.trim()}
-                                          </span>
-                                        )}
                                     </div>
                                   </TableCell>
 
@@ -758,6 +846,24 @@ export default function StudentCirculationPage() {
 
                                   <TableCell
                                     className={
+                                      "align-top w-72 max-w-72 " + wrapCellClasses
+                                    }
+                                  >
+                                    {hasLibrarianReturnRequest ? (
+                                      <LibrarianReturnRequestNotice
+                                        requesterName={librarianRequesterName}
+                                        requestedAt={record.returnRequestedAt}
+                                        note={librarianRequestNote}
+                                      />
+                                    ) : (
+                                      <span className="text-xs text-white/40">
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+
+                                  <TableCell
+                                    className={
                                       "text-right align-top w-44 max-w-44 " +
                                       wrapCellClasses
                                     }
@@ -775,24 +881,27 @@ export default function StudentCirculationPage() {
                                             }
                                           >
                                             <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                            Accruing overdue fine ({peso(finalFineAmount)})
+                                            Accruing overdue fine (
+                                            {peso(finalFineAmount)})
                                           </span>
                                         )}
 
-                                      {linkedFine && linkedFineStatus === "active" && (
-                                        <span
-                                          className={
-                                            "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40 " +
-                                            badgeWrapClasses
-                                          }
-                                        >
-                                          <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                          Active fine (unpaid)
-                                        </span>
-                                      )}
+                                      {linkedFine &&
+                                        linkedFineStatus === "active" && (
+                                          <span
+                                            className={
+                                              "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40 " +
+                                              badgeWrapClasses
+                                            }
+                                          >
+                                            <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                                            Active fine (unpaid)
+                                          </span>
+                                        )}
 
                                       {linkedFine &&
-                                        linkedFineStatus === "pending_verification" && (
+                                        linkedFineStatus ===
+                                          "pending_verification" && (
                                           <span
                                             className={
                                               "inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-slate-400/40 " +
@@ -804,17 +913,18 @@ export default function StudentCirculationPage() {
                                           </span>
                                         )}
 
-                                      {linkedFine && linkedFineStatus === "paid" && (
-                                        <span
-                                          className={
-                                            "inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40 " +
-                                            badgeWrapClasses
-                                          }
-                                        >
-                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                                          Fine paid
-                                        </span>
-                                      )}
+                                      {linkedFine &&
+                                        linkedFineStatus === "paid" && (
+                                          <span
+                                            className={
+                                              "inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40 " +
+                                              badgeWrapClasses
+                                            }
+                                          >
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                                            Fine paid
+                                          </span>
+                                        )}
 
                                       {linkedFine &&
                                         linkedFineStatus === "cancelled" && (
@@ -839,26 +949,6 @@ export default function StudentCirculationPage() {
                                   >
                                     {isBorrowed ? (
                                       <div className="flex w-full flex-col gap-2 items-stretch">
-                                        {hasLibrarianReturnRequest && (
-                                          <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-left text-[11px] text-rose-100">
-                                            <div className="inline-flex items-center gap-1 font-semibold">
-                                              <BellRing className="h-3.5 w-3.5" />
-                                              Librarian requested this book to be returned
-                                            </div>
-                                            <div className="mt-1 text-rose-100/90">
-                                              Requested by {librarianRequesterName}
-                                              {record.returnRequestedAt
-                                                ? ` • ${fmtDateTime(record.returnRequestedAt)}`
-                                                : ""}
-                                            </div>
-                                            {record.returnRequestNote?.trim() && (
-                                              <div className="mt-1 text-rose-100/85">
-                                                Note: {record.returnRequestNote.trim()}
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
-
                                         <AlertDialog>
                                           <AlertDialogTrigger asChild>
                                             <Button
@@ -903,7 +993,8 @@ export default function StudentCirculationPage() {
                                                   Book:
                                                 </span>{" "}
                                                 <span className="font-semibold text-white">
-                                                  {record.bookTitle ?? `Book #${record.bookId}`}
+                                                  {record.bookTitle ??
+                                                    `Book #${record.bookId}`}
                                                 </span>
                                               </p>
                                               <p>
@@ -913,32 +1004,29 @@ export default function StudentCirculationPage() {
                                                 {fmtDate(record.borrowDate)}
                                               </p>
                                               <p>
-                                                <span className="text-white/60">Due date:</span>{" "}
+                                                <span className="text-white/60">
+                                                  Due date:
+                                                </span>{" "}
                                                 {fmtDate(record.dueDate)}
                                               </p>
 
                                               {hasLibrarianReturnRequest && (
-                                                <div className="mt-2 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-                                                  <div className="font-semibold">
-                                                    Librarian return request
-                                                  </div>
-                                                  <div className="mt-1">
-                                                    Requested by {librarianRequesterName}
-                                                    {record.returnRequestedAt
-                                                      ? ` • ${fmtDateTime(record.returnRequestedAt)}`
-                                                      : ""}
-                                                  </div>
-                                                  {record.returnRequestNote?.trim() && (
-                                                    <div className="mt-1">
-                                                      Note: {record.returnRequestNote.trim()}
-                                                    </div>
-                                                  )}
-                                                </div>
+                                                <LibrarianReturnRequestNotice
+                                                  requesterName={
+                                                    librarianRequesterName
+                                                  }
+                                                  requestedAt={
+                                                    record.returnRequestedAt
+                                                  }
+                                                  note={librarianRequestNote}
+                                                  className="mt-2"
+                                                />
                                               )}
 
                                               {finalFineAmount > 0 && (
                                                 <p className="text-red-300">
-                                                  Estimated fine if returned today:{" "}
+                                                  Estimated fine if returned
+                                                  today:{" "}
                                                   <span className="font-semibold">
                                                     {peso(finalFineAmount)}
                                                   </span>
@@ -949,14 +1037,22 @@ export default function StudentCirculationPage() {
                                             <AlertDialogFooter>
                                               <AlertDialogCancel
                                                 className="border-white/20 text-white hover:bg-black/20"
-                                                disabled={returnBusyId === record.id}
+                                                disabled={
+                                                  returnBusyId === record.id
+                                                }
                                               >
                                                 Cancel
                                               </AlertDialogCancel>
                                               <AlertDialogAction
                                                 className="bg-purple-600 hover:bg-purple-700 text-white"
-                                                disabled={returnBusyId === record.id}
-                                                onClick={() => void handleRequestReturn(record)}
+                                                disabled={
+                                                  returnBusyId === record.id
+                                                }
+                                                onClick={() =>
+                                                  void handleRequestReturn(
+                                                    record
+                                                  )
+                                                }
                                               >
                                                 {returnBusyId === record.id ? (
                                                   <span className="inline-flex items-center gap-2">
@@ -981,11 +1077,15 @@ export default function StudentCirculationPage() {
                                                 "border-sky-300/40 text-sky-200 hover:bg-sky-500/10 " +
                                                 actionButtonBaseClasses
                                               }
-                                              disabled={extendBusyId === record.id || extensionPending}
+                                              disabled={
+                                                extendBusyId === record.id ||
+                                                extensionPending
+                                              }
                                               onClick={() => {
                                                 setExtendReasonById((prev) => ({
                                                   ...prev,
-                                                  [record.id]: prev[record.id] ?? "",
+                                                  [record.id]:
+                                                    prev[record.id] ?? "",
                                                 }));
                                               }}
                                             >
@@ -1031,17 +1131,23 @@ export default function StudentCirculationPage() {
                                                     <span className="font-semibold text-sky-200">
                                                       {extensionCount}×
                                                     </span>{" "}
-                                                    (total +{extensionTotalDays} days)
+                                                    (total +{extensionTotalDays}{" "}
+                                                    days)
                                                   </p>
                                                 )}
 
                                                 {reqStatus === "pending" && (
                                                   <p className="text-xs text-amber-200/90">
-                                                    You already have a pending request{" "}
+                                                    You already have a pending
+                                                    request{" "}
                                                     {typeof reqDays === "number"
                                                       ? `(+${reqDays} days)`
                                                       : ""}{" "}
-                                                    {reqAt ? `submitted at ${fmtDateTime(reqAt)}.` : "."}
+                                                    {reqAt
+                                                      ? `submitted at ${fmtDateTime(
+                                                          reqAt
+                                                        )}.`
+                                                      : "."}
                                                   </p>
                                                 )}
                                               </div>
@@ -1059,16 +1165,26 @@ export default function StudentCirculationPage() {
                                                   Reason (optional)
                                                 </label>
                                                 <Input
-                                                  value={extendReasonById[record.id] ?? ""}
+                                                  value={
+                                                    extendReasonById[
+                                                      record.id
+                                                    ] ?? ""
+                                                  }
                                                   onChange={(e) =>
-                                                    setExtendReasonById((prev) => ({
-                                                      ...prev,
-                                                      [record.id]: e.target.value,
-                                                    }))
+                                                    setExtendReasonById(
+                                                      (prev) => ({
+                                                        ...prev,
+                                                        [record.id]:
+                                                          e.target.value,
+                                                      })
+                                                    )
                                                   }
                                                   placeholder="e.g. Research requirement"
                                                   className="bg-slate-950/60 border-white/20 text-white"
-                                                  disabled={extendBusyId === record.id || extensionPending}
+                                                  disabled={
+                                                    extendBusyId === record.id ||
+                                                    extensionPending
+                                                  }
                                                 />
                                               </div>
                                             </div>
@@ -1076,14 +1192,23 @@ export default function StudentCirculationPage() {
                                             <AlertDialogFooter>
                                               <AlertDialogCancel
                                                 className="border-white/20 text-white hover:bg-black/20"
-                                                disabled={extendBusyId === record.id}
+                                                disabled={
+                                                  extendBusyId === record.id
+                                                }
                                               >
                                                 Cancel
                                               </AlertDialogCancel>
                                               <AlertDialogAction
                                                 className="bg-sky-600 hover:bg-sky-700 text-white"
-                                                disabled={extendBusyId === record.id || extensionPending}
-                                                onClick={() => void handleRequestExtension(record)}
+                                                disabled={
+                                                  extendBusyId === record.id ||
+                                                  extensionPending
+                                                }
+                                                onClick={() =>
+                                                  void handleRequestExtension(
+                                                    record
+                                                  )
+                                                }
                                               >
                                                 {extendBusyId === record.id ? (
                                                   <span className="inline-flex items-center gap-2">
@@ -1133,7 +1258,8 @@ export default function StudentCirculationPage() {
                                         variant="outline"
                                         disabled
                                         className={
-                                          "border-white/20 text-white/60 " + actionButtonBaseClasses
+                                          "border-white/20 text-white/60 " +
+                                          actionButtonBaseClasses
                                         }
                                       >
                                         Already returned
