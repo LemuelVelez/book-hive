@@ -96,6 +96,8 @@ function roleBadgeClasses(role: Role) {
       return "bg-red-600/80 hover:bg-red-600 text-white border-red-500/70";
     case "librarian":
       return "bg-purple-600/80 hover:bg-purple-600 text-white border-purple-500/70";
+    case "assistant_librarian":
+      return "bg-indigo-600/80 hover:bg-indigo-600 text-white border-indigo-500/70";
     case "faculty":
       return "bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70";
     case "other":
@@ -105,13 +107,29 @@ function roleBadgeClasses(role: Role) {
   }
 }
 
+function roleLabel(role: Role) {
+  switch (role) {
+    case "assistant_librarian":
+      return "assistant librarian";
+    default:
+      return role;
+  }
+}
+
 function approvalBadgeClasses(approved: boolean) {
   return approved
     ? "bg-emerald-600/80 hover:bg-emerald-600 text-white border-emerald-500/70"
     : "bg-orange-600/80 hover:bg-orange-600 text-white border-orange-500/70";
 }
 
-const ROLE_OPTIONS: Role[] = ["student", "other", "faculty", "librarian", "admin"];
+const ROLE_OPTIONS: Role[] = [
+  "student",
+  "other",
+  "faculty",
+  "assistant_librarian",
+  "librarian",
+  "admin",
+];
 
 type BusyState =
   | { id: string; action: "approve" | "disapprove" | "delete" | "role" | "credentials" }
@@ -125,6 +143,13 @@ type ConfirmState =
 function normalizeRole(raw: unknown): Role {
   const v = String(raw ?? "").trim().toLowerCase();
   if (v === "student") return "student";
+  if (
+    v === "assistant_librarian" ||
+    v === "assistant librarian" ||
+    v === "assistant-librarian"
+  ) {
+    return "assistant_librarian";
+  }
   if (v === "librarian") return "librarian";
   if (v === "faculty") return "faculty";
   if (v === "admin") return "admin";
@@ -438,6 +463,7 @@ export default function AdminUsersPage() {
       student: 0,
       other: 0,
       faculty: 0,
+      assistant_librarian: 0,
       librarian: 0,
       admin: 0,
     };
@@ -658,23 +684,29 @@ export default function AdminUsersPage() {
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("student")}>student</Badge>
+                <Badge className={roleBadgeClasses("student")}>{roleLabel("student")}</Badge>
                 <span className="opacity-80">{countsByRole.student}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("other")}>other</Badge>
+                <Badge className={roleBadgeClasses("other")}>{roleLabel("other")}</Badge>
                 <span className="opacity-80">{countsByRole.other}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("faculty")}>faculty</Badge>
+                <Badge className={roleBadgeClasses("faculty")}>{roleLabel("faculty")}</Badge>
                 <span className="opacity-80">{countsByRole.faculty}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("librarian")}>librarian</Badge>
+                <Badge className={roleBadgeClasses("assistant_librarian")}>
+                  {roleLabel("assistant_librarian")}
+                </Badge>
+                <span className="opacity-80">{countsByRole.assistant_librarian}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Badge className={roleBadgeClasses("librarian")}>{roleLabel("librarian")}</Badge>
                 <span className="opacity-80">{countsByRole.librarian}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("admin")}>admin</Badge>
+                <Badge className={roleBadgeClasses("admin")}>{roleLabel("admin")}</Badge>
                 <span className="opacity-80">{countsByRole.admin}</span>
               </span>
             </div>
@@ -820,11 +852,16 @@ export default function AdminUsersPage() {
                     <SelectContent className="bg-slate-900 text-white border-white/10">
                       {ROLE_OPTIONS.map((r) => (
                         <SelectItem key={r} value={r}>
-                          {r}
+                          {roleLabel(r)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {cRole === "assistant_librarian" ? (
+                    <p className="text-xs text-white/50">
+                      Use this for assistant librarian accounts. Route access will follow the librarian dashboard flow.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-2">
@@ -1053,7 +1090,7 @@ export default function AdminUsersPage() {
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2">
                             <Badge variant="default" className={roleBadgeClasses(currentRole)}>
-                              {currentRole}
+                              {roleLabel(currentRole)}
                             </Badge>
 
                             <Select
@@ -1061,13 +1098,13 @@ export default function AdminUsersPage() {
                               onValueChange={(v) => setRoleDraft((p) => ({ ...p, [u.id]: v as Role }))}
                               disabled={isSelf || anyBusyForRow}
                             >
-                              <SelectTrigger className="h-8 w-[140px] bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
+                              <SelectTrigger className="h-8 w-[170px] bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="bg-slate-900 text-white border-white/10">
                                 {ROLE_OPTIONS.map((r) => (
                                   <SelectItem key={r} value={r}>
-                                    {r}
+                                    {roleLabel(r)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -1075,7 +1112,7 @@ export default function AdminUsersPage() {
                           </div>
 
                           <div className="text-[11px] text-white/45">
-                            Account type (info): <span className="text-white/70">{u.accountType}</span>
+                            Account type (info): <span className="text-white/70">{roleLabel(u.accountType)}</span>
                           </div>
                         </div>
 
@@ -1167,7 +1204,7 @@ export default function AdminUsersPage() {
 
                         {roleChanged ? (
                           <div className="mt-1 text-[11px] text-white/50">
-                            Pending role change: <span className="text-white/80 font-medium">{draft}</span>
+                            Pending role change: <span className="text-white/80 font-medium">{roleLabel(draft)}</span>
                           </div>
                         ) : null}
                       </TableCell>
@@ -1191,7 +1228,7 @@ export default function AdminUsersPage() {
               {confirm?.type === "delete"
                 ? "This action cannot be undone."
                 : confirm
-                ? `Change role from "${confirm.from}" to "${confirm.to}"?`
+                ? `Change role from "${roleLabel(confirm.from)}" to "${roleLabel(confirm.to)}"?`
                 : null}
             </DialogDescription>
           </DialogHeader>

@@ -24,6 +24,7 @@ export function dashboardForRole(
     case "student":
     case "other":
       return "/dashboard";
+    case "assistant_librarian":
     case "librarian":
       return "/dashboard/librarian";
     case "faculty":
