@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ROUTES, API_BASE } from "@/api/auth/route";
 
-export type Role = "student" | "librarian" | "faculty" | "admin" | "other";
+export type Role =
+  | "student"
+  | "assistant_librarian"
+  | "librarian"
+  | "faculty"
+  | "admin"
+  | "other";
 
 export type UserDTO = {
   id: string;
@@ -75,6 +81,13 @@ function getErrorMessage(e: unknown): string {
 function normalizeRole(raw: unknown): Role {
   const v = String(raw ?? "").trim().toLowerCase();
   if (v === "student") return "student";
+  if (
+    v === "assistant_librarian" ||
+    v === "assistant librarian" ||
+    v === "assistant-librarian"
+  ) {
+    return "assistant_librarian";
+  }
   if (v === "librarian") return "librarian";
   if (v === "faculty") return "faculty";
   if (v === "admin") return "admin";
@@ -252,7 +265,7 @@ export async function register(payload: {
   fullName: string;
   email: string;
   password: string;
-  accountType: "student" | "other";
+  accountType: "student" | "assistant_librarian" | "other";
   role: Role;
   studentId?: string;
   course?: string;
