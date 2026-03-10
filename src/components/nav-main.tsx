@@ -21,6 +21,7 @@ import {
     Coins,
     BarChart3,
 } from "lucide-react"
+import { me as apiMe, type Role } from "@/lib/authentication"
 
 type Item = {
     label: string
@@ -34,10 +35,32 @@ export function NavMain() {
     const location = useLocation()
     const pathname = location.pathname
 
+    const [currentRole, setCurrentRole] = React.useState<Role | null | undefined>(undefined)
+
+    React.useEffect(() => {
+        let cancelled = false
+
+        ; (async () => {
+            try {
+                const user = await apiMe()
+                if (!cancelled) {
+                    const role = (user?.role ?? user?.accountType ?? null) as Role | null
+                    setCurrentRole(role)
+                }
+            } catch {
+                if (!cancelled) setCurrentRole(null)
+            }
+        })()
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
     let groupLabel = "Dashboard"
     let items: Item[] = [
         // Fallback for /dashboard root or unknown
-        { label: "Overview", icon: Home, to: "/dashboard", exact: true },
+        { label: "Dashboard", icon: Home, to: "/dashboard", exact: true },
     ]
 
     // Borrower (Student + Other) section:
@@ -49,12 +72,14 @@ export function NavMain() {
     const isBorrowerSection =
         pathname.startsWith("/dashboard") && !isLibrarian && !isFaculty && !isAdmin
 
+    const isAssistantLibrarian = currentRole === "assistant_librarian"
+
     if (isBorrowerSection) {
         // Shared navigation for "student" and "other" roles
         groupLabel = "My Library"
         items = [
             {
-                label: "Overview",
+                label: "Dashboard",
                 icon: Home,
                 to: "/dashboard",
                 exact: true,
@@ -86,60 +111,82 @@ export function NavMain() {
             },
         ]
     } else if (isLibrarian) {
-        groupLabel = "Librarian"
-        items = [
-            {
-                label: "Overview",
-                icon: Home,
-                to: "/dashboard/librarian",
-                exact: true,
-            },
-            {
-                label: "Books",
-                icon: BookOpen,
-                to: "/dashboard/librarian/books",
-            },
-            {
-                label: "Borrow Records",
-                icon: ListChecks,
-                to: "/dashboard/librarian/borrow-records",
-            },
-            {
-                label: "Fines",
-                icon: ReceiptText,
-                to: "/dashboard/librarian/fines",
-            },
-            {
-                label: "Income",
-                icon: Coins,
-                to: "/dashboard/librarian/income",
-            },
-            {
-                label: "Damage Reports",
-                icon: ShieldAlert,
-                to: "/dashboard/librarian/damage-reports",
-            },
-            {
-                label: "Feedbacks",
-                icon: MessageSquare,
-                to: "/dashboard/librarian/feedbacks",
-            },
-            {
-                label: "Users",
-                icon: Users2,
-                to: "/dashboard/librarian/users",
-            },
-            {
-                label: "Settings",
-                icon: Settings,
-                to: "/dashboard/librarian/settings",
-            },
-        ]
+        if (isAssistantLibrarian) {
+            groupLabel = "Assistant Librarian"
+            items = [
+                {
+                    label: "Dashboard",
+                    icon: Home,
+                    to: "/dashboard/librarian",
+                    exact: true,
+                },
+                {
+                    label: "Borrow Records",
+                    icon: ListChecks,
+                    to: "/dashboard/librarian/borrow-records",
+                },
+                {
+                    label: "Settings",
+                    icon: Settings,
+                    to: "/dashboard/librarian/settings",
+                },
+            ]
+        } else {
+            groupLabel = "Librarian"
+            items = [
+                {
+                    label: "Dashboard",
+                    icon: Home,
+                    to: "/dashboard/librarian",
+                    exact: true,
+                },
+                {
+                    label: "Books",
+                    icon: BookOpen,
+                    to: "/dashboard/librarian/books",
+                },
+                {
+                    label: "Borrow Records",
+                    icon: ListChecks,
+                    to: "/dashboard/librarian/borrow-records",
+                },
+                {
+                    label: "Fines",
+                    icon: ReceiptText,
+                    to: "/dashboard/librarian/fines",
+                },
+                {
+                    label: "Income",
+                    icon: Coins,
+                    to: "/dashboard/librarian/income",
+                },
+                {
+                    label: "Damage Reports",
+                    icon: ShieldAlert,
+                    to: "/dashboard/librarian/damage-reports",
+                },
+                {
+                    label: "Feedbacks",
+                    icon: MessageSquare,
+                    to: "/dashboard/librarian/feedbacks",
+                },
+                {
+                    label: "Users",
+                    icon: Users2,
+                    to: "/dashboard/librarian/users",
+                },
+                {
+                    label: "Settings",
+                    icon: Settings,
+                    to: "/dashboard/librarian/settings",
+                },
+            ]
+        }
     } else if (isFaculty) {
         groupLabel = "Faculty"
         items = [
             {
-                label: "Overview",
+                label: "Dashboard",
                 icon: Home,
                 to: "/dashboard/faculty",
                 exact: true,
@@ -174,7 +221,7 @@ export function NavMain() {
         groupLabel = "Admin"
         items = [
             {
-                label: "Overview",
+                label: "Dashboard",
                 icon: Home,
                 to: "/dashboard/admin",
                 exact: true,
