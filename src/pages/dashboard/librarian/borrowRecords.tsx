@@ -125,6 +125,20 @@ function studentFullName(rec: BorrowRecordDTO): string {
   return `User #${rec.userId}`;
 }
 
+function getStaffActorLabel(
+  name?: string | null,
+  actorId?: string | number | null
+): string {
+  const cleanName = (name || "").trim();
+  if (cleanName) return cleanName;
+
+  if (actorId !== null && actorId !== undefined && String(actorId).trim()) {
+    return `Staff account #${actorId} (account removed)`;
+  }
+
+  return "Library staff";
+}
+
 function computeAutoFine(dueDate?: string | null) {
   if (!dueDate) return { overdueDays: 0, autoFine: 0 };
 
@@ -774,6 +788,11 @@ export default function LibrarianBorrowRecordsPage() {
                               const canRequestReturn =
                                 isBorrowed && !hasReturnRequest;
 
+                              const hasReturnRequester =
+                                Boolean((rec.returnRequestedByName || "").trim()) ||
+                                rec.returnRequestedBy !== null &&
+                                  rec.returnRequestedBy !== undefined;
+
                               return (
                                 <TableRow
                                   key={rec.id}
@@ -849,9 +868,13 @@ export default function LibrarianBorrowRecordsPage() {
                                           <div>
                                             {fmtDateTime(rec.returnRequestedAt)}
                                           </div>
-                                          {rec.returnRequestedByName ? (
+                                          {hasReturnRequester ? (
                                             <div>
-                                              By: {rec.returnRequestedByName}
+                                              By:{" "}
+                                              {getStaffActorLabel(
+                                                rec.returnRequestedByName,
+                                                rec.returnRequestedBy ?? null
+                                              )}
                                             </div>
                                           ) : null}
                                           {rec.returnRequestNote ? (
@@ -1154,7 +1177,7 @@ export default function LibrarianBorrowRecordsPage() {
                 disabled={submittingRequestReturn}
               />
               <p className="text-[11px] text-white/60">
-                The borrower will be able to see that the librarian requested the
+                The borrower will be able to see that library staff requested the
                 return of this book.
               </p>
             </div>

@@ -188,7 +188,7 @@ function App() {
           <Route
             path="/dashboard/librarian"
             element={
-              <RequireRole allow={['librarian']}>
+              <RequireRole allow={['librarian', 'assistant_librarian']}>
                 <LibrarianDashboard />
               </RequireRole>
             }
@@ -197,7 +197,7 @@ function App() {
           <Route
             path="/dashboard/librarian/books"
             element={
-              <RequireRole allow={['librarian']}>
+              <RequireRole allow={['librarian', 'assistant_librarian']}>
                 <LibrarianBooksPage />
               </RequireRole>
             }
@@ -217,7 +217,7 @@ function App() {
           <Route
             path="/dashboard/librarian/borrow-records"
             element={
-              <RequireRole allow={['librarian']}>
+              <RequireRole allow={['librarian', 'assistant_librarian']}>
                 <LibrarianBorrowRecordsPage />
               </RequireRole>
             }
@@ -269,6 +269,34 @@ function App() {
             element={
               <RequireRole allow={['librarian']}>
                 <LibrarianSettingsPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Assistant Librarian limited-access aliases */}
+          <Route
+            path="/dashboard/assistant-librarian"
+            element={
+              <RequireRole allow={['assistant_librarian']}>
+                <LibrarianDashboard />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/dashboard/assistant-librarian/books"
+            element={
+              <RequireRole allow={['assistant_librarian']}>
+                <LibrarianBooksPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/dashboard/assistant-librarian/borrow-records"
+            element={
+              <RequireRole allow={['assistant_librarian']}>
+                <LibrarianBorrowRecordsPage />
               </RequireRole>
             }
           />
