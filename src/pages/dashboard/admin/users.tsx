@@ -1198,7 +1198,6 @@ export default function AdminUsersPage() {
                             title={isSelf ? "You can’t delete yourself" : "Delete user"}
                           >
                             {isBusyDelete ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                            <span className="ml-1">Delete</span>
                           </Button>
                         </div>
 
