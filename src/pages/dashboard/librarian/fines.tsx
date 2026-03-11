@@ -88,9 +88,7 @@ type DamageReportRow = DamageReportDTO & {
 type JsonOk<T> = { ok: true } & T;
 
 type FineRow = FineDTO & {
-    /** Where this row came from */
     _source?: "fine" | "damage";
-    /** Extra fields when coming from a damage report */
     damageReportId?: string | number | null;
     damageSeverity?: DamageSeverity | null;
     damageStatus?: DamageStatus | null;
@@ -160,6 +158,11 @@ function parseLooseDate(raw?: string | null): Date | null {
     }
     const date = new Date(raw);
     return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getFineDatePaid(fine: FineRow): string | null {
+    if (fine.status !== "paid") return null;
+    return ((fine as any).resolvedAt || (fine as any).updatedAt || (fine as any).createdAt || null) as any;
 }
 
 /**
@@ -235,7 +238,7 @@ function getFineRatePerHour(fine: FineRow): number {
 function getOfficialReceiptLabel(raw: unknown): string | null {
     if (raw === null || raw === undefined) return null;
     const value = String(raw).trim();
-    return value ? `OR #${value}` : null;
+    return value ? `OR ${value}` : null;
 }
 
 function statusWeight(status: FineStatus): number {
@@ -324,7 +327,7 @@ function toPrintableFineRecord(row: FineRow): PrintableFineRecord {
         status: row.status,
         amount: normalizeFine(row.amount),
         createdAt: row.createdAt ?? null,
-        resolvedAt: row.resolvedAt ?? null,
+        resolvedAt: getFineDatePaid(row),
         borrowDueDate: row.borrowDueDate ?? null,
         borrowReturnDate: row.borrowReturnDate ?? null,
         sourceLabel: row._source ?? "fine",
@@ -739,8 +742,8 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
 
         const receiptNumber = payOfficialReceiptNumber.trim();
         if (!receiptNumber) {
-            toast.error("Cashier OR # is required", {
-                description: "Please enter the cashier official receipt number before marking this fine as paid.",
+            toast.error("Cashier OR is required", {
+                description: "Please enter the cashier official receipt before marking this fine as paid.",
             });
             return;
         }
@@ -756,7 +759,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
             );
 
             toast.success("Fine marked as paid", {
-                description: `Recorded cashier proof: OR #${receiptNumber}.`,
+                description: `Recorded cashier proof: OR ${receiptNumber}.`,
             });
 
             resetPayDialog();
@@ -897,14 +900,13 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
 
     return (
         <DashboardLayout title="Fines">
-            {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <ReceiptText className="h-5 w-5" />
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Fines</h2>
                         <p className="text-xs text-white/70">
-                            Over-the-counter payments only. Collect the payment physically, require the cashier OR #,
+                            Over-the-counter payments only. Collect the payment physically, require the cashier OR,
                             then mark the fine as <span className="font-semibold text-emerald-200">Paid</span>.
                         </p>
                         <p className="mt-1 text-[11px] text-amber-200/90">
@@ -953,7 +955,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search by user, book, OR #, damage report, or reason…"
+                                    placeholder="Search by user, book, OR, damage report, or reason…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>
@@ -1063,7 +1065,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                             <TableHead className="text-xs font-semibold text-white/70">₱Amount</TableHead>
                                                             <TableHead className="text-xs font-semibold text-white/70">Duration</TableHead>
                                                             <TableHead className="text-xs font-semibold text-white/70">Created</TableHead>
-                                                            <TableHead className="text-xs font-semibold text-white/70">Resolved</TableHead>
+                                                            <TableHead className="text-xs font-semibold text-white/70">Date paid</TableHead>
                                                             <TableHead className="text-xs font-semibold text-white/70 text-right">
                                                                 Actions
                                                             </TableHead>
@@ -1270,7 +1272,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
 
                                                                     <TableCell className="text-xs opacity-80">{fmtDate(fine.createdAt)}</TableCell>
                                                                     <TableCell className="text-xs opacity-80">
-                                                                        {fine.resolvedAt ? fmtDate(fine.resolvedAt) : "—"}
+                                                                        {fmtDate(getFineDatePaid(fine))}
                                                                     </TableCell>
 
                                                                     <TableCell className={"text-right w-[230px] max-w-[250px] " + cellScrollbarClasses}>
@@ -1410,7 +1412,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                     <AlertDialogHeader>
                         <AlertDialogTitle>Mark this fine as paid?</AlertDialogTitle>
                         <AlertDialogDescription className="text-white/70">
-                            Enter the cashier official receipt number first. This OR # will be saved as payment proof.
+                            Enter the cashier official receipt first. This OR will be saved as payment proof.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
 
@@ -1436,11 +1438,11 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-xs font-medium text-white/80">Cashier OR #</label>
+                                <label className="text-xs font-medium text-white/80">Cashier OR</label>
                                 <Input
                                     value={payOfficialReceiptNumber}
                                     onChange={(e) => setPayOfficialReceiptNumber(e.target.value)}
-                                    placeholder="Enter official receipt number"
+                                    placeholder="Enter official receipt"
                                     className="bg-slate-900/70 border-white/20 text-white"
                                     autoFocus
                                 />

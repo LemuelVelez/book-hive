@@ -103,7 +103,7 @@ function normalizeAmount(value: any): number {
 function getOfficialReceiptLabel(raw: unknown): string | null {
     if (raw === null || raw === undefined) return null
     const value = String(raw).trim()
-    return value ? `OR #${value}` : null
+    return value ? `OR ${value}` : null
 }
 
 /**
@@ -125,9 +125,13 @@ function suggestedFineFromSeverity(severity?: DamageSeverity | null): number {
     }
 }
 
-function getRowPaidDate(r: IncomeRow): string | null {
-    if (r.status === "paid") return (r.resolvedAt || r.updatedAt || r.createdAt || null) as any
-    return (r.createdAt || null) as any
+function getRowDatePaid(r: IncomeRow): string | null {
+    if (r.status !== "paid") return null
+    return ((r as any).resolvedAt || (r as any).updatedAt || (r as any).createdAt || null) as any
+}
+
+function getRowSortDate(r: IncomeRow): string | null {
+    return (getRowDatePaid(r) || (r as any).createdAt || null) as any
 }
 
 function toMonthKey(dateStr?: string | null): string | null {
@@ -209,7 +213,6 @@ function buildVirtualDamageIncomeRows(
 ): IncomeRow[] {
     if (!reports?.length) return []
 
-    // Collect all damageReportIds already represented by real fines.
     const existingDamageIds = new Set(
         existingFines
             .map((f) => String((f as any).damageReportId ?? ""))
@@ -221,10 +224,7 @@ function buildVirtualDamageIncomeRows(
     for (const r of reports) {
         const idStr = String(r.id)
 
-        // Only income if PAID
         if (r.status !== "paid") continue
-
-        // If already in fines list, skip virtual row
         if (existingDamageIds.has(idStr)) continue
 
         const rawFee = (r as any).fee
@@ -343,12 +343,10 @@ export default function LibrarianIncomePage() {
         setLoading(true)
 
         try {
-            const fineData = await fetchFines() // librarian/admin list endpoint
+            const fineData = await fetchFines()
 
-            // Start with real fines
             let incomeRows: IncomeRow[] = fineData.map((f) => ({ ...(f as FineDTO), _source: "fine" }))
 
-            // Attempt to include paid damage reports even if backend hasn't synced fines yet
             try {
                 const damageReports = await fetchDamageReportsForIncome()
                 const virtualDamage = buildVirtualDamageIncomeRows(damageReports, fineData)
@@ -385,16 +383,15 @@ export default function LibrarianIncomePage() {
     }
 
     const monthOptions = React.useMemo(() => {
-        // Build options from PAID rows first (income), then include other rows if needed.
         const set = new Set<string>()
         for (const r of rows) {
-            const key = toMonthKey(getRowPaidDate(r))
+            if (r.status !== "paid") continue
+            const key = toMonthKey(getRowDatePaid(r))
             if (key) set.add(key)
         }
-        return Array.from(set).sort((a, b) => b.localeCompare(a)) // newest month first
+        return Array.from(set).sort((a, b) => b.localeCompare(a))
     }, [rows])
 
-    // If the currently selected month is no longer present, reset to all (e.g., after refresh)
     React.useEffect(() => {
         if (monthFilter === "all") return
         if (!monthOptions.includes(monthFilter)) setMonthFilter("all")
@@ -433,7 +430,7 @@ export default function LibrarianIncomePage() {
 
         if (monthFilter !== "all") {
             list = list.filter((r) => {
-                const key = toMonthKey(getRowPaidDate(r))
+                const key = toMonthKey(getRowDatePaid(r))
                 return key === monthFilter
             })
         }
@@ -442,20 +439,18 @@ export default function LibrarianIncomePage() {
         if (q) {
             list = list.filter((r) => {
                 const anyRow = r as any
-                // Names first for user-friendly searching
                 const haystack =
                     `${r.studentName ?? ""} ${r.studentEmail ?? ""} ${r.studentId ?? ""} ` +
                     `${r.bookTitle ?? ""} ${r.reason ?? ""} ${r.officialReceiptNumber ?? ""} ` +
-                    `${r.id} ${r.bookId ?? ""} ${r.borrowRecordId ?? ""} ` +
+                    `${r.id} ${r.bookId ?? ""} ${r.borrowRecordId ?? ""} ${r.borrowDueDate ?? ""} ` +
                     `${anyRow.damageReportId ?? ""} ${anyRow.damageNotes ?? ""}`
                 return haystack.toLowerCase().includes(q)
             })
         }
 
-        // Sort newest first by resolvedAt (preferred), else createdAt
         return list.sort((a, b) => {
-            const da = (getRowPaidDate(a) || "").toString()
-            const db = (getRowPaidDate(b) || "").toString()
+            const da = (getRowSortDate(a) || "").toString()
+            const db = (getRowSortDate(b) || "").toString()
             return db.localeCompare(da)
         })
     }, [rows, search, statusFilter, monthFilter])
@@ -480,25 +475,13 @@ export default function LibrarianIncomePage() {
         return { paidTotal, paidCount, activeTotal, activeCount, totalCount: filtered.length }
     }, [filtered])
 
+    const printableSourceRows = React.useMemo(() => {
+        return filtered.filter((r) => r.status === "paid")
+    }, [filtered])
+
     const printableRecords = React.useMemo<PrintableIncomeRecord[]>(() => {
-        return filtered.map((r) => {
-            const sourceText =
-                r._source === "damage" || (r as any).damageReportId
-                    ? "Damage"
-                    : "Borrow fine"
-
-            const referenceParts: string[] = [`#${r.id}`]
-            if ((r as any).damageReportId) {
-                referenceParts.push(`Damage #${(r as any).damageReportId}`)
-            }
-            if (r.borrowRecordId) {
-                referenceParts.push(`Borrow #${r.borrowRecordId}`)
-            }
-
+        return printableSourceRows.map((r) => {
             const receiptLabel = getOfficialReceiptLabel(r.officialReceiptNumber)
-            if (receiptLabel) {
-                referenceParts.push(receiptLabel)
-            }
 
             return {
                 id: r.id,
@@ -512,27 +495,17 @@ export default function LibrarianIncomePage() {
                 status: r.status,
                 amount: normalizeAmount(r.amount),
                 createdAt: r.createdAt ?? null,
-                resolvedAt: r.resolvedAt ?? r.updatedAt ?? null,
-                paidDate: getRowPaidDate(r),
+                resolvedAt: getRowDatePaid(r),
+                paidDate: getRowDatePaid(r),
                 sourceLabel: r._source ?? "fine",
-                referenceLabel: `${sourceText} • ${referenceParts.join(" • ")}`,
+                referenceLabel: receiptLabel ?? "—",
                 damageSeverity: r.damageSeverity ?? null,
             }
         })
-    }, [filtered])
+    }, [printableSourceRows])
 
     const exportSubtitle = React.useMemo(() => {
-        const parts: string[] = []
-
-        if (statusFilter === "all") {
-            parts.push("All statuses")
-        } else if (statusFilter === "paid") {
-            parts.push("Paid income only")
-        } else if (statusFilter === "active") {
-            parts.push("Active records only")
-        } else {
-            parts.push("Cancelled records only")
-        }
+        const parts: string[] = ["Paid income only"]
 
         if (monthFilter !== "all") {
             parts.push(monthLabel(monthFilter))
@@ -546,15 +519,18 @@ export default function LibrarianIncomePage() {
             parts.push(`Search: ${compactSearch}`)
         }
 
-        return `Current filtered librarian income view • ${parts.join(" • ")}`
-    }, [statusFilter, monthFilter, search])
+        if (statusFilter !== "paid") {
+            parts.push(`Source view: ${statusFilter}`)
+        }
+
+        return `Current librarian income report • ${parts.join(" • ")}`
+    }, [monthFilter, search, statusFilter])
 
     const exportFileNamePrefix = React.useMemo(() => {
-        let value = "bookhive-income-report"
-        if (statusFilter !== "all") value += `-${statusFilter}`
+        let value = "bookhive-income-report-paid"
         if (monthFilter !== "all") value += `-${monthFilter}`
         return value
-    }, [statusFilter, monthFilter])
+    }, [monthFilter])
 
     const handleOpenExportPreview = React.useCallback(() => {
         setExportAutoPrint(false)
@@ -577,7 +553,6 @@ export default function LibrarianIncomePage() {
 
     return (
         <DashboardLayout title="Income">
-            {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <div className="flex items-start gap-2">
                     <Coins className="h-5 w-5" />
@@ -588,7 +563,7 @@ export default function LibrarianIncomePage() {
                         </p>
                         <p className="mt-1 text-[11px] text-amber-200/90">
                             Borrow overdue fines follow <span className="font-semibold">{formatPHP(DEFAULT_FINE_PER_HOUR)} per hour</span>.
-                            Paid rows also show the cashier OR # when recorded.
+                            Paid rows also show the cashier <span className="font-semibold">OR</span> and the <span className="font-semibold">due date</span> when available.
                         </p>
                     </div>
                 </div>
@@ -596,7 +571,7 @@ export default function LibrarianIncomePage() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm text-white/70">
                     <div className="flex flex-col items-start sm:items-end">
                         <span>
-                            Total collected (All paid):{" "}
+                            Total income (All paid):{" "}
                             <span className="font-semibold text-emerald-200">
                                 {formatPHP(statsAll.paidTotal)} ({statsAll.paidCount})
                             </span>
@@ -617,7 +592,7 @@ export default function LibrarianIncomePage() {
                             variant="outline"
                             className="border-white/20 m-1 text-white/90 hover:bg-white/10"
                             onClick={handleOpenExportPreview}
-                            disabled={loading || filtered.length === 0}
+                            disabled={loading || printableRecords.length === 0}
                         >
                             <FileSearch className="mr-2 h-4 w-4" />
                             Preview PDF
@@ -628,7 +603,7 @@ export default function LibrarianIncomePage() {
                             variant="outline"
                             className="border-emerald-400/40 m-1 text-emerald-100 hover:bg-emerald-500/10"
                             onClick={handleQuickPrint}
-                            disabled={loading || filtered.length === 0}
+                            disabled={loading || printableRecords.length === 0}
                         >
                             <Printer className="mr-2 h-4 w-4" />
                             Print PDF
@@ -664,7 +639,7 @@ export default function LibrarianIncomePage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search name, email, book title, OR #, notes…"
+                                    placeholder="Search name, email, book title, OR, due date, notes…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>
@@ -731,21 +706,21 @@ export default function LibrarianIncomePage() {
                                 <TableRow className="border-white/10">
                                     <TableHead className="text-xs font-semibold text-white/70">User</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Book borrowed</TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">Due date</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Status</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Amount</TableHead>
-                                    <TableHead className="text-xs font-semibold text-white/70">Paid / Date</TableHead>
+                                    <TableHead className="text-xs font-semibold text-white/70">Date paid</TableHead>
                                     <TableHead className="text-xs font-semibold text-white/70">Notes</TableHead>
-                                    <TableHead className="w-28 text-xs font-semibold text-white/70">Reference</TableHead>
+                                    <TableHead className="w-28 text-xs font-semibold text-white/70">OR</TableHead>
                                 </TableRow>
                             </TableHeader>
 
                             <TableBody>
                                 {filtered.map((r) => {
                                     const amount = normalizeAmount(r.amount)
-                                    const paidDate = getRowPaidDate(r)
+                                    const datePaid = getRowDatePaid(r)
                                     const receiptLabel = getOfficialReceiptLabel(r.officialReceiptNumber)
 
-                                    // Prioritize names & titles for UX (IDs only as secondary)
                                     const userPrimary =
                                         (r.studentName && String(r.studentName).trim()) ||
                                         (r.studentEmail && String(r.studentEmail).trim()) ||
@@ -786,29 +761,27 @@ export default function LibrarianIncomePage() {
                                                 </div>
                                             </TableCell>
 
+                                            <TableCell className="text-xs opacity-80">
+                                                {fmtDate(r.borrowDueDate ?? null)}
+                                            </TableCell>
+
                                             <TableCell>{renderStatusBadge(r.status)}</TableCell>
 
                                             <TableCell className="text-sm">{formatPHP(amount)}</TableCell>
 
-                                            <TableCell className="text-xs opacity-80">{fmtDate(paidDate)}</TableCell>
+                                            <TableCell className="text-xs opacity-80">{fmtDate(datePaid)}</TableCell>
 
                                             <TableCell className={"text-xs text-white/70 w-44 max-w-80 " + cellScrollbarClasses}>
                                                 <div className="flex flex-col gap-0.5">
                                                     <span>{r.reason ? r.reason : "—"}</span>
-                                                    {receiptLabel && (
-                                                        <span className="font-medium text-emerald-200/90">
-                                                            {receiptLabel}
-                                                        </span>
-                                                    )}
                                                 </div>
                                             </TableCell>
 
                                             <TableCell className="text-xs text-white/60">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className="opacity-80">#{r.id}</span>
-                                                    {receiptLabel && (
-                                                        <span className="text-emerald-200/90">{receiptLabel}</span>
-                                                    )}
+                                                    <span className={receiptLabel ? "text-emerald-200/90 font-medium" : "opacity-60"}>
+                                                        {receiptLabel ?? "—"}
+                                                    </span>
                                                     {monthFilter !== "all" && (
                                                         <span className="text-xs text-white/50">{monthLabel(monthFilter)}</span>
                                                     )}
