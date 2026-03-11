@@ -19,6 +19,8 @@ import type {
 type FacultyBooksCatalogControlsProps = {
     rowsCount: number
     booksCount: number
+    regularRowsCount: number
+    libraryUseOnlyRowsCount: number
     search: string
     onSearchChange: (value: string) => void
     filterMode: FilterMode
@@ -38,6 +40,8 @@ type FacultyBooksCatalogControlsProps = {
 export function FacultyBooksCatalogControls({
     rowsCount,
     booksCount,
+    regularRowsCount,
+    libraryUseOnlyRowsCount,
     search,
     onSearchChange,
     filterMode,
@@ -57,9 +61,11 @@ export function FacultyBooksCatalogControls({
         <>
             <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
-                    <h3 className="text-base font-semibold">Books you can borrow</h3>
+                    <h3 className="text-base font-semibold">Books you can browse</h3>
                     <p className="text-xs text-white/70">
                         Showing {rowsCount} of {booksCount} {booksCount === 1 ? "book" : "books"}.
+                        {" "}Regular catalog: <span className="font-semibold">{regularRowsCount}</span>.
+                        {" "}Library use only: <span className="font-semibold">{libraryUseOnlyRowsCount}</span>.
                     </p>
                     <p className="text-xs text-amber-100/90">
                         Faculty policy: up to {maxActiveBorrows} active books, default borrow
@@ -81,7 +87,7 @@ export function FacultyBooksCatalogControls({
                             type="search"
                             value={search}
                             onChange={(e) => onSearchChange(e.target.value)}
-                            placeholder="Search call no., accession, title, subtitle, author, ISBN, subjects…"
+                            placeholder="Search call no., accession, title, author, ISBN, subjects, or library use only…"
                             autoComplete="off"
                             aria-label="Search books"
                             className="pl-9 bg-slate-900/70 border-white/20 text-white"
@@ -183,7 +189,9 @@ export function FacultyBooksCatalogControls({
                 When you borrow a book online, its status starts as{" "}
                 <span className="font-semibold text-amber-200">Pending pickup</span> until a
                 librarian confirms pickup. After confirmation it will appear as{" "}
-                <span className="font-semibold text-emerald-200">Borrowed</span>.
+                <span className="font-semibold text-emerald-200">Borrowed</span>. Books marked{" "}
+                <span className="font-semibold text-amber-200">Library use only</span> stay in the
+                catalog choices but are separated and cannot be borrowed for take-home use.
             </p>
         </>
     )

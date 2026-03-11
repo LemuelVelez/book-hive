@@ -4,6 +4,7 @@ import type { BookWithStatus } from "@/components/faculty-books/types"
 import {
     fmtDate,
     getBookBorrowMeta,
+    isLibraryUseOnlyBook,
     peso,
 } from "@/components/faculty-books/utils"
 
@@ -18,6 +19,14 @@ export function FacultyBookStatus({ book }: { book: BookWithStatus }) {
         overdueDaysMax,
         hasOverdue,
     } = getBookBorrowMeta(book)
+
+    if (activeRecords.length === 0 && isLibraryUseOnlyBook(book)) {
+        return (
+            <span className="text-amber-200">
+                Library use only · Available for in-library reading only
+            </span>
+        )
+    }
 
     if (activeRecords.length === 0 && book.myStatus === "never") {
         return <span className="text-white/60">Not yet borrowed</span>

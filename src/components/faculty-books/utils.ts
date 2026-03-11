@@ -71,8 +71,37 @@ export function getRemainingCopies(book: BookDTO): number {
     return book.available ? 1 : 0
 }
 
+export function isLibraryUseOnlyBook(book: BookDTO): boolean {
+    return Boolean(book.isLibraryUseOnly || book.canBorrow === false)
+}
+
 export function isBorrowable(book: BookDTO): boolean {
+    if (isLibraryUseOnlyBook(book)) return false
+    if (book.canBorrow === false) return false
     return Boolean(book.available) && getRemainingCopies(book) > 0
+}
+
+export function getActiveBorrowCount(book: BookDTO): number {
+    if (
+        typeof book.activeBorrowCount === "number" &&
+        Number.isFinite(book.activeBorrowCount)
+    ) {
+        return Math.max(0, Math.floor(book.activeBorrowCount))
+    }
+    return 0
+}
+
+export function getTotalBorrowCount(book: BookDTO): number {
+    const active = getActiveBorrowCount(book)
+
+    if (
+        typeof book.totalBorrowCount === "number" &&
+        Number.isFinite(book.totalBorrowCount)
+    ) {
+        return Math.max(active, Math.floor(book.totalBorrowCount))
+    }
+
+    return active
 }
 
 export function sortRecordsNewestFirst(records: BorrowRecordDTO[]) {

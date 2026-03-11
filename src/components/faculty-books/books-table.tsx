@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+    BookOpen,
     CheckCircle2,
     CircleOff,
 } from "lucide-react"
@@ -23,9 +24,12 @@ import {
 } from "@/components/faculty-books/book-status"
 import type { BookWithStatus } from "@/components/faculty-books/types"
 import {
+    getActiveBorrowCount,
     getBookBorrowMeta,
     getRemainingCopies,
+    getTotalBorrowCount,
     isBorrowable,
+    isLibraryUseOnlyBook,
     shouldIgnoreHorizontalDrag,
 } from "@/components/faculty-books/utils"
 
@@ -137,7 +141,7 @@ export function FacultyBooksTable({
 
             <Table
                 ref={tableScrollRef}
-                className="min-w-[1380px]"
+                className="min-w-[1600px]"
                 containerClassName={`hidden md:block rounded-md ${isTableDragging ? "cursor-grabbing select-none" : "cursor-grab"
                     }`}
                 containerProps={{
@@ -179,8 +183,11 @@ export function FacultyBooksTable({
                         <TableHead className="min-w-[180px] text-xs font-semibold text-white/70">
                             Subjects
                         </TableHead>
-                        <TableHead className="min-w-[140px] text-xs font-semibold text-white/70">
+                        <TableHead className="min-w-[150px] text-xs font-semibold text-white/70">
                             Availability
+                        </TableHead>
+                        <TableHead className="min-w-[150px] text-xs font-semibold text-white/70">
+                            Borrow stats
                         </TableHead>
                         <TableHead className="min-w-[120px] text-xs font-semibold text-white/70">
                             Due date
@@ -188,7 +195,7 @@ export function FacultyBooksTable({
                         <TableHead className="min-w-[260px] text-xs font-semibold text-white/70">
                             My status
                         </TableHead>
-                        <TableHead className="min-w-[220px] text-right text-xs font-semibold text-white/70">
+                        <TableHead className="min-w-60 text-right text-xs font-semibold text-white/70">
                             Action
                         </TableHead>
                     </TableRow>
@@ -198,6 +205,7 @@ export function FacultyBooksTable({
                     {rows.map((book) => {
                         const remaining = getRemainingCopies(book)
                         const borrowableNow = isBorrowable(book)
+                        const libraryUseOnly = isLibraryUseOnlyBook(book)
                         const maxCopies = Math.min(remaining, remainingBorrowSlots)
                         const canBorrowThisBook = borrowableNow && maxCopies > 0
                         const borrowBtnLabel =
@@ -206,6 +214,8 @@ export function FacultyBooksTable({
                             activeRecords,
                             dueCell,
                         } = getBookBorrowMeta(book)
+                        const activeBorrowingNow = getActiveBorrowCount(book)
+                        const totalBorrowedTimes = getTotalBorrowCount(book)
 
                         return (
                             <TableRow
@@ -255,12 +265,19 @@ export function FacultyBooksTable({
                                     <Badge
                                         variant={borrowableNow ? "default" : "outline"}
                                         className={
-                                            borrowableNow
-                                                ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
-                                                : "border-red-400/70 text-red-200 hover:bg-red-500/10"
+                                            libraryUseOnly
+                                                ? "border-amber-400/70 text-amber-200 hover:bg-amber-500/10"
+                                                : borrowableNow
+                                                    ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80"
+                                                    : "border-red-400/70 text-red-200 hover:bg-red-500/10"
                                         }
                                     >
-                                        {borrowableNow ? (
+                                        {libraryUseOnly ? (
+                                            <span className="inline-flex items-center gap-1">
+                                                <BookOpen className="h-3 w-3" aria-hidden="true" />
+                                                Library use only
+                                            </span>
+                                        ) : borrowableNow ? (
                                             <span className="inline-flex items-center gap-1">
                                                 <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                                                 Available{" "}
@@ -273,6 +290,23 @@ export function FacultyBooksTable({
                                             </span>
                                         )}
                                     </Badge>
+                                </TableCell>
+
+                                <TableCell className="align-top text-xs text-white/75 whitespace-normal wrap-break-word">
+                                    <div className="space-y-1">
+                                        <div>
+                                            <span className="text-white/50">Now borrowed:</span>{" "}
+                                            <span className="font-medium text-white/90">
+                                                {activeBorrowingNow}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-white/50">Total borrows:</span>{" "}
+                                            <span className="font-medium text-white/90">
+                                                {totalBorrowedTimes}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </TableCell>
 
                                 <TableCell className="align-top text-sm text-white/80 whitespace-normal wrap-break-word">
@@ -308,6 +342,25 @@ export function FacultyBooksTable({
                                             triggerLabel={borrowBtnLabel}
                                             triggerDisabled={maxCopies <= 0}
                                         />
+                                    ) : activeRecords.length > 0 ? (
+                                        <span className="inline-flex flex-col items-end text-xs text-amber-200 whitespace-normal wrap-break-word">
+                                            <FacultyBookActionState book={book} />
+                                        </span>
+                                    ) : libraryUseOnly ? (
+                                        <div className="inline-flex flex-col items-end gap-1 text-xs">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                disabled
+                                                className="border-amber-400/50 text-amber-200"
+                                            >
+                                                Library use only
+                                            </Button>
+                                            <span className="text-white/60 whitespace-normal wrap-break-word">
+                                                This title is for in-library reading only.
+                                            </span>
+                                        </div>
                                     ) : borrowableNow && remainingBorrowSlots <= 0 ? (
                                         <div className="inline-flex flex-col items-end gap-1 text-xs">
                                             <Button
@@ -324,10 +377,6 @@ export function FacultyBooksTable({
                                                 {facultyMaxActiveBorrows} active books.
                                             </span>
                                         </div>
-                                    ) : activeRecords.length > 0 ? (
-                                        <span className="inline-flex flex-col items-end text-xs text-amber-200 whitespace-normal wrap-break-word">
-                                            <FacultyBookActionState book={book} />
-                                        </span>
                                     ) : (
                                         <Button
                                             type="button"

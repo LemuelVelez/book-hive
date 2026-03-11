@@ -1,4 +1,5 @@
 import {
+    BookOpen,
     CheckCircle2,
     CircleOff,
 } from "lucide-react"
@@ -13,9 +14,12 @@ import {
 } from "@/components/faculty-books/book-status"
 import type { BookWithStatus } from "@/components/faculty-books/types"
 import {
+    getActiveBorrowCount,
     getBookBorrowMeta,
     getRemainingCopies,
+    getTotalBorrowCount,
     isBorrowable,
+    isLibraryUseOnlyBook,
 } from "@/components/faculty-books/utils"
 
 type FacultyBooksMobileListProps = {
@@ -50,11 +54,14 @@ export function FacultyBooksMobileList({
             {rows.map((book) => {
                 const remaining = getRemainingCopies(book)
                 const borrowableNow = isBorrowable(book)
+                const libraryUseOnly = isLibraryUseOnlyBook(book)
                 const maxCopies = Math.min(remaining, remainingBorrowSlots)
                 const canBorrowThisBook = borrowableNow && maxCopies > 0
                 const borrowBtnLabel =
                     book.activeRecords.length > 0 ? "Borrow more" : "Borrow"
                 const { activeRecords, dueCell } = getBookBorrowMeta(book)
+                const activeBorrowingNow = getActiveBorrowCount(book)
+                const totalBorrowedTimes = getTotalBorrowCount(book)
 
                 return (
                     <div
@@ -79,12 +86,19 @@ export function FacultyBooksMobileList({
                             <Badge
                                 variant={borrowableNow ? "default" : "outline"}
                                 className={
-                                    borrowableNow
-                                        ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80 shrink-0"
-                                        : "border-red-400/70 text-red-200 hover:bg-red-500/10 shrink-0"
+                                    libraryUseOnly
+                                        ? "border-amber-400/70 text-amber-200 hover:bg-amber-500/10 shrink-0"
+                                        : borrowableNow
+                                            ? "bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80 shrink-0"
+                                            : "border-red-400/70 text-red-200 hover:bg-red-500/10 shrink-0"
                                 }
                             >
-                                {borrowableNow ? (
+                                {libraryUseOnly ? (
+                                    <span className="inline-flex items-center gap-1">
+                                        <BookOpen className="h-3 w-3" aria-hidden="true" />
+                                        Library use only
+                                    </span>
+                                ) : borrowableNow ? (
                                     <span className="inline-flex items-center gap-1">
                                         <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                                         Available{" "}
@@ -147,6 +161,20 @@ export function FacultyBooksMobileList({
                                 </div>
                             </div>
 
+                            <div>
+                                <div className="uppercase text-white/40">Borrowing now</div>
+                                <div className="text-white/85">
+                                    {activeBorrowingNow}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="uppercase text-white/40">Total borrows</div>
+                                <div className="text-white/85">
+                                    {totalBorrowedTimes}
+                                </div>
+                            </div>
+
                             <div className="col-span-2">
                                 <div className="uppercase text-white/40">Due date</div>
                                 <div className="text-white/85 wrap-break-word">
@@ -184,6 +212,25 @@ export function FacultyBooksMobileList({
                                     triggerLabel={borrowBtnLabel}
                                     triggerDisabled={maxCopies <= 0}
                                 />
+                            ) : activeRecords.length > 0 ? (
+                                <span className="inline-flex flex-col items-end text-xs text-amber-200">
+                                    <FacultyBookActionState book={book} />
+                                </span>
+                            ) : libraryUseOnly ? (
+                                <span className="inline-flex flex-col items-end text-xs text-amber-200">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled
+                                        className="border-amber-400/50 text-amber-200"
+                                    >
+                                        Library use only
+                                    </Button>
+                                    <span className="mt-1 text-right text-white/60">
+                                        This title is for in-library reading only.
+                                    </span>
+                                </span>
                             ) : borrowableNow && remainingBorrowSlots <= 0 ? (
                                 <span className="inline-flex flex-col items-end text-xs text-white/70">
                                     <Button
@@ -199,10 +246,6 @@ export function FacultyBooksMobileList({
                                         You already have {activeBorrowCount}/
                                         {facultyMaxActiveBorrows} active books.
                                     </span>
-                                </span>
-                            ) : activeRecords.length > 0 ? (
-                                <span className="inline-flex flex-col items-end text-xs text-amber-200">
-                                    <FacultyBookActionState book={book} />
                                 </span>
                             ) : (
                                 <Button

@@ -24,6 +24,7 @@ import {
     compareText,
     getRemainingCopies,
     isBorrowable,
+    isLibraryUseOnlyBook,
     matchesAllTokens,
     normalizeSearchText,
     sortRecordsNewestFirst,
@@ -173,6 +174,7 @@ export default function FacultyBooksPage() {
 
         const filtered = withStatus.filter((book) => {
             const borrowable = isBorrowable(book)
+            const libraryUseOnly = isLibraryUseOnlyBook(book)
 
             switch (filterMode) {
                 case "available":
@@ -218,7 +220,10 @@ export default function FacultyBooksPage() {
                 String(getRemainingCopies(book)),
                 String(typeof book.totalCopies === "number" ? book.totalCopies : ""),
                 String(typeof book.borrowedCopies === "number" ? book.borrowedCopies : ""),
-                borrowable ? "available" : "unavailable",
+                String(typeof book.activeBorrowCount === "number" ? book.activeBorrowCount : 0),
+                String(typeof book.totalBorrowCount === "number" ? book.totalBorrowCount : 0),
+                borrowable ? "available borrowable" : "unavailable not borrowable",
+                libraryUseOnly ? "library use only in library read only reference" : "",
                 book.activeRecords.length > 0 ? "borrowed" : "",
                 book.myStatus,
             ]
@@ -346,12 +351,24 @@ export default function FacultyBooksPage() {
         })
     }, [availabilityFilter, books, filterMode, myRecordsByBookId, search, sortOption])
 
+    const regularRows = React.useMemo(
+        () => rows.filter((book) => !isLibraryUseOnlyBook(book)),
+        [rows]
+    )
+
+    const libraryUseOnlyRows = React.useMemo(
+        () => rows.filter((book) => isLibraryUseOnlyBook(book)),
+        [rows]
+    )
+
     async function handleBorrow(book: BookWithStatus, copiesRequested = 1) {
         const remaining = getRemainingCopies(book)
 
         if (!isBorrowable(book) || remaining <= 0) {
             toast.info("Book is not available right now.", {
-                description: "There are no remaining copies to borrow.",
+                description: book.isLibraryUseOnly || book.canBorrow === false
+                    ? "This title is marked as library use only and cannot be borrowed for take-home use."
+                    : "There are no remaining copies to borrow.",
             })
             return
         }
@@ -436,6 +453,8 @@ export default function FacultyBooksPage() {
                             <p className="text-xs text-white/70">
                                 Faculty may borrow up to {facultyBorrowMaxBooks} active books, with
                                 a default duration of {facultyBorrowDurationDays} days per borrow.
+                                Titles tagged as <span className="font-semibold text-amber-200">Library use only</span>{" "}
+                                are shown separately and cannot be taken home.
                             </p>
                         </div>
                     </div>
@@ -465,6 +484,8 @@ export default function FacultyBooksPage() {
                         <FacultyBooksCatalogControls
                             rowsCount={rows.length}
                             booksCount={books.length}
+                            regularRowsCount={regularRows.length}
+                            libraryUseOnlyRowsCount={libraryUseOnlyRows.length}
                             search={search}
                             onSearchChange={setSearch}
                             filterMode={filterMode}
@@ -500,35 +521,103 @@ export default function FacultyBooksPage() {
                                 </span>
                             </div>
                         ) : (
-                            <>
-                                <FacultyBooksTable
-                                    rows={rows}
-                                    borrowBusyId={borrowBusyId}
-                                    borrowDialogBookId={borrowDialogBookId}
-                                    borrowCopies={borrowCopies}
-                                    onBorrowDialogBookChange={setBorrowDialogBookId}
-                                    onBorrowCopiesChange={setBorrowCopies}
-                                    onBorrow={handleBorrow}
-                                    facultyMaxActiveBorrows={facultyBorrowMaxBooks}
-                                    defaultBorrowDurationDays={facultyBorrowDurationDays}
-                                    activeBorrowCount={activeBorrowCount}
-                                    remainingBorrowSlots={remainingBorrowSlots}
-                                />
+                            <div className="space-y-6">
+                                {regularRows.length > 0 && (
+                                    <section className="space-y-2">
+                                        <div className="space-y-1">
+                                            <h3 className="text-sm font-semibold text-white">
+                                                Borrowable and regular catalog
+                                            </h3>
+                                            <p className="text-xs text-white/60">
+                                                {regularRows.length} matching
+                                                {" "}
+                                                {regularRows.length === 1 ? "title" : "titles"} that
+                                                faculty may borrow, subject to remaining copy counts
+                                                and your active borrow limit.
+                                            </p>
+                                        </div>
 
-                                <FacultyBooksMobileList
-                                    rows={rows}
-                                    borrowBusyId={borrowBusyId}
-                                    borrowDialogBookId={borrowDialogBookId}
-                                    borrowCopies={borrowCopies}
-                                    onBorrowDialogBookChange={setBorrowDialogBookId}
-                                    onBorrowCopiesChange={setBorrowCopies}
-                                    onBorrow={handleBorrow}
-                                    facultyMaxActiveBorrows={facultyBorrowMaxBooks}
-                                    defaultBorrowDurationDays={facultyBorrowDurationDays}
-                                    activeBorrowCount={activeBorrowCount}
-                                    remainingBorrowSlots={remainingBorrowSlots}
-                                />
-                            </>
+                                        <FacultyBooksTable
+                                            rows={regularRows}
+                                            borrowBusyId={borrowBusyId}
+                                            borrowDialogBookId={borrowDialogBookId}
+                                            borrowCopies={borrowCopies}
+                                            onBorrowDialogBookChange={setBorrowDialogBookId}
+                                            onBorrowCopiesChange={setBorrowCopies}
+                                            onBorrow={handleBorrow}
+                                            facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                            defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                            activeBorrowCount={activeBorrowCount}
+                                            remainingBorrowSlots={remainingBorrowSlots}
+                                        />
+
+                                        <FacultyBooksMobileList
+                                            rows={regularRows}
+                                            borrowBusyId={borrowBusyId}
+                                            borrowDialogBookId={borrowDialogBookId}
+                                            borrowCopies={borrowCopies}
+                                            onBorrowDialogBookChange={setBorrowDialogBookId}
+                                            onBorrowCopiesChange={setBorrowCopies}
+                                            onBorrow={handleBorrow}
+                                            facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                            defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                            activeBorrowCount={activeBorrowCount}
+                                            remainingBorrowSlots={remainingBorrowSlots}
+                                        />
+                                    </section>
+                                )}
+
+                                {libraryUseOnlyRows.length > 0 && (
+                                    <section
+                                        className={`space-y-2 ${
+                                            regularRows.length > 0
+                                                ? "border-t border-white/10 pt-4"
+                                                : ""
+                                        }`}
+                                    >
+                                        <div className="space-y-1">
+                                            <h3 className="text-sm font-semibold text-amber-200">
+                                                Library use only
+                                            </h3>
+                                            <p className="text-xs text-white/60">
+                                                {libraryUseOnlyRows.length} matching
+                                                {" "}
+                                                {libraryUseOnlyRows.length === 1 ? "title is" : "titles are"}
+                                                {" "}included in the catalog for reference, but these
+                                                cannot be borrowed for take-home use.
+                                            </p>
+                                        </div>
+
+                                        <FacultyBooksTable
+                                            rows={libraryUseOnlyRows}
+                                            borrowBusyId={borrowBusyId}
+                                            borrowDialogBookId={borrowDialogBookId}
+                                            borrowCopies={borrowCopies}
+                                            onBorrowDialogBookChange={setBorrowDialogBookId}
+                                            onBorrowCopiesChange={setBorrowCopies}
+                                            onBorrow={handleBorrow}
+                                            facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                            defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                            activeBorrowCount={activeBorrowCount}
+                                            remainingBorrowSlots={remainingBorrowSlots}
+                                        />
+
+                                        <FacultyBooksMobileList
+                                            rows={libraryUseOnlyRows}
+                                            borrowBusyId={borrowBusyId}
+                                            borrowDialogBookId={borrowDialogBookId}
+                                            borrowCopies={borrowCopies}
+                                            onBorrowDialogBookChange={setBorrowDialogBookId}
+                                            onBorrowCopiesChange={setBorrowCopies}
+                                            onBorrow={handleBorrow}
+                                            facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                            defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                            activeBorrowCount={activeBorrowCount}
+                                            remainingBorrowSlots={remainingBorrowSlots}
+                                        />
+                                    </section>
+                                )}
+                            </div>
                         )}
                     </CardContent>
                 </Card>
