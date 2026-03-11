@@ -37,6 +37,7 @@ export type PrintableFineRecord = {
     amount: number;
     createdAt?: string | null;
     resolvedAt?: string | null;
+    paidDate?: string | null;
     borrowDueDate?: string | null;
     borrowReturnDate?: string | null;
     sourceLabel?: "fine" | "damage" | null;
@@ -117,6 +118,10 @@ function safeToken(value: string) {
         .replace(/[^a-z0-9-_]+/g, "-")
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "");
+}
+
+function getDatePaid(record: PrintableFineRecord) {
+    return record.paidDate || record.resolvedAt || null;
 }
 
 const pdfStyles = StyleSheet.create({
@@ -210,7 +215,7 @@ const pdfStyles = StyleSheet.create({
         justifyContent: "center",
     },
     colDate: { width: "13%" },
-    colResolved: { width: "13%" },
+    colDatePaid: { width: "13%" },
     colAmount: { width: "13%", alignItems: "flex-end" },
     th: {
         fontSize: 8.25,
@@ -388,8 +393,8 @@ function FinesPdfDocument({
                     <View style={pdfStyles.colDate}>
                         <Text style={pdfStyles.th}>Created</Text>
                     </View>
-                    <View style={pdfStyles.colResolved}>
-                        <Text style={pdfStyles.th}>Resolved</Text>
+                    <View style={pdfStyles.colDatePaid}>
+                        <Text style={pdfStyles.th}>Date Paid</Text>
                     </View>
                     <View style={pdfStyles.colAmount}>
                         <Text style={pdfStyles.th}>Amount</Text>
@@ -436,8 +441,8 @@ function FinesPdfDocument({
                                 <Text style={pdfStyles.td}>{fmtDate(r.createdAt)}</Text>
                             </View>
 
-                            <View style={pdfStyles.colResolved}>
-                                <Text style={pdfStyles.td}>{fmtDate(r.resolvedAt)}</Text>
+                            <View style={pdfStyles.colDatePaid}>
+                                <Text style={pdfStyles.td}>{fmtDate(getDatePaid(r))}</Text>
                             </View>
 
                             <View style={pdfStyles.colAmount}>

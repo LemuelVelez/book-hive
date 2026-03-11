@@ -128,7 +128,7 @@ function safeToken(value: string) {
         .replace(/^-|-$/g, "")
 }
 
-function getRecordDate(record: PrintableIncomeRecord) {
+function getDatePaid(record: PrintableIncomeRecord) {
     return record.paidDate || record.resolvedAt || record.createdAt || null
 }
 
@@ -354,7 +354,7 @@ function IncomePdfDocument({
     reportSubtitle,
 }: IncomePdfDocProps) {
     const sorted = [...records].sort((a, b) =>
-        String(getRecordDate(b) ?? "").localeCompare(String(getRecordDate(a) ?? ""))
+        String(getDatePaid(b) ?? "").localeCompare(String(getDatePaid(a) ?? ""))
     )
 
     const paidTotal = sorted
@@ -374,7 +374,7 @@ function IncomePdfDocument({
     const cancelledCount = sorted.filter((r) => r.status === "cancelled").length
 
     const dateValues = sorted
-        .map((r) => getRecordDate(r))
+        .map((r) => getDatePaid(r))
         .filter(Boolean)
         .map((value) => new Date(String(value)))
         .filter((date) => !Number.isNaN(date.getTime()))
@@ -452,7 +452,7 @@ function IncomePdfDocument({
                         <Text style={pdfStyles.th}>Status</Text>
                     </View>
                     <View style={pdfStyles.colDate}>
-                        <Text style={pdfStyles.th}>Paid / Date</Text>
+                        <Text style={pdfStyles.th}>Date Paid</Text>
                     </View>
                     <View style={pdfStyles.colAmount}>
                         <Text style={pdfStyles.th}>Amount</Text>
@@ -504,7 +504,7 @@ function IncomePdfDocument({
                             </View>
 
                             <View style={pdfStyles.colDate}>
-                                <Text style={pdfStyles.td}>{fmtDate(getRecordDate(record))}</Text>
+                                <Text style={pdfStyles.td}>{fmtDate(getDatePaid(record))}</Text>
                             </View>
 
                             <View style={pdfStyles.colAmount}>
