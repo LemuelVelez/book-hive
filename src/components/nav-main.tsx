@@ -84,30 +84,38 @@ export function NavMain() {
     ]
 
     const isLibrarian = pathname.startsWith("/dashboard/librarian")
+    const isAssistantSection = pathname.startsWith("/dashboard/assistant-librarian")
     const isFaculty = pathname.startsWith("/dashboard/faculty")
     const isAdmin = pathname.startsWith("/dashboard/admin")
 
     const isBorrowerSection =
-        pathname.startsWith("/dashboard") && !isLibrarian && !isFaculty && !isAdmin
+        pathname.startsWith("/dashboard") &&
+        !isLibrarian &&
+        !isAssistantSection &&
+        !isFaculty &&
+        !isAdmin
 
     const isAssistantLibrarian = currentRole === "assistant_librarian"
+    const assistantBasePath = isAssistantSection
+        ? "/dashboard/assistant-librarian"
+        : "/dashboard/librarian"
 
     const assistantLibrarianItems: Item[] = [
         {
             label: "Dashboard",
             icon: Home,
-            to: "/dashboard/librarian",
+            to: assistantBasePath,
             exact: true,
         },
         {
             label: "Borrow Records",
             icon: ListChecks,
-            to: "/dashboard/librarian/borrow-records",
+            to: `${assistantBasePath}/borrow-records`,
         },
         {
             label: "Settings",
             icon: Settings,
-            to: "/dashboard/librarian/settings",
+            to: `${assistantBasePath}/settings`,
         },
     ]
 
@@ -146,9 +154,9 @@ export function NavMain() {
                 to: "/dashboard/settings",
             },
         ]
-    } else if (isLibrarian) {
-        if (currentRole === undefined || currentRole === null || isAssistantLibrarian) {
-            groupLabel = isAssistantLibrarian ? "Assistant Librarian" : "Library"
+    } else if (isLibrarian || isAssistantSection) {
+        if (currentRole === undefined || currentRole === null || isAssistantLibrarian || isAssistantSection) {
+            groupLabel = "Assistant Librarian"
             items = assistantLibrarianItems
         } else {
             groupLabel = "Librarian"

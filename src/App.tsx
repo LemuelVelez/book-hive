@@ -267,7 +267,7 @@ function App() {
           <Route
             path="/dashboard/librarian/settings"
             element={
-              <RequireRole allow={['librarian']}>
+              <RequireRole allow={['librarian', 'assistant_librarian']}>
                 <LibrarianSettingsPage />
               </RequireRole>
             }
@@ -297,6 +297,15 @@ function App() {
             element={
               <RequireRole allow={['assistant_librarian']}>
                 <LibrarianBorrowRecordsPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/dashboard/assistant-librarian/settings"
+            element={
+              <RequireRole allow={['assistant_librarian']}>
+                <LibrarianSettingsPage />
               </RequireRole>
             }
           />
