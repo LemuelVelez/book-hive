@@ -2053,16 +2053,16 @@ export default function LibrarianBooksPage() {
             <Card className="border-white/10 bg-slate-800/60">
                 <CardHeader className="pb-2">
                     <div className="flex flex-col gap-3">
-                        <div className="flex flex-col gap-1">
-                            <CardTitle>Books catalog</CardTitle>
-                            <p className="text-xs text-white/70">
-                                Showing {filteredBooks.length} of {books.length}{" "}
-                                {books.length === 1 ? "book" : "books"}.
-                            </p>
-                        </div>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 flex-col gap-1">
+                                <CardTitle>Books catalog</CardTitle>
+                                <p className="text-xs text-white/70">
+                                    Showing {filteredBooks.length} of {books.length}{" "}
+                                    {books.length === 1 ? "book" : "books"}.
+                                </p>
+                            </div>
 
-                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                            <div className="relative min-w-0 md:col-span-2 xl:col-span-3">
+                            <div className="relative min-w-0 sm:w-full sm:max-w-sm lg:max-w-md">
                                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                                 <Input
                                     value={search}
@@ -2072,12 +2072,14 @@ export default function LibrarianBooksPage() {
                                     autoComplete="off"
                                 />
                             </div>
+                        </div>
 
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
                             <Select
                                 value={libraryAreaFilter}
                                 onValueChange={(value) => setLibraryAreaFilter(value)}
                             >
-                                <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
+                                <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                                     <div className="flex items-center gap-2 truncate">
                                         <Filter className="h-4 w-4 text-white/60" />
                                         <SelectValue placeholder="Library area" />
@@ -2099,7 +2101,7 @@ export default function LibrarianBooksPage() {
                                     setAvailabilityFilter(value as CatalogAvailabilityFilter)
                                 }
                             >
-                                <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
+                                <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                                     <div className="flex items-center gap-2 truncate">
                                         <Filter className="h-4 w-4 text-white/60" />
                                         <SelectValue placeholder="Availability" />
@@ -2116,7 +2118,7 @@ export default function LibrarianBooksPage() {
                                 value={sortOption}
                                 onValueChange={(value) => setSortOption(value as CatalogSortOption)}
                             >
-                                <SelectTrigger className="w-full bg-slate-900/70 text-white border-white/20">
+                                <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                                     <div className="flex items-center gap-2 truncate">
                                         <ArrowUpDown className="h-4 w-4 text-white/60" />
                                         <SelectValue placeholder="Sort books" />
@@ -2139,7 +2141,7 @@ export default function LibrarianBooksPage() {
                                 </SelectContent>
                             </Select>
 
-                            <div className="flex flex-col gap-2 xl:col-span-3 sm:flex-row sm:flex-wrap">
+                            <div className="flex flex-col gap-2 md:col-span-2 xl:col-span-3 sm:flex-row sm:flex-wrap">
                                 <BooksExcelPreviewDialog books={filteredBooks} />
                                 <Button
                                     type="button"
