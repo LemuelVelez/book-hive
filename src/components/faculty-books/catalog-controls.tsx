@@ -29,6 +29,10 @@ type FacultyBooksCatalogControlsProps = {
     onSortOptionChange: (value: FacultySortOption) => void
     onClear: () => void
     hasCatalogControlsApplied: boolean
+    maxActiveBorrows: number
+    defaultBorrowDurationDays: number
+    activeBorrowCount: number
+    remainingBorrowSlots: number
 }
 
 export function FacultyBooksCatalogControls({
@@ -44,6 +48,10 @@ export function FacultyBooksCatalogControls({
     onSortOptionChange,
     onClear,
     hasCatalogControlsApplied,
+    maxActiveBorrows,
+    defaultBorrowDurationDays,
+    activeBorrowCount,
+    remainingBorrowSlots,
 }: FacultyBooksCatalogControlsProps) {
     return (
         <>
@@ -52,6 +60,14 @@ export function FacultyBooksCatalogControls({
                     <h3 className="text-base font-semibold">Books you can borrow</h3>
                     <p className="text-xs text-white/70">
                         Showing {rowsCount} of {booksCount} {booksCount === 1 ? "book" : "books"}.
+                    </p>
+                    <p className="text-xs text-amber-100/90">
+                        Faculty policy: up to {maxActiveBorrows} active books, default borrow
+                        duration of {defaultBorrowDurationDays} days. You currently have{" "}
+                        <span className="font-semibold">{activeBorrowCount}</span> active
+                        book{activeBorrowCount === 1 ? "" : "s"} and{" "}
+                        <span className="font-semibold">{remainingBorrowSlots}</span> remaining
+                        slot{remainingBorrowSlots === 1 ? "" : "s"}.
                     </p>
                 </div>
 

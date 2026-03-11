@@ -30,6 +30,9 @@ type FacultyBorrowConfirmDialogProps = {
     busy: boolean
     onConfirm: (quantity: number) => void
     maxCopies: number
+    remainingBorrowSlots: number
+    facultyMaxActiveBorrows: number
+    defaultBorrowDurationDays: number
     triggerLabel: string
     triggerDisabled?: boolean
 }
@@ -43,10 +46,14 @@ export function FacultyBorrowConfirmDialog({
     busy,
     onConfirm,
     maxCopies,
+    remainingBorrowSlots,
+    facultyMaxActiveBorrows,
+    defaultBorrowDurationDays,
     triggerLabel,
     triggerDisabled = false,
 }: FacultyBorrowConfirmDialogProps) {
-    const safeMaxCopies = Math.max(1, maxCopies)
+    const effectiveMaxCopies = Math.max(0, Math.min(maxCopies, remainingBorrowSlots))
+    const safeMaxCopies = Math.max(1, effectiveMaxCopies)
     const qty = clampInt(quantity, 1, safeMaxCopies)
 
     return (
@@ -56,7 +63,7 @@ export function FacultyBorrowConfirmDialog({
                     type="button"
                     size="sm"
                     className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                    disabled={busy || triggerDisabled || maxCopies <= 0}
+                    disabled={busy || triggerDisabled || effectiveMaxCopies <= 0}
                 >
                     {triggerLabel}
                 </Button>
@@ -101,8 +108,12 @@ export function FacultyBorrowConfirmDialog({
                         <span className="text-white/60">Subjects:</span> {getSubjects(book)}
                     </p>
                     <p>
-                        <span className="text-white/60">Default loan duration:</span>{" "}
-                        {fmtDurationDays(book.borrowDurationDays)}
+                        <span className="text-white/60">Faculty borrow duration:</span>{" "}
+                        {fmtDurationDays(defaultBorrowDurationDays)}
+                    </p>
+                    <p>
+                        <span className="text-white/60">Faculty maximum active books:</span>{" "}
+                        {facultyMaxActiveBorrows}
                     </p>
 
                     <div className="pt-3">
@@ -154,13 +165,16 @@ export function FacultyBorrowConfirmDialog({
                             <span className="text-xs text-white/60">Max {safeMaxCopies}</span>
                         </div>
                         <p className="text-[11px] text-white/60 mt-1">
-                            Remaining copies available right now: {maxCopies}.
+                            Remaining physical copies available right now: {maxCopies}.
+                        </p>
+                        <p className="text-[11px] text-white/60">
+                            Remaining faculty borrow slots in your account: {remainingBorrowSlots}.
                         </p>
                     </div>
 
                     <p className="text-xs text-white/60 mt-2">
-                        The due date will be set automatically based on the library policy.
-                        Any overdue days may incur fines.
+                        The due date will be set automatically based on the faculty borrowing
+                        policy. Any overdue days may incur fines.
                     </p>
                 </div>
 
@@ -173,7 +187,7 @@ export function FacultyBorrowConfirmDialog({
                     </AlertDialogCancel>
                     <AlertDialogAction
                         className="bg-purple-600 hover:bg-purple-700 text-white"
-                        disabled={busy || maxCopies <= 0}
+                        disabled={busy || effectiveMaxCopies <= 0}
                         onClick={() => onConfirm(qty)}
                     >
                         {busy ? (

@@ -38,6 +38,8 @@ import { fetchBooks, type BookDTO } from "@/lib/books"
 import {
     createSelfBorrow,
     fetchMyBorrowRecords,
+    getFacultyBorrowDurationDays,
+    getFacultyBorrowMaxBooks,
     type BorrowRecordDTO,
 } from "@/lib/borrows"
 
@@ -60,6 +62,9 @@ export default function FacultyBooksPage() {
         null
     )
     const [borrowCopies, setBorrowCopies] = React.useState<number>(1)
+
+    const facultyBorrowMaxBooks = getFacultyBorrowMaxBooks()
+    const facultyBorrowDurationDays = getFacultyBorrowDurationDays()
 
     const loadAll = React.useCallback(async () => {
         setError(null)
@@ -106,6 +111,18 @@ export default function FacultyBooksPage() {
         filterMode !== "all" ||
         availabilityFilter !== "all" ||
         sortOption !== "catalog"
+
+    const activeBorrowCount = React.useMemo(() => {
+        return myRecords.filter(
+            (record) =>
+                record.status === "borrowed" ||
+                record.status === "pending" ||
+                record.status === "pending_pickup" ||
+                record.status === "pending_return"
+        ).length
+    }, [myRecords])
+
+    const remainingBorrowSlots = Math.max(0, facultyBorrowMaxBooks - activeBorrowCount)
 
     const myRecordsByBookId = React.useMemo(() => {
         const map = new Map<string, BorrowRecordDTO[]>()
@@ -339,7 +356,22 @@ export default function FacultyBooksPage() {
             return
         }
 
-        const requestedCopies = clampInt(copiesRequested, 1, remaining)
+        if (remainingBorrowSlots <= 0) {
+            toast.info("Faculty borrow limit reached", {
+                description: `You already have ${activeBorrowCount} active book${activeBorrowCount === 1 ? "" : "s"}. Faculty can only have up to ${facultyBorrowMaxBooks} active books at a time.`,
+            })
+            return
+        }
+
+        const maxAllowedNow = Math.min(remaining, remainingBorrowSlots)
+        const requestedCopies = clampInt(copiesRequested, 1, maxAllowedNow)
+
+        if (copiesRequested > maxAllowedNow) {
+            toast.info("Borrow quantity adjusted", {
+                description: `You can only borrow up to ${maxAllowedNow} more book${maxAllowedNow === 1 ? "" : "s"} right now because faculty is limited to ${facultyBorrowMaxBooks} active books.`,
+            })
+        }
+
         setBorrowBusyId(book.id)
 
         try {
@@ -368,8 +400,7 @@ export default function FacultyBooksPage() {
                     : "—"
 
             toast.success("Borrow request submitted", {
-                description: `${created.length} cop${created.length === 1 ? "y" : "ies"
-                    } of "${book.title}" ${created.length === 1 ? "is" : "are"} now pending pickup. Earliest due date: ${due}.`,
+                description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"} now pending pickup. Earliest due date: ${due}. Faculty may keep up to ${facultyBorrowMaxBooks} active books for ${facultyBorrowDurationDays} days by default.`,
             })
 
             setMyRecords((prev) => [...created.slice().reverse(), ...prev])
@@ -403,8 +434,8 @@ export default function FacultyBooksPage() {
                         <div>
                             <h2 className="text-lg font-semibold leading-tight">Library catalog</h2>
                             <p className="text-xs text-white/70">
-                                Browse all books, see availability, and borrow as many copies as
-                                you need while copies remain.
+                                Faculty may borrow up to {facultyBorrowMaxBooks} active books, with
+                                a default duration of {facultyBorrowDurationDays} days per borrow.
                             </p>
                         </div>
                     </div>
@@ -444,6 +475,10 @@ export default function FacultyBooksPage() {
                             onSortOptionChange={setSortOption}
                             onClear={clearCatalogControls}
                             hasCatalogControlsApplied={hasCatalogControlsApplied}
+                            maxActiveBorrows={facultyBorrowMaxBooks}
+                            defaultBorrowDurationDays={facultyBorrowDurationDays}
+                            activeBorrowCount={activeBorrowCount}
+                            remainingBorrowSlots={remainingBorrowSlots}
                         />
                     </CardHeader>
 
@@ -474,6 +509,10 @@ export default function FacultyBooksPage() {
                                     onBorrowDialogBookChange={setBorrowDialogBookId}
                                     onBorrowCopiesChange={setBorrowCopies}
                                     onBorrow={handleBorrow}
+                                    facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                    defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                    activeBorrowCount={activeBorrowCount}
+                                    remainingBorrowSlots={remainingBorrowSlots}
                                 />
 
                                 <FacultyBooksMobileList
@@ -484,6 +523,10 @@ export default function FacultyBooksPage() {
                                     onBorrowDialogBookChange={setBorrowDialogBookId}
                                     onBorrowCopiesChange={setBorrowCopies}
                                     onBorrow={handleBorrow}
+                                    facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                    defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                    activeBorrowCount={activeBorrowCount}
+                                    remainingBorrowSlots={remainingBorrowSlots}
                                 />
                             </>
                         )}

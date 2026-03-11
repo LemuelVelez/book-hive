@@ -26,6 +26,10 @@ type FacultyBooksMobileListProps = {
     onBorrowDialogBookChange: (bookId: string | null) => void
     onBorrowCopiesChange: (value: number) => void
     onBorrow: (book: BookWithStatus, copiesRequested: number) => void | Promise<void>
+    facultyMaxActiveBorrows: number
+    defaultBorrowDurationDays: number
+    activeBorrowCount: number
+    remainingBorrowSlots: number
 }
 
 export function FacultyBooksMobileList({
@@ -36,13 +40,18 @@ export function FacultyBooksMobileList({
     onBorrowDialogBookChange,
     onBorrowCopiesChange,
     onBorrow,
+    facultyMaxActiveBorrows,
+    defaultBorrowDurationDays,
+    activeBorrowCount,
+    remainingBorrowSlots,
 }: FacultyBooksMobileListProps) {
     return (
         <div className="md:hidden space-y-3 mt-2">
             {rows.map((book) => {
                 const remaining = getRemainingCopies(book)
                 const borrowableNow = isBorrowable(book)
-                const maxCopies = remaining
+                const maxCopies = Math.min(remaining, remainingBorrowSlots)
+                const canBorrowThisBook = borrowableNow && maxCopies > 0
                 const borrowBtnLabel =
                     book.activeRecords.length > 0 ? "Borrow more" : "Borrow"
                 const { activeRecords, dueCell } = getBookBorrowMeta(book)
@@ -151,7 +160,7 @@ export function FacultyBooksMobileList({
                         </div>
 
                         <div className="flex justify-end pt-1">
-                            {borrowableNow ? (
+                            {canBorrowThisBook ? (
                                 <FacultyBorrowConfirmDialog
                                     book={book}
                                     open={borrowDialogBookId === book.id}
@@ -169,9 +178,28 @@ export function FacultyBooksMobileList({
                                     busy={borrowBusyId === book.id}
                                     onConfirm={(qty) => void onBorrow(book, qty)}
                                     maxCopies={maxCopies}
+                                    remainingBorrowSlots={remainingBorrowSlots}
+                                    facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                                    defaultBorrowDurationDays={defaultBorrowDurationDays}
                                     triggerLabel={borrowBtnLabel}
                                     triggerDisabled={maxCopies <= 0}
                                 />
+                            ) : borrowableNow && remainingBorrowSlots <= 0 ? (
+                                <span className="inline-flex flex-col items-end text-xs text-white/70">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled
+                                        className="border-white/20 text-white/60"
+                                    >
+                                        Limit reached
+                                    </Button>
+                                    <span className="mt-1 text-right">
+                                        You already have {activeBorrowCount}/
+                                        {facultyMaxActiveBorrows} active books.
+                                    </span>
+                                </span>
                             ) : activeRecords.length > 0 ? (
                                 <span className="inline-flex flex-col items-end text-xs text-amber-200">
                                     <FacultyBookActionState book={book} />

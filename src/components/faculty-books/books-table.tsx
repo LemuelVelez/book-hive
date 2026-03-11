@@ -37,6 +37,10 @@ type FacultyBooksTableProps = {
     onBorrowDialogBookChange: (bookId: string | null) => void
     onBorrowCopiesChange: (value: number) => void
     onBorrow: (book: BookWithStatus, copiesRequested: number) => void | Promise<void>
+    facultyMaxActiveBorrows: number
+    defaultBorrowDurationDays: number
+    activeBorrowCount: number
+    remainingBorrowSlots: number
 }
 
 export function FacultyBooksTable({
@@ -47,6 +51,10 @@ export function FacultyBooksTable({
     onBorrowDialogBookChange,
     onBorrowCopiesChange,
     onBorrow,
+    facultyMaxActiveBorrows,
+    defaultBorrowDurationDays,
+    activeBorrowCount,
+    remainingBorrowSlots,
 }: FacultyBooksTableProps) {
     const tableScrollRef = React.useRef<HTMLDivElement | null>(null)
     const tableDragPointerIdRef = React.useRef<number | null>(null)
@@ -190,7 +198,8 @@ export function FacultyBooksTable({
                     {rows.map((book) => {
                         const remaining = getRemainingCopies(book)
                         const borrowableNow = isBorrowable(book)
-                        const maxCopies = remaining
+                        const maxCopies = Math.min(remaining, remainingBorrowSlots)
+                        const canBorrowThisBook = borrowableNow && maxCopies > 0
                         const borrowBtnLabel =
                             book.activeRecords.length > 0 ? "Borrow more" : "Borrow"
                         const {
@@ -275,7 +284,7 @@ export function FacultyBooksTable({
                                 </TableCell>
 
                                 <TableCell className="align-top text-right">
-                                    {borrowableNow ? (
+                                    {canBorrowThisBook ? (
                                         <FacultyBorrowConfirmDialog
                                             book={book}
                                             open={borrowDialogBookId === book.id}
@@ -293,9 +302,28 @@ export function FacultyBooksTable({
                                             busy={borrowBusyId === book.id}
                                             onConfirm={(qty) => void onBorrow(book, qty)}
                                             maxCopies={maxCopies}
+                                            remainingBorrowSlots={remainingBorrowSlots}
+                                            facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                                            defaultBorrowDurationDays={defaultBorrowDurationDays}
                                             triggerLabel={borrowBtnLabel}
                                             triggerDisabled={maxCopies <= 0}
                                         />
+                                    ) : borrowableNow && remainingBorrowSlots <= 0 ? (
+                                        <div className="inline-flex flex-col items-end gap-1 text-xs">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                disabled
+                                                className="border-white/20 text-white/60"
+                                            >
+                                                Limit reached
+                                            </Button>
+                                            <span className="text-white/60 whitespace-normal wrap-break-word">
+                                                You already have {activeBorrowCount}/
+                                                {facultyMaxActiveBorrows} active books.
+                                            </span>
+                                        </div>
                                     ) : activeRecords.length > 0 ? (
                                         <span className="inline-flex flex-col items-end text-xs text-amber-200 whitespace-normal wrap-break-word">
                                             <FacultyBookActionState book={book} />
