@@ -60,6 +60,22 @@ function getErrorMessage(e: unknown): string {
     }
 }
 
+function normalizeOfficialReceiptNumber(raw: unknown): string | null {
+    if (raw === undefined || raw === null) return null;
+    const value = String(raw).trim();
+    return value.length > 0 ? value : null;
+}
+
+function ensureOfficialReceiptNumber(raw: unknown): string {
+    const value = normalizeOfficialReceiptNumber(raw);
+    if (!value) {
+        throw new Error(
+            "Official receipt number is required when marking a damage report as paid."
+        );
+    }
+    return value;
+}
+
 async function requestJSON<T = unknown>(url: string, init: FetchInit = {}): Promise<T> {
     const { asFormData, body, headers, ...rest } = init;
 
@@ -181,7 +197,52 @@ export type UpdateDamageReportPayload = Partial<{
 
     /** Liable user can differ from reporter/current borrower */
     liableUserId: string | number | null;
+
+    /**
+     * Cashier proof / official receipt number.
+     * Required by backend when status becomes "paid".
+     */
+    officialReceiptNumber: string | null;
+    orNumber: string | null;
+    receiptNumber: string | null;
 }>;
+
+function buildDamageReportUpdatePayload(
+    payload: UpdateDamageReportPayload
+): Record<string, unknown> {
+    const next: Record<string, unknown> = {};
+
+    if (payload.status !== undefined) next.status = payload.status;
+    if (payload.severity !== undefined) next.severity = payload.severity;
+    if (payload.fee !== undefined) next.fee = payload.fee;
+    if (payload.notes !== undefined) next.notes = payload.notes;
+    if (payload.liableUserId !== undefined) next.liableUserId = payload.liableUserId;
+
+    const hasReceiptField =
+        payload.officialReceiptNumber !== undefined ||
+        payload.orNumber !== undefined ||
+        payload.receiptNumber !== undefined;
+
+    if (payload.status === "paid") {
+        next.officialReceiptNumber = ensureOfficialReceiptNumber(
+            payload.officialReceiptNumber ??
+                payload.orNumber ??
+                payload.receiptNumber
+        );
+    } else if (hasReceiptField) {
+        const value = normalizeOfficialReceiptNumber(
+            payload.officialReceiptNumber ??
+                payload.orNumber ??
+                payload.receiptNumber
+        );
+
+        if (value) {
+            next.officialReceiptNumber = value;
+        }
+    }
+
+    return next;
+}
 
 /**
  * Update a damage report (status, severity, fee, notes, liable user).
@@ -194,9 +255,28 @@ export async function updateDamageReport(
     type Resp = JsonOk<{ report: DamageReportDTO }>;
     const res = await requestJSON<Resp>(DAMAGE_ROUTES.update(id), {
         method: "PATCH",
-        body: payload,
+        body: buildDamageReportUpdatePayload(payload),
     });
     return res.report;
+}
+
+/**
+ * Explicit helper for the UI "Mark as Paid" action on damage reports.
+ * Requires a cashier OR # as proof before the API request is sent.
+ */
+export async function markDamageReportAsPaid(
+    id: string | number,
+    officialReceiptNumber: string,
+    extra?: Partial<Pick<UpdateDamageReportPayload, "fee" | "notes" | "liableUserId" | "severity">>
+): Promise<DamageReportDTO> {
+    return updateDamageReport(id, {
+        status: "paid",
+        fee: extra?.fee,
+        notes: extra?.notes,
+        liableUserId: extra?.liableUserId,
+        severity: extra?.severity,
+        officialReceiptNumber: ensureOfficialReceiptNumber(officialReceiptNumber),
+    });
 }
 
 /**

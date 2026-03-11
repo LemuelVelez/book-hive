@@ -9,6 +9,8 @@ import type { BorrowStatus } from "@/lib/borrows";
  */
 export type FineStatus = "active" | "paid" | "cancelled";
 
+export const DEFAULT_FINE_PER_HOUR = 10;
+
 export type FineDTO = {
   id: string;
   userId: string;
@@ -26,6 +28,12 @@ export type FineDTO = {
   updatedAt: string;
   resolvedAt: string | null;
 
+  /**
+   * Cashier proof / official receipt number.
+   * Backend requires this when status becomes "paid".
+   */
+  officialReceiptNumber: string | null;
+
   studentEmail: string | null;
   studentId: string | null;
   studentName: string | null;
@@ -35,6 +43,14 @@ export type FineDTO = {
   borrowStatus: BorrowStatus | null;
   borrowDueDate: string | null;
   borrowReturnDate: string | null;
+
+  /**
+   * Borrow-overdue metrics returned by backend so UI can show the actual
+   * overdue duration instead of incorrectly showing 0 day(s).
+   */
+  finePerHour: number | null;
+  overdueHours: number | null;
+  overdueDays: number | null;
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -56,6 +72,22 @@ function getErrorMessage(e: unknown): string {
   } catch {
     return "";
   }
+}
+
+function normalizeOfficialReceiptNumber(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const value = String(raw).trim();
+  return value.length > 0 ? value : null;
+}
+
+function ensureOfficialReceiptNumber(raw: unknown): string {
+  const value = normalizeOfficialReceiptNumber(raw);
+  if (!value) {
+    throw new Error(
+      "Official receipt number is required when marking a fine as paid."
+    );
+  }
+  return value;
 }
 
 async function requestJSON<T = unknown>(
@@ -175,12 +207,59 @@ export async function fetchFines(params?: FetchFinesParams): Promise<FineDTO[]> 
  * - status: active | paid | cancelled
  * - amount: >= 0
  * - reason: optional note
+ * - officialReceiptNumber/orNumber/receiptNumber: cashier OR #
  */
 export type UpdateFinePayload = Partial<{
   status: FineStatus;
   amount: number;
   reason: string | null;
+  officialReceiptNumber: string | null;
+  orNumber: string | null;
+  receiptNumber: string | null;
 }>;
+
+function buildFineUpdatePayload(
+  payload: UpdateFinePayload
+): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+
+  if (payload.status !== undefined) {
+    next.status = payload.status;
+  }
+
+  if (payload.amount !== undefined) {
+    next.amount = payload.amount;
+  }
+
+  if (payload.reason !== undefined) {
+    next.reason = payload.reason;
+  }
+
+  const hasReceiptField =
+    payload.officialReceiptNumber !== undefined ||
+    payload.orNumber !== undefined ||
+    payload.receiptNumber !== undefined;
+
+  if (payload.status === "paid") {
+    next.officialReceiptNumber = ensureOfficialReceiptNumber(
+      payload.officialReceiptNumber ??
+        payload.orNumber ??
+        payload.receiptNumber
+    );
+  } else if (hasReceiptField) {
+    const value = normalizeOfficialReceiptNumber(
+      payload.officialReceiptNumber ??
+        payload.orNumber ??
+        payload.receiptNumber
+    );
+
+    if (value) {
+      next.officialReceiptNumber = value;
+    }
+  }
+
+  return next;
+}
 
 export async function updateFine(
   id: string | number,
@@ -189,7 +268,24 @@ export async function updateFine(
   type Resp = JsonOk<{ fine: FineDTO }>;
   const res = await requestJSON<Resp>(FINES_ROUTES.update(id), {
     method: "PATCH",
-    body: payload,
+    body: buildFineUpdatePayload(payload),
   });
   return res.fine;
+}
+
+/**
+ * Explicit helper for the UI "Mark as Paid" action.
+ * Requires a cashier OR # as proof before the API request is sent.
+ */
+export async function markFineAsPaid(
+  id: string | number,
+  officialReceiptNumber: string,
+  extra?: Partial<Pick<UpdateFinePayload, "amount" | "reason">>
+): Promise<FineDTO> {
+  return updateFine(id, {
+    status: "paid",
+    amount: extra?.amount,
+    reason: extra?.reason,
+    officialReceiptNumber: ensureOfficialReceiptNumber(officialReceiptNumber),
+  });
 }
