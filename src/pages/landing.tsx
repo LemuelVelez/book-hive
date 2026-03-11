@@ -66,12 +66,12 @@ function FeatureCard({
     description: string
 }) {
     return (
-        <Card className="bg-slate-900/70 border-blue-100/10 backdrop-blur">
+        <Card className="bg-blue-900/60 border-yellow-300/10 backdrop-blur">
             <CardHeader className="flex flex-row items-center gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-linear-to-tr from-blue-600 to-yellow-400">
-                    <Icon className="h-5 w-5 text-slate-950" />
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-linear-to-tr from-blue-500 to-yellow-400">
+                    <Icon className="h-5 w-5 text-white" />
                 </div>
-                <CardTitle className="text-white text-lg">{title}</CardTitle>
+                <CardTitle className="text-lg text-white">{title}</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
                 <CardDescription className="text-white/70">{description}</CardDescription>
@@ -95,7 +95,7 @@ function StepItem({
         <div className="relative">
             <div className="flex items-start gap-4">
                 <div className="relative">
-                    <div className="grid h-10 w-10 place-items-center rounded-full bg-linear-to-tr from-blue-600 to-yellow-400 font-semibold text-slate-950">
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-linear-to-tr from-blue-500 to-yellow-400 font-semibold text-white">
                         {number}
                     </div>
                     {!isLast && (
@@ -103,8 +103,8 @@ function StepItem({
                     )}
                 </div>
                 <div>
-                    <h4 className="text-white font-semibold">{title}</h4>
-                    <p className="text-white/70 text-sm">{description}</p>
+                    <h4 className="font-semibold text-white">{title}</h4>
+                    <p className="text-sm text-white/70">{description}</p>
                 </div>
             </div>
         </div>
@@ -125,36 +125,36 @@ export default function LandingPage() {
     useEffect(() => {
         let cancelled = false
 
-        ;(async () => {
-            const user = await apiMe()
-            if (cancelled || !user) return
+            ; (async () => {
+                const user = await apiMe()
+                if (cancelled || !user) return
 
-            setIsAuthed(true)
+                setIsAuthed(true)
 
-            // ✅ Route user to their own dashboard based on accountType
-            switch (user.accountType) {
-                case "student":
-                case "other":
-                    setDashboardHref("/dashboard")
-                    setBooksHref("/dashboard/books")
-                    break
-                case "librarian":
-                    setDashboardHref("/dashboard/librarian")
-                    setBooksHref("/dashboard/librarian/books")
-                    break
-                case "faculty":
-                    setDashboardHref("/dashboard/faculty")
-                    setBooksHref("/dashboard/faculty/books")
-                    break
-                case "admin":
-                    setDashboardHref("/dashboard/admin")
-                    setBooksHref("/dashboard/admin")
-                    break
-                default:
-                    setDashboardHref("/dashboard")
-                    setBooksHref("/dashboard/books")
-            }
-        })()
+                // ✅ Route user to their own dashboard based on accountType
+                switch (user.accountType) {
+                    case "student":
+                    case "other":
+                        setDashboardHref("/dashboard")
+                        setBooksHref("/dashboard/books")
+                        break
+                    case "librarian":
+                        setDashboardHref("/dashboard/librarian")
+                        setBooksHref("/dashboard/librarian/books")
+                        break
+                    case "faculty":
+                        setDashboardHref("/dashboard/faculty")
+                        setBooksHref("/dashboard/faculty/books")
+                        break
+                    case "admin":
+                        setDashboardHref("/dashboard/admin")
+                        setBooksHref("/dashboard/admin")
+                        break
+                    default:
+                        setDashboardHref("/dashboard")
+                        setBooksHref("/dashboard/books")
+                }
+            })()
 
         return () => {
             cancelled = true
@@ -162,32 +162,33 @@ export default function LandingPage() {
     }, [])
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white">
+        <div className="min-h-screen bg-blue-950 text-white">
             {/* Gradient background flourish */}
             <div
                 aria-hidden="true"
                 className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
             >
-                <div className="absolute -top-24 left-1/2 h-72 w-xl -translate-x-1/2 rounded-full bg-blue-600/20 blur-3xl" />
+                <div className="absolute -top-24 left-1/2 h-72 w-xl -translate-x-1/2 rounded-full bg-blue-500/20 blur-3xl" />
                 <div className="absolute top-1/3 -left-10 h-72 w-md rounded-full bg-yellow-400/15 blur-3xl" />
+                <div className="absolute bottom-0 right-0 h-72 w-lg rounded-full bg-sky-400/10 blur-3xl" />
             </div>
 
             {/* Header (sticky) */}
-            <header className="sticky top-0 z-40 border-b border-blue-100/10 bg-slate-950/80 backdrop-blur">
+            <header className="sticky top-0 z-40 border-b border-yellow-300/10 bg-blue-950/85 backdrop-blur">
                 <div className={`${PAGE_WRAP} py-5`}>
                     <nav className="flex items-center justify-between gap-4">
                         {/* Left: Logo + OPAC (visible before login) */}
-                        <div className="flex items-center gap-3 min-w-0">
-                            <Link to="/" className="flex items-center gap-2 group min-w-0">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <Link to="/" className="group flex min-w-0 items-center gap-2">
                                 <img
                                     src={logo}
                                     alt="JRMSU-TC Book-Hive logo"
                                     className="h-10 w-10 rounded-md object-contain"
                                 />
-                                <span className="font-semibold tracking-tight group-hover:text-white/90 hidden sm:inline truncate">
+                                <span className="hidden truncate font-semibold tracking-tight group-hover:text-white/90 sm:inline">
                                     JRMSU-TC Book-Hive
                                 </span>
-                                <span className="font-semibold tracking-tight group-hover:text-white/90 sm:hidden truncate">
+                                <span className="truncate font-semibold tracking-tight group-hover:text-white/90 sm:hidden">
                                     Book-Hive
                                 </span>
                             </Link>
@@ -196,30 +197,30 @@ export default function LandingPage() {
                         </div>
 
                         {/* Desktop nav */}
-                        <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
-                            <a href="#features" className="hover:text-yellow-300">
+                        <div className="hidden items-center gap-6 text-sm text-white/80 md:flex">
+                            <a href="#features" className="hover:text-white">
                                 Features
                             </a>
-                            <a href="#how-it-works" className="hover:text-yellow-300">
+                            <a href="#how-it-works" className="hover:text-white">
                                 How it works
                             </a>
-                            <a href="#faq" className="hover:text-yellow-300">
+                            <a href="#faq" className="hover:text-white">
                                 FAQ
                             </a>
                         </div>
 
                         {/* Desktop CTA */}
-                        <div className="hidden md:flex items-center gap-3">
+                        <div className="hidden items-center gap-3 md:flex">
                             {!isAuthed ? (
                                 <Button
-                                    className="cursor-pointer border border-yellow-400/40 bg-blue-600 text-white hover:bg-blue-700"
+                                    className="cursor-pointer bg-yellow-400 text-blue-950 hover:bg-yellow-300"
                                     onClick={() => navigate("/auth")}
                                 >
                                     Login / Register
                                 </Button>
                             ) : (
                                 <Button
-                                    className="cursor-pointer border border-yellow-400/40 bg-blue-600 text-white hover:bg-blue-700"
+                                    className="cursor-pointer bg-yellow-400 text-blue-950 hover:bg-yellow-300"
                                     onClick={() => navigate(dashboardHref)}
                                 >
                                     Go to Dashboard
@@ -234,7 +235,7 @@ export default function LandingPage() {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="rounded-xl group"
+                                        className="rounded-xl text-white group"
                                         aria-expanded={sheetOpen}
                                     >
                                         <Menu
@@ -250,27 +251,27 @@ export default function LandingPage() {
 
                                 <SheetContent
                                     side="top"
-                                    className="w-full rounded-b-2xl border-blue-100/10 bg-slate-900 p-6 text-white sm:p-8"
+                                    className="w-full rounded-b-2xl border-yellow-300/10 bg-blue-950 p-6 text-white sm:p-8"
                                 >
                                     <div className="w-full">
                                         <div className="mb-4 space-y-2 text-sm text-white/80">
-                                            <a href="#features" className="block hover:text-yellow-300">
+                                            <a href="#features" className="block hover:text-white">
                                                 Features
                                             </a>
                                             <a
                                                 href="#how-it-works"
-                                                className="block hover:text-yellow-300"
+                                                className="block hover:text-white"
                                             >
                                                 How it works
                                             </a>
-                                            <a href="#faq" className="block hover:text-yellow-300">
+                                            <a href="#faq" className="block hover:text-white">
                                                 FAQ
                                             </a>
                                         </div>
 
                                         <SheetClose asChild>
                                             <Button
-                                                className="mt-2 w-full cursor-pointer border border-yellow-400/40 bg-blue-600 text-white hover:bg-blue-700"
+                                                className="mt-2 w-full cursor-pointer bg-yellow-400 text-blue-950 hover:bg-yellow-300"
                                                 onClick={() =>
                                                     navigate(isAuthed ? dashboardHref : "/auth")
                                                 }
@@ -291,16 +292,16 @@ export default function LandingPage() {
             {/* Hero */}
             <section className="w-full pt-10 pb-20">
                 <div className={PAGE_WRAP}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                    <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
                         <div>
-                            <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">
+                            <h1 className="text-4xl leading-tight font-extrabold md:text-5xl">
                                 Borrow books{" "}
-                                <span className="bg-linear-to-r from-blue-400 to-yellow-300 bg-clip-text text-transparent">
+                                <span className="bg-linear-to-r from-blue-300 to-yellow-300 bg-clip-text text-transparent">
                                     online
                                 </span>{" "}
                                 and save time.
                             </h1>
-                            <p className="mt-4 text-white/80 text-lg">
+                            <p className="mt-4 text-lg text-white/80">
                                 Book-Hive is JRMSU-TC’s web-based library platform for{" "}
                                 <span className="font-semibold">
                                     real-time availability and online reservations
@@ -312,7 +313,7 @@ export default function LandingPage() {
                                 {!isAuthed ? (
                                     <Button
                                         size="lg"
-                                        className="cursor-pointer border border-yellow-400/40 bg-blue-600 px-7 py-6 text-base text-white hover:bg-blue-700"
+                                        className="cursor-pointer px-7 py-6 text-base bg-yellow-400 text-blue-950 hover:bg-yellow-300"
                                         onClick={() => navigate("/auth")}
                                     >
                                         Get Started
@@ -321,7 +322,7 @@ export default function LandingPage() {
                                 ) : (
                                     <Button
                                         size="lg"
-                                        className="cursor-pointer border border-yellow-400/40 bg-blue-600 px-7 py-6 text-base text-white hover:bg-blue-700"
+                                        className="cursor-pointer px-7 py-6 text-base bg-yellow-400 text-blue-950 hover:bg-yellow-300"
                                         onClick={() => navigate(dashboardHref)}
                                     >
                                         Go to Dashboard
@@ -331,30 +332,33 @@ export default function LandingPage() {
 
                                 <a
                                     href="#features"
-                                    className="inline-flex items-center text-white/80 hover:text-yellow-300"
+                                    className="inline-flex items-center text-white/80 hover:text-white"
                                 >
                                     Learn more
                                 </a>
                             </div>
 
                             {/* Quick value bullets */}
-                            <ul className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm text-white/70">
+                            <ul className="mt-6 grid grid-cols-1 gap-3 text-sm text-white/70 sm:grid-cols-3">
                                 <li className="flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4 text-yellow-300" /> Secure accounts
+                                    <ShieldCheck className="h-4 w-4 text-yellow-300" /> Secure
+                                    accounts
                                 </li>
                                 <li className="flex items-center gap-2">
-                                    <Clock className="h-4 w-4 text-yellow-300" /> Fast reservations
+                                    <Clock className="h-4 w-4 text-yellow-300" /> Fast
+                                    reservations
                                 </li>
                                 <li className="flex items-center gap-2">
-                                    <Search className="h-4 w-4 text-yellow-300" /> Easy catalog search
+                                    <Search className="h-4 w-4 text-yellow-300" /> Easy catalog
+                                    search
                                 </li>
                             </ul>
                         </div>
 
                         {/* Illustration / hero image */}
                         <div className="relative">
-                            <div className="absolute -inset-1 rounded-xl bg-linear-to-r from-blue-600 to-yellow-400 opacity-70 blur" />
-                            <div className="relative rounded-xl border border-blue-100/10 bg-slate-900/80 p-4">
+                            <div className="absolute -inset-1 rounded-xl bg-linear-to-r from-blue-500 to-yellow-400 opacity-70 blur" />
+                            <div className="relative rounded-xl border border-yellow-300/10 bg-blue-950/80 p-4">
                                 <img
                                     src={heroImg}
                                     alt="Book-Hive hero"
@@ -375,7 +379,7 @@ export default function LandingPage() {
                         className="mb-10"
                     />
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                         <FeatureCard
                             icon={Search}
                             title="Real-time Availability"
@@ -408,9 +412,9 @@ export default function LandingPage() {
             {/* How it works */}
             <section id="how-it-works" className="w-full pb-20">
                 <div className={PAGE_WRAP}>
-                    <div className="rounded-2xl border border-blue-100/10 bg-linear-to-r from-blue-900/35 via-blue-800/20 to-yellow-700/20 p-8">
+                    <div className="rounded-2xl border border-yellow-300/10 bg-linear-to-r from-blue-950/70 to-yellow-500/10 p-8">
                         <SectionHeading title="How it works" className="mb-8" />
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                        <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
                             <StepItem
                                 number={1}
                                 title="Login / Register"
@@ -448,7 +452,7 @@ export default function LandingPage() {
                         />
                         <Button
                             size="lg"
-                            className="cursor-pointer border border-yellow-400/40 bg-blue-600 px-8 py-6 text-base text-white hover:bg-blue-700"
+                            className="cursor-pointer px-8 py-6 text-base bg-yellow-400 text-blue-950 hover:bg-yellow-300"
                             onClick={() => navigate(isAuthed ? dashboardHref : "/auth")}
                         >
                             {isAuthed ? "Go to Dashboard" : "Login / Register"}
@@ -465,7 +469,7 @@ export default function LandingPage() {
                     <Accordion type="single" collapsible className="mx-auto px-16">
                         <AccordionItem
                             value="item-1"
-                            className="mb-3 rounded-xl border-blue-100/10 bg-slate-900/70 backdrop-blur"
+                            className="mb-3 rounded-xl border-yellow-300/10 bg-blue-900/60 backdrop-blur"
                         >
                             <AccordionTrigger className="px-4 text-left text-white hover:no-underline">
                                 Do I need to visit the library to complete a reservation?
@@ -478,7 +482,7 @@ export default function LandingPage() {
 
                         <AccordionItem
                             value="item-2"
-                            className="mb-3 rounded-xl border-blue-100/10 bg-slate-900/70 backdrop-blur"
+                            className="mb-3 rounded-xl border-yellow-300/10 bg-blue-900/60 backdrop-blur"
                         >
                             <AccordionTrigger className="px-4 text-left text-white hover:no-underline">
                                 Can I see if a book is currently borrowed?
@@ -493,24 +497,24 @@ export default function LandingPage() {
             </section>
 
             {/* Footer */}
-            <footer className="border-t border-blue-100/10 py-8">
+            <footer className="border-t border-yellow-300/10 py-8">
                 <div
-                    className={`${PAGE_WRAP} flex flex-col md:flex-row items-center justify-between gap-4 text-white/70 text-sm`}
+                    className={`${PAGE_WRAP} flex flex-col items-center justify-between gap-4 text-sm text-white/70 md:flex-row`}
                 >
                     <p>© {new Date().getFullYear()} JRMSU-TC — Book-Hive</p>
                     <div className="flex items-center gap-6">
-                        <a href="#features" className="hover:text-yellow-300">
+                        <a href="#features" className="hover:text-white">
                             Features
                         </a>
-                        <a href="#how-it-works" className="hover:text-yellow-300">
+                        <a href="#how-it-works" className="hover:text-white">
                             How it works
                         </a>
                         {isAuthed ? (
-                            <Link to={dashboardHref} className="hover:text-yellow-300">
+                            <Link to={dashboardHref} className="hover:text-white">
                                 Dashboard
                             </Link>
                         ) : (
-                            <Link to="/auth" className="hover:text-yellow-300">
+                            <Link to="/auth" className="hover:text-white">
                                 Login
                             </Link>
                         )}
