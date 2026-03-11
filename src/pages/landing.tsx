@@ -66,10 +66,10 @@ function FeatureCard({
     description: string
 }) {
     return (
-        <Card className="bg-slate-800/60 border-white/10 backdrop-blur">
+        <Card className="bg-slate-900/70 border-blue-100/10 backdrop-blur">
             <CardHeader className="flex flex-row items-center gap-3">
-                <div className="h-10 w-10 shrink-0 rounded-lg bg-linear-to-tr from-purple-500 to-pink-500 grid place-items-center">
-                    <Icon className="h-5 w-5 text-white" />
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-linear-to-tr from-blue-600 to-yellow-400">
+                    <Icon className="h-5 w-5 text-slate-950" />
                 </div>
                 <CardTitle className="text-white text-lg">{title}</CardTitle>
             </CardHeader>
@@ -95,11 +95,11 @@ function StepItem({
         <div className="relative">
             <div className="flex items-start gap-4">
                 <div className="relative">
-                    <div className="h-10 w-10 rounded-full bg-linear-to-tr from-purple-500 to-pink-500 text-white grid place-items-center font-semibold">
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-linear-to-tr from-blue-600 to-yellow-400 font-semibold text-slate-950">
                         {number}
                     </div>
                     {!isLast && (
-                        <div className="absolute left-1/2 -bottom-6 -translate-x-1/2 h-6 w-0.5 bg-white/15" />
+                        <div className="absolute left-1/2 -bottom-6 h-6 w-0.5 -translate-x-1/2 bg-white/15" />
                     )}
                 </div>
                 <div>
@@ -125,36 +125,36 @@ export default function LandingPage() {
     useEffect(() => {
         let cancelled = false
 
-            ; (async () => {
-                const user = await apiMe()
-                if (cancelled || !user) return
+        ;(async () => {
+            const user = await apiMe()
+            if (cancelled || !user) return
 
-                setIsAuthed(true)
+            setIsAuthed(true)
 
-                // ✅ Route user to their own dashboard based on accountType
-                switch (user.accountType) {
-                    case "student":
-                    case "other":
-                        setDashboardHref("/dashboard")
-                        setBooksHref("/dashboard/books")
-                        break
-                    case "librarian":
-                        setDashboardHref("/dashboard/librarian")
-                        setBooksHref("/dashboard/librarian/books")
-                        break
-                    case "faculty":
-                        setDashboardHref("/dashboard/faculty")
-                        setBooksHref("/dashboard/faculty/books")
-                        break
-                    case "admin":
-                        setDashboardHref("/dashboard/admin")
-                        setBooksHref("/dashboard/admin")
-                        break
-                    default:
-                        setDashboardHref("/dashboard")
-                        setBooksHref("/dashboard/books")
-                }
-            })()
+            // ✅ Route user to their own dashboard based on accountType
+            switch (user.accountType) {
+                case "student":
+                case "other":
+                    setDashboardHref("/dashboard")
+                    setBooksHref("/dashboard/books")
+                    break
+                case "librarian":
+                    setDashboardHref("/dashboard/librarian")
+                    setBooksHref("/dashboard/librarian/books")
+                    break
+                case "faculty":
+                    setDashboardHref("/dashboard/faculty")
+                    setBooksHref("/dashboard/faculty/books")
+                    break
+                case "admin":
+                    setDashboardHref("/dashboard/admin")
+                    setBooksHref("/dashboard/admin")
+                    break
+                default:
+                    setDashboardHref("/dashboard")
+                    setBooksHref("/dashboard/books")
+            }
+        })()
 
         return () => {
             cancelled = true
@@ -168,12 +168,12 @@ export default function LandingPage() {
                 aria-hidden="true"
                 className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
             >
-                <div className="absolute -top-24 left-1/2 h-72 w-xl -translate-x-1/2 rounded-full bg-purple-600/20 blur-3xl" />
-                <div className="absolute top-1/3 -left-10 h-72 w-md rounded-full bg-pink-600/20 blur-3xl" />
+                <div className="absolute -top-24 left-1/2 h-72 w-xl -translate-x-1/2 rounded-full bg-blue-600/20 blur-3xl" />
+                <div className="absolute top-1/3 -left-10 h-72 w-md rounded-full bg-yellow-400/15 blur-3xl" />
             </div>
 
             {/* Header (sticky) */}
-            <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur border-b border-white/10">
+            <header className="sticky top-0 z-40 border-b border-blue-100/10 bg-slate-950/80 backdrop-blur">
                 <div className={`${PAGE_WRAP} py-5`}>
                     <nav className="flex items-center justify-between gap-4">
                         {/* Left: Logo + OPAC (visible before login) */}
@@ -197,13 +197,13 @@ export default function LandingPage() {
 
                         {/* Desktop nav */}
                         <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
-                            <a href="#features" className="hover:text-white">
+                            <a href="#features" className="hover:text-yellow-300">
                                 Features
                             </a>
-                            <a href="#how-it-works" className="hover:text-white">
+                            <a href="#how-it-works" className="hover:text-yellow-300">
                                 How it works
                             </a>
-                            <a href="#faq" className="hover:text-white">
+                            <a href="#faq" className="hover:text-yellow-300">
                                 FAQ
                             </a>
                         </div>
@@ -212,14 +212,14 @@ export default function LandingPage() {
                         <div className="hidden md:flex items-center gap-3">
                             {!isAuthed ? (
                                 <Button
-                                    className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                    className="cursor-pointer border border-yellow-400/40 bg-blue-600 text-white hover:bg-blue-700"
                                     onClick={() => navigate("/auth")}
                                 >
                                     Login / Register
                                 </Button>
                             ) : (
                                 <Button
-                                    className="text-white cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                    className="cursor-pointer border border-yellow-400/40 bg-blue-600 text-white hover:bg-blue-700"
                                     onClick={() => navigate(dashboardHref)}
                                 >
                                     Go to Dashboard
@@ -250,27 +250,27 @@ export default function LandingPage() {
 
                                 <SheetContent
                                     side="top"
-                                    className="w-full p-6 sm:p-8 bg-slate-900 border-white/10 text-white rounded-b-2xl"
+                                    className="w-full rounded-b-2xl border-blue-100/10 bg-slate-900 p-6 text-white sm:p-8"
                                 >
                                     <div className="w-full">
                                         <div className="mb-4 space-y-2 text-sm text-white/80">
-                                            <a href="#features" className="block hover:text-white">
+                                            <a href="#features" className="block hover:text-yellow-300">
                                                 Features
                                             </a>
                                             <a
                                                 href="#how-it-works"
-                                                className="block hover:text-white"
+                                                className="block hover:text-yellow-300"
                                             >
                                                 How it works
                                             </a>
-                                            <a href="#faq" className="block hover:text-white">
+                                            <a href="#faq" className="block hover:text-yellow-300">
                                                 FAQ
                                             </a>
                                         </div>
 
                                         <SheetClose asChild>
                                             <Button
-                                                className="text-white w-full cursor-pointer mt-2 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                                className="mt-2 w-full cursor-pointer border border-yellow-400/40 bg-blue-600 text-white hover:bg-blue-700"
                                                 onClick={() =>
                                                     navigate(isAuthed ? dashboardHref : "/auth")
                                                 }
@@ -295,7 +295,7 @@ export default function LandingPage() {
                         <div>
                             <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">
                                 Borrow books{" "}
-                                <span className="text-transparent bg-clip-text bg-linear-to-r from-purple-400 to-pink-400">
+                                <span className="bg-linear-to-r from-blue-400 to-yellow-300 bg-clip-text text-transparent">
                                     online
                                 </span>{" "}
                                 and save time.
@@ -312,7 +312,7 @@ export default function LandingPage() {
                                 {!isAuthed ? (
                                     <Button
                                         size="lg"
-                                        className="text-white cursor-pointer px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                        className="cursor-pointer border border-yellow-400/40 bg-blue-600 px-7 py-6 text-base text-white hover:bg-blue-700"
                                         onClick={() => navigate("/auth")}
                                     >
                                         Get Started
@@ -321,7 +321,7 @@ export default function LandingPage() {
                                 ) : (
                                     <Button
                                         size="lg"
-                                        className=" text-white cursor-pointer px-7 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                        className="cursor-pointer border border-yellow-400/40 bg-blue-600 px-7 py-6 text-base text-white hover:bg-blue-700"
                                         onClick={() => navigate(dashboardHref)}
                                     >
                                         Go to Dashboard
@@ -331,7 +331,7 @@ export default function LandingPage() {
 
                                 <a
                                     href="#features"
-                                    className="inline-flex items-center text-white/80 hover:text-white"
+                                    className="inline-flex items-center text-white/80 hover:text-yellow-300"
                                 >
                                     Learn more
                                 </a>
@@ -340,25 +340,25 @@ export default function LandingPage() {
                             {/* Quick value bullets */}
                             <ul className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm text-white/70">
                                 <li className="flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4" /> Secure accounts
+                                    <ShieldCheck className="h-4 w-4 text-yellow-300" /> Secure accounts
                                 </li>
                                 <li className="flex items-center gap-2">
-                                    <Clock className="h-4 w-4" /> Fast reservations
+                                    <Clock className="h-4 w-4 text-yellow-300" /> Fast reservations
                                 </li>
                                 <li className="flex items-center gap-2">
-                                    <Search className="h-4 w-4" /> Easy catalog search
+                                    <Search className="h-4 w-4 text-yellow-300" /> Easy catalog search
                                 </li>
                             </ul>
                         </div>
 
                         {/* Illustration / hero image */}
                         <div className="relative">
-                            <div className="absolute -inset-1 rounded-xl bg-linear-to-r from-purple-500 to-pink-500 opacity-70 blur" />
-                            <div className="relative rounded-xl bg-slate-900/80 border border-white/10 p-4">
+                            <div className="absolute -inset-1 rounded-xl bg-linear-to-r from-blue-600 to-yellow-400 opacity-70 blur" />
+                            <div className="relative rounded-xl border border-blue-100/10 bg-slate-900/80 p-4">
                                 <img
                                     src={heroImg}
                                     alt="Book-Hive hero"
-                                    className="w-full h-auto rounded-md object-cover"
+                                    className="h-auto w-full rounded-md object-cover"
                                 />
                             </div>
                         </div>
@@ -408,7 +408,7 @@ export default function LandingPage() {
             {/* How it works */}
             <section id="how-it-works" className="w-full pb-20">
                 <div className={PAGE_WRAP}>
-                    <div className="rounded-2xl border border-white/10 bg-linear-to-r from-purple-900/30 to-pink-900/30 p-8">
+                    <div className="rounded-2xl border border-blue-100/10 bg-linear-to-r from-blue-900/35 via-blue-800/20 to-yellow-700/20 p-8">
                         <SectionHeading title="How it works" className="mb-8" />
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                             <StepItem
@@ -448,7 +448,7 @@ export default function LandingPage() {
                         />
                         <Button
                             size="lg"
-                            className="text-white cursor-pointer px-8 py-6 text-base bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                            className="cursor-pointer border border-yellow-400/40 bg-blue-600 px-8 py-6 text-base text-white hover:bg-blue-700"
                             onClick={() => navigate(isAuthed ? dashboardHref : "/auth")}
                         >
                             {isAuthed ? "Go to Dashboard" : "Login / Register"}
@@ -465,7 +465,7 @@ export default function LandingPage() {
                     <Accordion type="single" collapsible className="mx-auto px-16">
                         <AccordionItem
                             value="item-1"
-                            className="mb-3 rounded-xl border-white/10 bg-slate-800/60 backdrop-blur"
+                            className="mb-3 rounded-xl border-blue-100/10 bg-slate-900/70 backdrop-blur"
                         >
                             <AccordionTrigger className="px-4 text-left text-white hover:no-underline">
                                 Do I need to visit the library to complete a reservation?
@@ -478,7 +478,7 @@ export default function LandingPage() {
 
                         <AccordionItem
                             value="item-2"
-                            className="mb-3 rounded-xl border-white/10 bg-slate-800/60 backdrop-blur"
+                            className="mb-3 rounded-xl border-blue-100/10 bg-slate-900/70 backdrop-blur"
                         >
                             <AccordionTrigger className="px-4 text-left text-white hover:no-underline">
                                 Can I see if a book is currently borrowed?
@@ -493,24 +493,24 @@ export default function LandingPage() {
             </section>
 
             {/* Footer */}
-            <footer className="py-8 border-t border-white/10">
+            <footer className="border-t border-blue-100/10 py-8">
                 <div
                     className={`${PAGE_WRAP} flex flex-col md:flex-row items-center justify-between gap-4 text-white/70 text-sm`}
                 >
                     <p>© {new Date().getFullYear()} JRMSU-TC — Book-Hive</p>
                     <div className="flex items-center gap-6">
-                        <a href="#features" className="hover:text-white">
+                        <a href="#features" className="hover:text-yellow-300">
                             Features
                         </a>
-                        <a href="#how-it-works" className="hover:text-white">
+                        <a href="#how-it-works" className="hover:text-yellow-300">
                             How it works
                         </a>
                         {isAuthed ? (
-                            <Link to={dashboardHref} className="hover:text-white">
+                            <Link to={dashboardHref} className="hover:text-yellow-300">
                                 Dashboard
                             </Link>
                         ) : (
-                            <Link to="/auth" className="hover:text-white">
+                            <Link to="/auth" className="hover:text-yellow-300">
                                 Login
                             </Link>
                         )}

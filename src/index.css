@@ -54,106 +54,106 @@
 }
 
 /* ============================
-   DEFAULT (DARK) THEME — matches Landing/Auth
-   Background: slate-950
-   Card/Popover: slate-800/60 with white/10 borders
+   DEFAULT (DARK) THEME — Library palette
+   Blue + Yellow
    ============================ */
 :root {
   --radius: 0.625rem;
 
   /* page/text */
-  --background: oklch(0.145 0 0); /* ~ slate-950 */
-  --foreground: oklch(0.985 0 0); /* white */
+  --background: oklch(0.18 0.03 255);
+  --foreground: oklch(0.98 0.01 255);
 
   /* surfaces */
-  --card: oklch(0.205 0 0 / 60%); /* ~ bg-slate-800/60 */
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0 / 60%); /* translucent like cards */
-  --popover-foreground: oklch(0.985 0 0);
+  --card: oklch(0.24 0.03 255 / 72%);
+  --card-foreground: oklch(0.98 0.01 255);
+  --popover: oklch(0.24 0.03 255 / 78%);
+  --popover-foreground: oklch(0.98 0.01 255);
 
   /* brand/utility */
-  --primary: oklch(0.922 0 0); /* white-ish for buttons on dark */
-  --primary-foreground: oklch(0.205 0 0); /* dark text when primary is light */
+  --primary: oklch(0.55 0.19 258); /* library blue */
+  --primary-foreground: oklch(0.98 0.01 255);
 
-  --secondary: oklch(0.269 0 0); /* ~ slate-800 */
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.9 0.16 98); /* library yellow */
+  --secondary-foreground: oklch(0.24 0.03 255);
 
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted: oklch(0.27 0.03 255);
+  --muted-foreground: oklch(0.82 0.03 255);
 
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.9 0.16 98); /* yellow accent */
+  --accent-foreground: oklch(0.24 0.03 255);
 
   --destructive: oklch(0.704 0.191 22.216);
 
   /* borders/inputs/rings */
-  --border: oklch(1 0 0 / 10%); /* ~ border-white/10 */
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.9 0.16 98);
 
-  /* charts (kept from dark palette) */
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  /* charts */
+  --chart-1: oklch(0.55 0.19 258);
+  --chart-2: oklch(0.9 0.16 98);
+  --chart-3: oklch(0.67 0.12 220);
+  --chart-4: oklch(0.78 0.14 85);
+  --chart-5: oklch(0.46 0.14 270);
 
   /* sidebar */
-  --sidebar: oklch(0.205 0 0); /* ~ slate-800/900 */
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%); /* border-white/10 */
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.21 0.03 255);
+  --sidebar-foreground: oklch(0.98 0.01 255);
+  --sidebar-primary: oklch(0.55 0.19 258);
+  --sidebar-primary-foreground: oklch(0.98 0.01 255);
+  --sidebar-accent: oklch(0.9 0.16 98);
+  --sidebar-accent-foreground: oklch(0.24 0.03 255);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.9 0.16 98);
 }
 
 /* ============================
-   LIGHT THEME (was :root before) — apply by adding class="light" on html
+   LIGHT THEME — Library palette
+   apply by adding class="light" on html
    ============================ */
 .light {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.99 0.01 250);
+  --foreground: oklch(0.22 0.03 255);
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.22 0.03 255);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.22 0.03 255);
 
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.55 0.19 258); /* library blue */
+  --primary-foreground: oklch(0.98 0.01 255);
 
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.97 0.06 100); /* soft library yellow */
+  --secondary-foreground: oklch(0.22 0.03 255);
 
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted: oklch(0.97 0.02 250);
+  --muted-foreground: oklch(0.5 0.03 255);
 
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.97 0.06 100);
+  --accent-foreground: oklch(0.22 0.03 255);
 
   --destructive: oklch(0.577 0.245 27.325);
 
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.9 0.02 250);
+  --input: oklch(0.9 0.02 250);
+  --ring: oklch(0.55 0.19 258);
 
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --chart-1: oklch(0.55 0.19 258);
+  --chart-2: oklch(0.82 0.15 95);
+  --chart-3: oklch(0.62 0.11 225);
+  --chart-4: oklch(0.75 0.12 85);
+  --chart-5: oklch(0.44 0.12 270);
 
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.97 0.02 250);
+  --sidebar-foreground: oklch(0.22 0.03 255);
+  --sidebar-primary: oklch(0.55 0.19 258);
+  --sidebar-primary-foreground: oklch(0.98 0.01 255);
+  --sidebar-accent: oklch(0.97 0.06 100);
+  --sidebar-accent-foreground: oklch(0.22 0.03 255);
+  --sidebar-border: oklch(0.9 0.02 250);
+  --sidebar-ring: oklch(0.55 0.19 258);
 }
 
 @layer base {
@@ -165,11 +165,11 @@
   }
 }
 
-/* ---------- Global scrollbar styles (thin, dark, rounded) ---------- */
+/* ---------- Global scrollbar styles (thin, library themed, rounded) ---------- */
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.55) rgb(15, 23, 42); /* thumb | track */
+  scrollbar-color: rgba(59, 130, 246, 0.55) rgb(15, 23, 42); /* thumb | track */
 }
 
 /* WebKit (Chrome, Edge, Safari) */
@@ -179,16 +179,16 @@
 }
 
 *::-webkit-scrollbar-track {
-  background: rgb(15, 23, 42); /* slate-900 */
+  background: rgb(15, 23, 42);
   border-radius: 9999px;
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.55); /* dark-contrast thumb */
+  background-color: rgba(59, 130, 246, 0.55);
   border-radius: 9999px;
-  border: 2px solid rgb(15, 23, 42); /* keeps thumb integrated with dark track */
+  border: 2px solid rgb(15, 23, 42);
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(148, 163, 184, 0.75);
+  background-color: rgba(250, 204, 21, 0.75);
 }
