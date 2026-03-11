@@ -37,7 +37,12 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { fetchFines, type FineDTO, type FineStatus } from "@/lib/fines"
+import {
+    DEFAULT_FINE_PER_HOUR,
+    fetchFines,
+    type FineDTO,
+    type FineStatus,
+} from "@/lib/fines"
 import { API_BASE } from "@/api/auth/route"
 import type { DamageReportDTO, DamageStatus, DamageSeverity } from "@/lib/damageReports"
 import {
@@ -93,6 +98,12 @@ function normalizeAmount(value: any): number {
     if (value === null || value === undefined) return 0
     const num = typeof value === "number" ? value : Number(value)
     return Number.isNaN(num) ? 0 : num
+}
+
+function getOfficialReceiptLabel(raw: unknown): string | null {
+    if (raw === null || raw === undefined) return null
+    const value = String(raw).trim()
+    return value ? `OR #${value}` : null
 }
 
 /**
@@ -248,6 +259,11 @@ function buildVirtualDamageIncomeRows(
             createdAt: createdAt as any,
             updatedAt: createdAt as any,
             resolvedAt: (resolvedAt ?? null) as any,
+            officialReceiptNumber:
+                anyReport.officialReceiptNumber ??
+                anyReport.orNumber ??
+                anyReport.receiptNumber ??
+                null,
 
             studentName: r.studentName ?? null,
             studentEmail: r.studentEmail ?? null,
@@ -429,7 +445,7 @@ export default function LibrarianIncomePage() {
                 // Names first for user-friendly searching
                 const haystack =
                     `${r.studentName ?? ""} ${r.studentEmail ?? ""} ${r.studentId ?? ""} ` +
-                    `${r.bookTitle ?? ""} ${r.reason ?? ""} ` +
+                    `${r.bookTitle ?? ""} ${r.reason ?? ""} ${r.officialReceiptNumber ?? ""} ` +
                     `${r.id} ${r.bookId ?? ""} ${r.borrowRecordId ?? ""} ` +
                     `${anyRow.damageReportId ?? ""} ${anyRow.damageNotes ?? ""}`
                 return haystack.toLowerCase().includes(q)
@@ -477,6 +493,11 @@ export default function LibrarianIncomePage() {
             }
             if (r.borrowRecordId) {
                 referenceParts.push(`Borrow #${r.borrowRecordId}`)
+            }
+
+            const receiptLabel = getOfficialReceiptLabel(r.officialReceiptNumber)
+            if (receiptLabel) {
+                referenceParts.push(receiptLabel)
             }
 
             return {
@@ -565,6 +586,10 @@ export default function LibrarianIncomePage() {
                         <p className="text-xs text-white/70">
                             Track collected income from paid fines and paid damage fees with PDF preview, print, and export.
                         </p>
+                        <p className="mt-1 text-[11px] text-amber-200/90">
+                            Borrow overdue fines follow <span className="font-semibold">{formatPHP(DEFAULT_FINE_PER_HOUR)} per hour</span>.
+                            Paid rows also show the cashier OR # when recorded.
+                        </p>
                     </div>
                 </div>
 
@@ -639,7 +664,7 @@ export default function LibrarianIncomePage() {
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search name, email, book title, notes…"
+                                    placeholder="Search name, email, book title, OR #, notes…"
                                     className="pl-9 bg-slate-900/70 border-white/20 text-white"
                                 />
                             </div>
@@ -718,6 +743,7 @@ export default function LibrarianIncomePage() {
                                 {filtered.map((r) => {
                                     const amount = normalizeAmount(r.amount)
                                     const paidDate = getRowPaidDate(r)
+                                    const receiptLabel = getOfficialReceiptLabel(r.officialReceiptNumber)
 
                                     // Prioritize names & titles for UX (IDs only as secondary)
                                     const userPrimary =
@@ -767,12 +793,22 @@ export default function LibrarianIncomePage() {
                                             <TableCell className="text-xs opacity-80">{fmtDate(paidDate)}</TableCell>
 
                                             <TableCell className={"text-xs text-white/70 w-44 max-w-80 " + cellScrollbarClasses}>
-                                                {r.reason ? r.reason : "—"}
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span>{r.reason ? r.reason : "—"}</span>
+                                                    {receiptLabel && (
+                                                        <span className="font-medium text-emerald-200/90">
+                                                            {receiptLabel}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </TableCell>
 
                                             <TableCell className="text-xs text-white/60">
                                                 <div className="flex flex-col gap-0.5">
                                                     <span className="opacity-80">#{r.id}</span>
+                                                    {receiptLabel && (
+                                                        <span className="text-emerald-200/90">{receiptLabel}</span>
+                                                    )}
                                                     {monthFilter !== "all" && (
                                                         <span className="text-xs text-white/50">{monthLabel(monthFilter)}</span>
                                                     )}
