@@ -19,10 +19,12 @@ import {
     type CatalogAvailabilityFilter,
     type CatalogSortOption,
     formatLibraryAreaLabel,
+    getBorrowTracking,
     getErrorMessage,
     getInventory,
     isBorrowableByCopies,
     isKnownLibraryArea,
+    isLibraryUseOnlyBook,
     matchesAllTokens,
     normalizeOtherLibraryArea,
     normalizeSearchText,
@@ -58,6 +60,7 @@ function buildEditFormValues(book: BookDTO): {
 } {
     const rawPages = (book as { pages?: unknown }).pages;
     const inventory = getInventory(book);
+    const tracking = getBorrowTracking(book);
     const currentArea = (book.libraryArea || "").trim();
 
     const currentTotalCopies =
@@ -111,8 +114,13 @@ function buildEditFormValues(book: BookDTO): {
                     ? String(book.borrowDurationDays)
                     : "7",
             available: book.available,
+            isLibraryUseOnly: Boolean(book.isLibraryUseOnly),
         },
-        inventory,
+        inventory: {
+            ...inventory,
+            activeBorrowCount: tracking.active,
+            totalBorrowCount: tracking.total,
+        },
     };
 }
 
@@ -366,6 +374,8 @@ export default function LibrarianBooksPage() {
                 libraryArea: area.value as LibraryArea,
                 numberOfCopies: copiesTotal,
                 available: createForm.available,
+                isLibraryUseOnly: createForm.isLibraryUseOnly,
+                canBorrow: !createForm.isLibraryUseOnly,
                 borrowDurationDays: borrowDaysInt,
             });
 
@@ -565,6 +575,8 @@ export default function LibrarianBooksPage() {
                 libraryArea: area.value as LibraryArea,
                 ...copiesPayload,
                 available: editForm.available,
+                isLibraryUseOnly: editForm.isLibraryUseOnly,
+                canBorrow: !editForm.isLibraryUseOnly,
                 borrowDurationDays: borrowDaysInt,
             });
 
@@ -640,10 +652,12 @@ export default function LibrarianBooksPage() {
 
         const base = books.filter((book) => {
             const inventory = getInventory(book);
+            const tracking = getBorrowTracking(book);
             const area = book.libraryArea ? String(book.libraryArea).trim() : "";
             const areaLabel = area ? formatLibraryAreaLabel(area) : "";
             const rawPages = (book as { pages?: unknown }).pages;
             const borrowable = isBorrowableByCopies(book);
+            const libraryUseOnly = isLibraryUseOnlyBook(book);
 
             if (libraryAreaFilter !== "all" && area !== libraryAreaFilter) {
                 return false;
@@ -653,7 +667,11 @@ export default function LibrarianBooksPage() {
                 return false;
             }
 
-            if (availabilityFilter === "unavailable" && borrowable) {
+            if (availabilityFilter === "unavailable" && (borrowable || libraryUseOnly)) {
+                return false;
+            }
+
+            if (availabilityFilter === "library_use_only" && !libraryUseOnly) {
                 return false;
             }
 
@@ -692,7 +710,12 @@ export default function LibrarianBooksPage() {
                 String(inventory.remaining ?? ""),
                 String(inventory.total ?? ""),
                 String(inventory.borrowed ?? ""),
+                String(tracking.active ?? ""),
+                String(tracking.total ?? ""),
                 book.available ? "available" : "unavailable",
+                libraryUseOnly ? "library use only" : "",
+                libraryUseOnly ? "cannot borrow" : "borrowable",
+                book.canBorrow === false ? "cannot borrow" : "can borrow",
             ]
                 .map(normalizeSearchText)
                 .filter(Boolean)
@@ -702,6 +725,13 @@ export default function LibrarianBooksPage() {
         });
 
         return [...base].sort((a, b) => {
+            const sectionRankA = isLibraryUseOnlyBook(a) ? 1 : 0;
+            const sectionRankB = isLibraryUseOnlyBook(b) ? 1 : 0;
+
+            if (sectionRankA !== sectionRankB) {
+                return sectionRankA - sectionRankB;
+            }
+
             switch (sortOption) {
                 case "title_asc":
                     return (
@@ -800,8 +830,8 @@ export default function LibrarianBooksPage() {
                     <div className="min-w-0">
                         <h2 className="text-lg font-semibold leading-tight">Catalog &amp; inventory</h2>
                         <p className="text-xs text-white/70">
-                            Add new titles, manage inventory copies, and monitor remaining/borrowed
-                            counts.
+                            Add new titles, mark books as Library Use Only, manage copy counts, and
+                            monitor active/all-time borrow tracking.
                         </p>
                     </div>
                 </div>

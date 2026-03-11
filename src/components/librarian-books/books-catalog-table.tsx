@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Edit, Trash2, CheckCircle2, CircleOff } from "lucide-react";
+import { BookMarked, CheckCircle2, CircleOff, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,8 +25,10 @@ import {
 import type { BookDTO } from "@/lib/books";
 import {
     formatLibraryAreaLabel,
+    getBorrowTracking,
     getInventory,
     isBorrowableByCopies,
+    isLibraryUseOnlyBook,
 } from "./books-constants";
 
 type BooksCatalogTableProps = {
@@ -38,7 +40,24 @@ type BooksCatalogTableProps = {
 
 const DRAG_THRESHOLD_PX = 5;
 
-function AvailabilityBadge({ borrowable }: { borrowable: boolean }) {
+function CatalogStatusBadge({ book }: { book: BookDTO }) {
+    const borrowable = isBorrowableByCopies(book);
+    const libraryUseOnly = isLibraryUseOnlyBook(book);
+
+    if (libraryUseOnly) {
+        return (
+            <Badge
+                variant="outline"
+                className="border-amber-400/70 bg-amber-500/15 text-amber-100 hover:bg-amber-500/20"
+            >
+                <span className="inline-flex items-center gap-1">
+                    <BookMarked className="h-3 w-3" />
+                    Library Use Only
+                </span>
+            </Badge>
+        );
+    }
+
     return (
         <Badge
             variant={borrowable ? "default" : "outline"}
@@ -146,6 +165,25 @@ function getLoanDaysLabel(book: BookDTO) {
     }
 
     return "—";
+}
+
+function renderBorrowTracking(book: BookDTO) {
+    const tracking = getBorrowTracking(book);
+
+    if (tracking.active === null && tracking.total === null) {
+        return <span className="opacity-50">—</span>;
+    }
+
+    return (
+        <div className="leading-5">
+            <div className="font-medium text-white">
+                Active: {tracking.active ?? "—"}
+            </div>
+            <div className="text-[11px] text-white/60">
+                All-time: {tracking.total ?? "—"}
+            </div>
+        </div>
+    );
 }
 
 function isInteractiveTarget(target: EventTarget | null) {
@@ -302,7 +340,6 @@ export function BooksCatalogTable({
                     const inv = getInventory(book);
                     const area = book.libraryArea ? String(book.libraryArea) : "";
                     const areaLabel = area ? formatLibraryAreaLabel(area) : "—";
-                    const borrowable = isBorrowableByCopies(book);
                     const subjectsValue = getSubjectsValue(book);
 
                     return (
@@ -329,7 +366,7 @@ export function BooksCatalogTable({
                                 </div>
 
                                 <div className="shrink-0">
-                                    <AvailabilityBadge borrowable={borrowable} />
+                                    <CatalogStatusBadge book={book} />
                                 </div>
                             </div>
 
@@ -376,6 +413,10 @@ export function BooksCatalogTable({
                                     }
                                 />
                                 <CatalogField
+                                    label="Borrow tracking"
+                                    value={renderBorrowTracking(book)}
+                                />
+                                <CatalogField
                                     label="Barcode"
                                     value={book.barcode || "—"}
                                 />
@@ -386,6 +427,10 @@ export function BooksCatalogTable({
                                 <CatalogField
                                     label="Loan days"
                                     value={getLoanDaysLabel(book)}
+                                />
+                                <CatalogField
+                                    label="Status"
+                                    value={<CatalogStatusBadge book={book} />}
                                 />
                             </div>
 
@@ -420,7 +465,7 @@ export function BooksCatalogTable({
                     onLostPointerCapture={handleLostPointerCapture}
                     onClickCapture={handleClickCapture}
                 >
-                    <Table className="min-w-[1580px] table-fixed">
+                    <Table className="min-w-[1760px] table-fixed">
                         <TableCaption className="text-xs text-white/60">
                             Showing {books.length}{" "}
                             {books.length === 1 ? "book" : "books"}.
@@ -459,6 +504,9 @@ export function BooksCatalogTable({
                                     Inventory
                                 </TableHead>
                                 <TableHead className="w-[150px] whitespace-nowrap text-xs font-semibold text-white/70">
+                                    Borrow tracking
+                                </TableHead>
+                                <TableHead className="w-[150px] whitespace-nowrap text-xs font-semibold text-white/70">
                                     Barcode
                                 </TableHead>
                                 <TableHead className="w-[140px] whitespace-nowrap text-xs font-semibold text-white/70">
@@ -467,8 +515,8 @@ export function BooksCatalogTable({
                                 <TableHead className="w-[110px] whitespace-nowrap text-xs font-semibold text-white/70">
                                     Loan days
                                 </TableHead>
-                                <TableHead className="w-[130px] whitespace-nowrap text-xs font-semibold text-white/70">
-                                    Available
+                                <TableHead className="w-[170px] whitespace-nowrap text-xs font-semibold text-white/70">
+                                    Status
                                 </TableHead>
                                 <TableHead className="w-[100px] text-right text-xs font-semibold text-white/70">
                                     Actions
@@ -483,7 +531,6 @@ export function BooksCatalogTable({
                                 const areaLabel = area
                                     ? formatLibraryAreaLabel(area)
                                     : "—";
-                                const borrowable = isBorrowableByCopies(book);
                                 const subjectsValue = getSubjectsValue(book);
 
                                 return (
@@ -570,6 +617,10 @@ export function BooksCatalogTable({
                                             )}
                                         </TableCell>
 
+                                        <TableCell className="align-top text-sm leading-5 text-white/90">
+                                            {renderBorrowTracking(book)}
+                                        </TableCell>
+
                                         <TableCell
                                             className={`${wrapCellClass} break-all`}
                                         >
@@ -593,7 +644,7 @@ export function BooksCatalogTable({
                                         </TableCell>
 
                                         <TableCell className="align-top">
-                                            <AvailabilityBadge borrowable={borrowable} />
+                                            <CatalogStatusBadge book={book} />
                                         </TableCell>
 
                                         <TableCell className="align-top text-right">

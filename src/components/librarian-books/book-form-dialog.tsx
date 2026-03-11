@@ -53,12 +53,15 @@ export type BookFormValues = {
     libraryAreaOther: string;
     borrowDuration: string;
     available: boolean;
+    isLibraryUseOnly: boolean;
 };
 
 export type InventorySnapshot = {
     total: number | null;
     borrowed: number | null;
     remaining: number | null;
+    activeBorrowCount?: number | null;
+    totalBorrowCount?: number | null;
 };
 
 export function getDefaultBookFormValues(): BookFormValues {
@@ -91,6 +94,7 @@ export function getDefaultBookFormValues(): BookFormValues {
         libraryAreaOther: "",
         borrowDuration: "7",
         available: true,
+        isLibraryUseOnly: false,
     };
 }
 
@@ -141,15 +145,15 @@ export function BookFormDialog({
                     <DialogDescription className="text-white/70">
                         {isEdit ? (
                             <>
-                                Update the details for this catalog entry. Use{" "}
-                                <span className="font-semibold text-white/80">Add copies</span> to
-                                increase inventory.
+                                Update the catalog details, circulation behavior, and copy counts for
+                                this title.
                             </>
                         ) : (
                             <>
-                                Enter catalog details. You can add more copies later via{" "}
-                                <span className="font-semibold text-white/80">
-                                    Edit → Add copies
+                                Enter catalog details, starting inventory, and whether this title is
+                                borrowable or marked as{" "}
+                                <span className="font-semibold text-amber-300">
+                                    Library Use Only
                                 </span>
                                 .
                             </>
@@ -461,6 +465,22 @@ export function BookFormDialog({
                                                 : "—"}
                                         </span>
                                     </span>
+                                    <span>
+                                        <span className="text-white/50">Active borrows:</span>{" "}
+                                        <span className="font-semibold text-white/80">
+                                            {typeof inventory?.activeBorrowCount === "number"
+                                                ? inventory.activeBorrowCount
+                                                : "—"}
+                                        </span>
+                                    </span>
+                                    <span>
+                                        <span className="text-white/50">Borrowed all-time:</span>{" "}
+                                        <span className="font-semibold text-white/80">
+                                            {typeof inventory?.totalBorrowCount === "number"
+                                                ? inventory.totalBorrowCount
+                                                : "—"}
+                                        </span>
+                                    </span>
                                 </div>
                             </div>
                         ) : null}
@@ -680,6 +700,30 @@ export function BookFormDialog({
                             </p>
                         </Field>
 
+                        <div className="rounded-md border border-amber-400/20 bg-amber-500/10 px-3 py-3">
+                            <div className="flex items-start gap-2">
+                                <Checkbox
+                                    id={`${isEdit ? "edit" : "add"}-library-use-only`}
+                                    checked={values.isLibraryUseOnly}
+                                    onCheckedChange={(v) =>
+                                        onChange({ isLibraryUseOnly: v === true })
+                                    }
+                                />
+                                <div className="space-y-1">
+                                    <Label
+                                        htmlFor={`${isEdit ? "edit" : "add"}-library-use-only`}
+                                        className="cursor-pointer text-sm font-medium text-amber-100"
+                                    >
+                                        Library Use Only
+                                    </Label>
+                                    <p className="text-[11px] leading-5 text-amber-100/80">
+                                        Keep this title visible in catalog lists and choices, but do
+                                        not allow it to be borrowed.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="flex items-center gap-2 pt-2">
                             <Checkbox
                                 id={`${isEdit ? "edit" : "add"}-available`}
@@ -690,10 +734,17 @@ export function BookFormDialog({
                                 htmlFor={`${isEdit ? "edit" : "add"}-available`}
                                 className="text-sm text-white/80"
                             >
-                                Mark as available in the catalog (may be computed by remaining
-                                copies)
+                                Show as available in the catalog
                             </Label>
                         </div>
+
+                        {values.isLibraryUseOnly ? (
+                            <p className="text-[11px] text-amber-200/90">
+                                Borrowing is disabled for this title. It will still appear in
+                                selections with the{" "}
+                                <span className="font-semibold">Library Use Only</span> label.
+                            </p>
+                        ) : null}
 
                         {error ? <FieldError>{error}</FieldError> : null}
                     </div>

@@ -14,7 +14,11 @@ export const LIBRARY_AREA_OPTIONS: LibraryArea[] = [
 
 export const LIBRARY_AREA_OTHER_VALUE = "others";
 
-export type CatalogAvailabilityFilter = "all" | "available" | "unavailable";
+export type CatalogAvailabilityFilter =
+    | "all"
+    | "available"
+    | "unavailable"
+    | "library_use_only";
 export type CatalogSortOption =
     | "catalog"
     | "title_asc"
@@ -77,7 +81,34 @@ export function getInventory(book: BookDTO) {
     return { remaining, total, borrowed };
 }
 
+export function isLibraryUseOnlyBook(book: BookDTO) {
+    return Boolean(book.isLibraryUseOnly);
+}
+
+export function getBorrowTracking(book: BookDTO) {
+    const inventory = getInventory(book);
+
+    const active =
+        typeof book.activeBorrowCount === "number" &&
+        Number.isFinite(book.activeBorrowCount)
+            ? Math.max(0, Math.floor(book.activeBorrowCount))
+            : typeof book.borrowedCopies === "number" &&
+                Number.isFinite(book.borrowedCopies)
+              ? Math.max(0, Math.floor(book.borrowedCopies))
+              : inventory.borrowed;
+
+    const total =
+        typeof book.totalBorrowCount === "number" &&
+        Number.isFinite(book.totalBorrowCount)
+            ? Math.max(0, Math.floor(book.totalBorrowCount))
+            : null;
+
+    return { active, total };
+}
+
 export function isBorrowableByCopies(book: BookDTO) {
+    if (isLibraryUseOnlyBook(book) || book.canBorrow === false) return false;
+
     const inv = getInventory(book);
     if (inv.remaining === null) return Boolean(book.available);
     return inv.remaining > 0 && Boolean(book.available);

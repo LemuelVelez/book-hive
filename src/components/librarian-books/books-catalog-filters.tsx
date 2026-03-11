@@ -68,7 +68,7 @@ export function BooksCatalogFilters({
                         <Input
                             value={search}
                             onChange={(e) => onSearchChange(e.target.value)}
-                            placeholder="Search keyword, call no., accession, title, author, publisher, subjects, inventory…"
+                            placeholder="Search keyword, call no., accession, title, author, publisher, borrow tracking…"
                             className="border-white/20 bg-slate-900/70 pl-9 text-white"
                             autoComplete="off"
                         />
@@ -105,13 +105,14 @@ export function BooksCatalogFilters({
                         <SelectTrigger className="w-full border-white/20 bg-slate-900/70 text-white">
                             <div className="flex items-center gap-2 truncate">
                                 <Filter className="h-4 w-4 text-white/60" />
-                                <SelectValue placeholder="Availability" />
+                                <SelectValue placeholder="Catalog status" />
                             </div>
                         </SelectTrigger>
                         <SelectContent className="border-white/10 bg-slate-900 text-white">
-                            <SelectItem value="all">All availability</SelectItem>
-                            <SelectItem value="available">Available only</SelectItem>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            <SelectItem value="available">Available for borrowing</SelectItem>
                             <SelectItem value="unavailable">Unavailable only</SelectItem>
+                            <SelectItem value="library_use_only">Library Use Only</SelectItem>
                         </SelectContent>
                     </Select>
 
