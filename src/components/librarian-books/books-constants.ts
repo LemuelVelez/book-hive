@@ -14,6 +14,18 @@ export const LIBRARY_AREA_OPTIONS: LibraryArea[] = [
 
 export const LIBRARY_AREA_OTHER_VALUE = "others";
 
+export type CatalogAvailabilityFilter = "all" | "available" | "unavailable";
+export type CatalogSortOption =
+    | "catalog"
+    | "title_asc"
+    | "title_desc"
+    | "author_asc"
+    | "author_desc"
+    | "pub_year_desc"
+    | "pub_year_asc"
+    | "copies_desc"
+    | "copies_asc";
+
 export function isKnownLibraryArea(value: string): value is LibraryArea {
     return LIBRARY_AREA_OPTIONS.includes(value as LibraryArea);
 }
@@ -52,22 +64,21 @@ export function getInventory(book: BookDTO) {
         typeof book.totalCopies === "number" && Number.isFinite(book.totalCopies)
             ? Math.max(0, Math.floor(book.totalCopies))
             : typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)
-                ? Math.max(0, Math.floor(book.numberOfCopies))
-                : null;
+              ? Math.max(0, Math.floor(book.numberOfCopies))
+              : null;
 
     const borrowed =
         typeof book.borrowedCopies === "number" && Number.isFinite(book.borrowedCopies)
             ? Math.max(0, Math.floor(book.borrowedCopies))
             : total !== null && remaining !== null
-                ? Math.max(0, total - remaining)
-                : null;
+              ? Math.max(0, total - remaining)
+              : null;
 
     return { remaining, total, borrowed };
 }
 
 export function isBorrowableByCopies(book: BookDTO) {
     const inv = getInventory(book);
-    // If remaining is unknown, fall back to server availability flag.
     if (inv.remaining === null) return Boolean(book.available);
     return inv.remaining > 0 && Boolean(book.available);
 }
@@ -86,6 +97,62 @@ export function parsePositiveIntOrNull(raw: string): number | null {
     const n = Math.floor(Number(v));
     if (!Number.isFinite(n) || n <= 0) return null;
     return n;
+}
+
+export function normalizeSearchText(value: unknown): string {
+    if (value === null || value === undefined) return "";
+    if (Array.isArray(value)) return value.map(normalizeSearchText).filter(Boolean).join(" ");
+    if (typeof value === "string") return value.trim().toLowerCase().replace(/\s+/g, " ");
+    return String(value).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function tokenizeSearch(query: string): string[] {
+    return normalizeSearchText(query)
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+}
+
+export function matchesAllTokens(hay: string, tokens: string[]): boolean {
+    if (tokens.length === 0) return true;
+    return tokens.every((t) => hay.includes(t));
+}
+
+export function buildCatalogSortKey(book: BookDTO): string {
+    return [
+        normalizeSearchText(book.callNumber),
+        normalizeSearchText(book.title),
+        normalizeSearchText(book.author),
+        normalizeSearchText(book.accessionNumber),
+    ]
+        .filter(Boolean)
+        .join("|");
+}
+
+export function compareText(a: unknown, b: unknown) {
+    const av = normalizeSearchText(a);
+    const bv = normalizeSearchText(b);
+
+    if (!av && !bv) return 0;
+    if (!av) return 1;
+    if (!bv) return -1;
+
+    return av.localeCompare(bv, undefined, { sensitivity: "base" });
+}
+
+export function compareNullableNumber(
+    a: number | null | undefined,
+    b: number | null | undefined,
+    direction: "asc" | "desc" = "asc"
+) {
+    const av = typeof a === "number" && Number.isFinite(a) ? a : null;
+    const bv = typeof b === "number" && Number.isFinite(b) ? b : null;
+
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+
+    return direction === "asc" ? av - bv : bv - av;
 }
 
 export type ExcelBookRow = {
@@ -112,15 +179,15 @@ export function toExcelRows(books: BookDTO[]): ExcelBookRow[] {
             typeof inv.total === "number"
                 ? inv.total
                 : typeof inv.remaining === "number"
-                    ? inv.remaining
-                    : "";
+                  ? inv.remaining
+                  : "";
 
         const copyrightValue =
             typeof book.copyrightYear === "number"
                 ? book.copyrightYear
                 : typeof book.publicationYear === "number"
-                    ? book.publicationYear
-                    : "";
+                  ? book.publicationYear
+                  : "";
 
         return {
             callNumber: asSafeText(book.callNumber),
