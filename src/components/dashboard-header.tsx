@@ -50,7 +50,13 @@ import {
 import { fetchBooks, type BookDTO } from "@/lib/books"
 import { createSelfBorrow } from "@/lib/borrows"
 
-type Role = "student" | "other" | "faculty" | "librarian" | "admin"
+type Role =
+    | "student"
+    | "other"
+    | "faculty"
+    | "assistant_librarian"
+    | "librarian"
+    | "admin"
 
 function fmtDate(d?: string | null) {
     if (!d) return "—"
@@ -94,16 +100,26 @@ function resolveAvatarUrl(u: any): string | undefined {
     return s ? s : undefined
 }
 
+function normalizeComparableText(value?: string | null) {
+    return String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+}
+
 function dashboardHomeForRole(role?: Role): string {
-    if (role === "librarian") return "/dashboard/librarian"
+    if (role === "librarian" || role === "assistant_librarian") return "/dashboard/librarian"
     if (role === "faculty") return "/dashboard/faculty"
     if (role === "admin") return "/dashboard/admin"
-    return "/dashboard" // student + other (guest)
+    return "/dashboard"
 }
 
 function settingsPathForRole(role?: Role): string | null {
-    // ✅ only route that exists in your App.tsx
     if (role === "student" || role === "other" || role === undefined) return "/dashboard/settings"
+    if (role === "librarian" || role === "assistant_librarian") return "/dashboard/librarian/settings"
+    if (role === "faculty") return "/dashboard/faculty/settings"
+    if (role === "admin") return "/dashboard/admin/settings"
     return null
 }
 
@@ -124,20 +140,19 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const [books, setBooks] = React.useState<BookDTO[]>([])
     const [selectedBookId, setSelectedBookId] = React.useState<string>("")
 
-    // ✅ NEW: copies-to-borrow in header reserve dialog
     const [reserveCopies, setReserveCopies] = React.useState<number>(1)
 
     React.useEffect(() => {
         let cancelled = false
 
-            ; (async () => {
-                try {
-                    const u = await apiMe()
-                    if (!cancelled) setUser(u)
-                } catch {
-                    if (!cancelled) setUser(null)
-                }
-            })()
+        ; (async () => {
+            try {
+                const u = await apiMe()
+                if (!cancelled) setUser(u)
+            } catch {
+                if (!cancelled) setUser(null)
+            }
+        })()
 
         return () => {
             cancelled = true
@@ -158,20 +173,18 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
     function formatRole(raw: string | undefined): string {
         if (!raw) return ""
+        const normalized = normalizeComparableText(raw).replace(/\s+/g, "_")
         const map: Record<string, string> = {
             student: "Student",
-            other: "Guest", // ✅ "other" is still Guest
+            other: "Guest",
+            assistant_librarian: "Assistant Librarian",
             librarian: "Librarian",
             faculty: "Faculty",
             admin: "Admin",
         }
-        return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
+        return map[normalized] ?? raw.charAt(0).toUpperCase() + raw.slice(1)
     }
 
-    /**
-     * ✅ Use ROLE (not accountType) as the effective role everywhere in the header.
-     * We only fall back to path/accountType if role is missing.
-     */
     const rawRole: Role | undefined =
         (user?.role as Role | undefined) ??
         inferRoleFromPath(pathname) ??
@@ -180,7 +193,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
     const roleLabel = formatRole(rawRole)
 
-    const displayName =
+    const displayNameRaw =
         user?.fullName ||
         user?.name ||
         user?.full_name ||
@@ -189,6 +202,11 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         user?.staff_name ||
         user?.email ||
         ""
+
+    const displayName =
+        normalizeComparableText(displayNameRaw) === normalizeComparableText(roleLabel)
+            ? ""
+            : displayNameRaw
 
     const showWelcome = !!roleLabel || !!displayName
     const showReserve = rawRole === "student" || rawRole === "other" || rawRole === "faculty"
@@ -213,18 +231,18 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
 
         let cancelled = false
 
-            ; (async () => {
-                setReserveLoading(true)
-                try {
-                    const data = await fetchBooks()
-                    if (!cancelled) setBooks(data)
-                } catch (err: any) {
-                    const msg = err?.message || "Failed to load books for reservation. Please try again."
-                    toast.error("Failed to load books", { description: msg })
-                } finally {
-                    if (!cancelled) setReserveLoading(false)
-                }
-            })()
+        ; (async () => {
+            setReserveLoading(true)
+            try {
+                const data = await fetchBooks()
+                if (!cancelled) setBooks(data)
+            } catch (err: any) {
+                const msg = err?.message || "Failed to load books for reservation. Please try again."
+                toast.error("Failed to load books", { description: msg })
+            } finally {
+                if (!cancelled) setReserveLoading(false)
+            }
+        })()
 
         return () => {
             cancelled = true
@@ -263,7 +281,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         try {
             const created: any[] = []
 
-            // Borrow/reserve copies one-by-one (works even if API only supports 1 per call)
             for (let i = 0; i < requestedCopies; i++) {
                 try {
                     const record = await createSelfBorrow(selectedBookId)
@@ -293,12 +310,11 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                 })
             }
 
-            // Best-effort refresh to keep availability/copies accurate
             try {
                 const latest = await fetchBooks()
                 setBooks(latest)
             } catch {
-                // ignore; keep current list
+                // ignore
             }
 
             setReserveOpen(false)
@@ -349,7 +365,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             return
         }
         toast.info("Settings", {
-            description: "Settings is only available for Student/Guest accounts right now.",
+            description: "Settings is not available for this account right now.",
         })
     }
 
@@ -459,7 +475,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                 </p>
                                             </div>
 
-                                            {/* ✅ copies selector */}
                                             <div className="pt-1">
                                                 <div className="text-xs font-medium text-white/80 mb-1">
                                                     Copies to borrow
@@ -565,7 +580,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                 aria-label={`${headerName} account menu`}
                             >
                                 <Avatar className="h-8 w-8">
-                                    {/* ✅ crop instead of stretch */}
                                     <AvatarImage src={avatarSrc} alt={headerName} className="object-cover object-center" />
                                     <AvatarFallback>
                                         {user === undefined ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : initials}

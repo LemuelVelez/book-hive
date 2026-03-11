@@ -33,6 +33,7 @@ import {
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
+import { me as fetchMe, type Role as AuthRole } from "@/lib/authentication";
 
 // Recharts (for the bar chart)
 import {
@@ -78,11 +79,17 @@ type DamageOverview = {
   paid: number;
 };
 
-type Role = "student" | "librarian" | "faculty" | "admin" | "other";
+type UserRole =
+  | "student"
+  | "assistant_librarian"
+  | "librarian"
+  | "faculty"
+  | "admin"
+  | "other";
 
 type UsersOverview = {
   total: number;
-  byRole: Record<Role, number>;
+  byRole: Record<UserRole, number>;
 };
 
 type FineStatus = "active" | "pending_verification" | "paid" | "cancelled";
@@ -138,6 +145,7 @@ const EMPTY_USERS_OVERVIEW: UsersOverview = {
   total: 0,
   byRole: {
     student: 0,
+    assistant_librarian: 0,
     librarian: 0,
     faculty: 0,
     admin: 0,
@@ -261,6 +269,20 @@ function suggestedFineFromSeverity(severity?: DamageSeverity | null): number {
   }
 }
 
+function normalizeUserRole(raw: unknown): UserRole {
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (value === "assistant_librarian") return "assistant_librarian";
+  if (value === "librarian") return "librarian";
+  if (value === "faculty") return "faculty";
+  if (value === "admin") return "admin";
+  if (value === "other") return "other";
+  return "student";
+}
+
 /* --------------------- API helpers (overview) ---------------------- */
 
 async function fetchDamageOverview(): Promise<DamageOverview> {
@@ -317,6 +339,7 @@ async function fetchUsersOverview(): Promise<UsersOverview> {
 
   const byRole: UsersOverview["byRole"] = {
     student: 0,
+    assistant_librarian: 0,
     librarian: 0,
     faculty: 0,
     admin: 0,
@@ -324,15 +347,7 @@ async function fetchUsersOverview(): Promise<UsersOverview> {
   };
 
   for (const u of list) {
-    const raw = String(u?.accountType ?? u?.role ?? "student").toLowerCase();
-    const role: Role =
-      raw === "librarian" ||
-        raw === "faculty" ||
-        raw === "admin" ||
-        raw === "other"
-        ? (raw as Role)
-        : "student";
-
+    const role = normalizeUserRole(u?.role ?? u?.accountType);
     byRole[role] += 1;
   }
 
@@ -443,7 +458,6 @@ async function fetchIncomeOverview(): Promise<IncomeOverview> {
     }
   }
 
-  // Try to include paid damage fees if backend hasn't created a fine row yet.
   try {
     const drRes = await fetch(`${API_BASE}/api/damage-reports`, {
       method: "GET",
@@ -452,7 +466,6 @@ async function fetchIncomeOverview(): Promise<IncomeOverview> {
     });
 
     if (!drRes.ok) {
-      // Do not fail the dashboard if damage reports are temporarily unavailable.
       return { paidTotal, paidCount };
     }
 
@@ -482,7 +495,7 @@ async function fetchIncomeOverview(): Promise<IncomeOverview> {
       paidTotal += fee;
     }
   } catch {
-    // ignore - fines-based income still works
+    // ignore
   }
 
   return { paidTotal, paidCount };
@@ -494,6 +507,7 @@ export default function LibrarianDashboard() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [currentRole, setCurrentRole] = React.useState<AuthRole | null>(null);
 
   const [booksOverview, setBooksOverview] =
     React.useState<BooksOverview>(EMPTY_BOOKS_OVERVIEW);
@@ -514,7 +528,28 @@ export default function LibrarianDashboard() {
   const loadOverview = React.useCallback(async () => {
     setError(null);
     setLoading(true);
+
     try {
+      const currentUser = await fetchMe();
+      const effectiveRole = (currentUser?.role ??
+        currentUser?.accountType ??
+        "librarian") as AuthRole;
+
+      setCurrentRole(effectiveRole);
+
+      if (effectiveRole === "assistant_librarian") {
+        const borrowList = await fetchBorrowRecords();
+
+        setBooksOverview(EMPTY_BOOKS_OVERVIEW);
+        setBorrowOverview(summarizeBorrows(borrowList));
+        setFeedbackOverview(EMPTY_FEEDBACK_OVERVIEW);
+        setDamageOverview(EMPTY_DAMAGE_OVERVIEW);
+        setUsersOverview(EMPTY_USERS_OVERVIEW);
+        setFinesOverview(EMPTY_FINES_OVERVIEW);
+        setIncomeOverview(EMPTY_INCOME_OVERVIEW);
+        return;
+      }
+
       const [booksList, borrowList, feedbackList, damage, users, fines, income] =
         await Promise.all([
           fetchBooks(),
@@ -536,14 +571,20 @@ export default function LibrarianDashboard() {
     } catch (err: any) {
       const msg =
         err?.message || "Failed to load overview data. Please try again.";
+
       setError(msg);
-      toast.error("Failed to load librarian overview", {
-        description: msg,
-      });
+      toast.error(
+        currentRole === "assistant_librarian"
+          ? "Failed to load assistant librarian overview"
+          : "Failed to load librarian overview",
+        {
+          description: msg,
+        }
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentRole]);
 
   React.useEffect(() => {
     void loadOverview();
@@ -568,6 +609,7 @@ export default function LibrarianDashboard() {
   );
 
   const activeBorrowCount = borrowOverview.borrowed + borrowOverview.pending;
+  const isAssistantLibrarian = currentRole === "assistant_librarian";
 
   const avgRatingLabel =
     feedbackOverview.avgRating > 0
@@ -579,11 +621,14 @@ export default function LibrarianDashboard() {
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-white">
-            Librarian dashboard
+            {isAssistantLibrarian
+              ? "Assistant librarian dashboard"
+              : "Librarian dashboard"}
           </h1>
           <p className="text-sm text-white/60">
-            Overview of catalog health, circulation, fines, and student
-            activity.
+            {isAssistantLibrarian
+              ? "Overview of borrowing and returning activity for assistant librarian access."
+              : "Overview of catalog health, circulation, fines, and student activity."}
           </p>
         </div>
 
@@ -615,7 +660,6 @@ export default function LibrarianDashboard() {
 
       {loading ? (
         <>
-          {/* Skeleton cards */}
           <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
             {Array.from({ length: 7 }).map((_, i) => (
               <Card key={i} className="bg-slate-800/60 border-white/10">
@@ -630,7 +674,6 @@ export default function LibrarianDashboard() {
             ))}
           </div>
 
-          {/* Skeleton chart + quick action card */}
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="bg-slate-800/60 border-white/10 lg:col-span-2">
               <CardHeader>
@@ -651,55 +694,14 @@ export default function LibrarianDashboard() {
             </Card>
           </div>
         </>
-      ) : (
+      ) : isAssistantLibrarian ? (
         <>
-          {/* Top stats grid: Books, Borrows, Fines, Income, Damage, Feedbacks, Users */}
-          <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            {/* Books */}
-            <Card className="bg-slate-800/60 border-white/10">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <div>
-                  <CardTitle className="text-sm">Books</CardTitle>
-                  <p className="text-[11px] text-white/60">Catalog at a glance</p>
-                </div>
-                <div className="rounded-full border border-emerald-400/40 bg-emerald-500/15 p-2">
-                  <BookOpen className="h-4 w-4 text-emerald-300" />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <div className="text-2xl font-semibold">
-                  {booksOverview.total}
-                  <span className="ml-1 text-xs text-white/60">titles</span>
-                </div>
-                <p className="text-[11px] text-white/70">
-                  <span className="inline-flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
-                    {booksOverview.available} available
-                  </span>{" "}
-                  ·{" "}
-                  <span className="inline-flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-amber-300" />
-                    {booksOverview.unavailable} unavailable
-                  </span>
-                </p>
-                <Link
-                  to="/dashboard/librarian/books"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-200 hover:text-emerald-100"
-                >
-                  Open catalog
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
-              </CardContent>
-            </Card>
-
-            {/* Borrow records */}
+          <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Card className="bg-slate-800/60 border-white/10">
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                 <div>
                   <CardTitle className="text-sm">Borrow records</CardTitle>
-                  <p className="text-[11px] text-white/60">
-                    Active &amp; pending circulation
-                  </p>
+                  <p className="text-[11px] text-white/60">All circulation records</p>
                 </div>
                 <div className="rounded-full border border-sky-400/40 bg-sky-500/15 p-2">
                   <ListChecks className="h-4 w-4 text-sky-300" />
@@ -711,24 +713,8 @@ export default function LibrarianDashboard() {
                   <span className="ml-1 text-xs text-white/60">records</span>
                 </div>
                 <p className="text-[11px] text-white/70">
-                  <span className="inline-flex items-center gap-1">
-                    <Clock3 className="h-3 w-3 text-sky-300" />
-                    {activeBorrowCount} active
-                  </span>{" "}
-                  ·{" "}
-                  <span className="inline-flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
-                    {borrowOverview.returned} returned
-                  </span>
+                  Monitor current borrowing and returning activity.
                 </p>
-                {borrowOverview.totalFine > 0 && (
-                  <p className="text-[11px] text-white/60">
-                    Total fines recorded:{" "}
-                    <span className="font-medium text-amber-200">
-                      {peso(borrowOverview.totalFine)}
-                    </span>
-                  </p>
-                )}
                 <Link
                   to="/dashboard/librarian/borrow-records"
                   className="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-200 hover:text-sky-100"
@@ -739,225 +725,62 @@ export default function LibrarianDashboard() {
               </CardContent>
             </Card>
 
-            {/* Fines */}
             <Card className="bg-slate-800/60 border-white/10">
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                 <div>
-                  <CardTitle className="text-sm">Fines</CardTitle>
-                  <p className="text-[11px] text-white/60">
-                    Active &amp; pending payments
-                  </p>
+                  <CardTitle className="text-sm">Active</CardTitle>
+                  <p className="text-[11px] text-white/60">Borrowed + pending</p>
                 </div>
                 <div className="rounded-full border border-amber-400/40 bg-amber-500/15 p-2">
-                  <ReceiptText className="h-4 w-4 text-amber-300" />
+                  <Clock3 className="h-4 w-4 text-amber-300" />
                 </div>
               </CardHeader>
               <CardContent className="space-y-1">
-                <div className="text-2xl font-semibold">
-                  {finesOverview.total}
-                  <span className="ml-1 text-xs text-white/60">fines</span>
-                </div>
+                <div className="text-2xl font-semibold">{activeBorrowCount}</div>
                 <p className="text-[11px] text-white/70">
-                  <span className="inline-flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-amber-300" />
-                    {finesOverview.active} active
-                  </span>{" "}
-                  ·{" "}
-                  <span className="inline-flex items-center gap-1">
-                    <Clock3 className="h-3 w-3 text-yellow-300" />
-                    {finesOverview.pendingVerification} pending verification
-                  </span>{" "}
-                  ·{" "}
-                  <span className="inline-flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
-                    {finesOverview.paid} paid
-                  </span>
+                  Records that still need return or completion.
                 </p>
-                {finesOverview.totalAmount > 0 && (
-                  <p className="text-[11px] text-white/60">
-                    Active:{" "}
-                    <span className="font-medium text-amber-200">
-                      {peso(finesOverview.activeAmount)}
-                    </span>{" "}
-                    · Pending:{" "}
-                    <span className="font-medium text-yellow-200">
-                      {peso(finesOverview.pendingAmount)}
-                    </span>
-                    <br />
-                    Total recorded:{" "}
-                    <span className="font-medium text-emerald-200">
-                      {peso(finesOverview.totalAmount)}
-                    </span>
-                  </p>
-                )}
-                <Link
-                  to="/dashboard/librarian/fines"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-amber-200 hover:text-amber-100"
-                >
-                  Open fines &amp; payments
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
               </CardContent>
             </Card>
 
-            {/* Income */}
             <Card className="bg-slate-800/60 border-white/10">
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                 <div>
-                  <CardTitle className="text-sm">Income</CardTitle>
-                  <p className="text-[11px] text-white/60">
-                    Paid fines &amp; damage fees
-                  </p>
-                </div>
-                <div className="rounded-full border border-emerald-400/40 bg-emerald-500/15 p-2">
-                  <Coins className="h-4 w-4 text-emerald-300" />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <div className="text-2xl font-semibold">
-                  {peso(incomeOverview.paidTotal)}
-                </div>
-                <p className="text-[11px] text-white/70">
-                  {incomeOverview.paidCount} paid transaction
-                  {incomeOverview.paidCount === 1 ? "" : "s"}
-                </p>
-                <Link
-                  to="/dashboard/librarian/income"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-200 hover:text-emerald-100"
-                >
-                  Open income summary
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
-              </CardContent>
-            </Card>
-
-            {/* Damage reports */}
-            <Card className="bg-slate-800/60 border-white/10">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <div>
-                  <CardTitle className="text-sm">Damage reports</CardTitle>
-                  <p className="text-[11px] text-white/60">
-                    Pending vs assessed vs paid
-                  </p>
-                </div>
-                <div className="rounded-full border border-red-400/40 bg-red-500/15 p-2">
-                  <ShieldAlert className="h-4 w-4 text-red-300" />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <div className="text-2xl font-semibold">
-                  {damageOverview.total}
-                  <span className="ml-1 text-xs text-white/60">reports</span>
-                </div>
-                <p className="text-[11px] text-white/70">
-                  <span className="inline-flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-amber-300" />
-                    {damageOverview.pending} pending
-                  </span>{" "}
-                  ·{" "}
-                  <span className="inline-flex items-center gap-1">
-                    <BarChart2 className="h-3 w-3 text-sky-300" />
-                    {damageOverview.assessed} assessed
-                  </span>{" "}
-                  ·{" "}
-                  <span className="inline-flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
-                    {damageOverview.paid} paid
-                  </span>
-                </p>
-                <Link
-                  to="/dashboard/librarian/damage-reports"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-red-200 hover:text-red-100"
-                >
-                  Open damage reports
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
-              </CardContent>
-            </Card>
-
-            {/* Feedbacks */}
-            <Card className="bg-slate-800/60 border-white/10">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <div>
-                  <CardTitle className="text-sm">Feedback</CardTitle>
-                  <p className="text-[11px] text-white/60">
-                    Ratings &amp; comments
-                  </p>
+                  <CardTitle className="text-sm">Pending</CardTitle>
+                  <p className="text-[11px] text-white/60">Awaiting action</p>
                 </div>
                 <div className="rounded-full border border-yellow-400/40 bg-yellow-500/15 p-2">
-                  <MessageSquare className="h-4 w-4 text-yellow-300" />
+                  <AlertTriangle className="h-4 w-4 text-yellow-300" />
                 </div>
               </CardHeader>
               <CardContent className="space-y-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-semibold">{avgRatingLabel}</span>
-                  <span className="inline-flex items-center gap-1 text-xs text-white/70">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    avg rating
-                  </span>
-                </div>
+                <div className="text-2xl font-semibold">{borrowOverview.pending}</div>
                 <p className="text-[11px] text-white/70">
-                  {feedbackOverview.total}
-                  <span className="ml-1 text-xs text-white/60">entries</span>
+                  Pending borrow records that may need follow-up.
                 </p>
-                <Link
-                  to="/dashboard/librarian/feedbacks"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-yellow-200 hover:text-yellow-100"
-                >
-                  Open feedback
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
               </CardContent>
             </Card>
 
-            {/* Users */}
             <Card className="bg-slate-800/60 border-white/10">
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                 <div>
-                  <CardTitle className="text-sm">Users</CardTitle>
-                  <p className="text-[11px] text-white/60">Roles &amp; access</p>
+                  <CardTitle className="text-sm">Returned</CardTitle>
+                  <p className="text-[11px] text-white/60">Completed circulation</p>
                 </div>
-                <div className="rounded-full border border-indigo-400/40 bg-indigo-500/15 p-2">
-                  <Users2 className="h-4 w-4 text-indigo-300" />
+                <div className="rounded-full border border-emerald-400/40 bg-emerald-500/15 p-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="text-2xl font-semibold">
-                  {usersOverview.total}
-                  <span className="ml-1 text-xs text-white/60">users</span>
-                </div>
-                <div className="space-y-0.5 text-[11px] text-white/70">
-                  {(
-                    ["student", "librarian", "faculty", "admin", "other"] as Role[]
-                  ).map((role) => {
-                    const count = usersOverview.byRole[role] ?? 0;
-                    if (!count) return null;
-                    const label =
-                      role === "other"
-                        ? "Other / guest"
-                        : role.charAt(0).toUpperCase() + role.slice(1);
-                    return (
-                      <div key={role} className="flex items-center justify-between">
-                        <span>{label}</span>
-                        <span className="font-mono">{count}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <Link
-                  to="/dashboard/librarian/users"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-indigo-200 hover:text-indigo-100"
-                >
-                  Open users directory
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-semibold">{borrowOverview.returned}</div>
+                <p className="text-[11px] text-white/70">
+                  Successfully returned borrow records.
+                </p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Chart + quick notes row */}
           <div className="grid gap-4 lg:grid-cols-3">
-            {/* Borrowing status bar chart */}
             <Card className="bg-slate-800/60 border-white/10 lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                 <div>
@@ -1028,7 +851,423 @@ export default function LibrarianDashboard() {
               </CardContent>
             </Card>
 
-            {/* Quick actions / summary notes */}
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Quick assistant actions</CardTitle>
+                <p className="text-[11px] text-white/60">
+                  Access only the tools allowed for assistant librarian workflow.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs text-white/80">
+                <Link
+                  to="/dashboard/librarian/borrow-records"
+                  className="flex items-center justify-between rounded-md border border-white/10 bg-black/10 px-3 py-2 hover:border-sky-400/70 hover:bg-sky-500/10"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Manage borrow &amp; return</span>
+                    <span className="text-[11px] text-white/60">
+                      Process borrowing and returning records.
+                    </span>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-sky-200" />
+                </Link>
+
+                <Link
+                  to="/dashboard/librarian/settings"
+                  className="flex items-center justify-between rounded-md border border-white/10 bg-black/10 px-3 py-2 hover:border-slate-300/70 hover:bg-slate-500/10"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Assistant settings</span>
+                    <span className="text-[11px] text-white/60">
+                      Configure your dashboard preferences.
+                    </span>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-slate-200" />
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">Books</CardTitle>
+                  <p className="text-[11px] text-white/60">Catalog at a glance</p>
+                </div>
+                <div className="rounded-full border border-emerald-400/40 bg-emerald-500/15 p-2">
+                  <BookOpen className="h-4 w-4 text-emerald-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-semibold">
+                  {booksOverview.total}
+                  <span className="ml-1 text-xs text-white/60">titles</span>
+                </div>
+                <p className="text-[11px] text-white/70">
+                  <span className="inline-flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
+                    {booksOverview.available} available
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-amber-300" />
+                    {booksOverview.unavailable} unavailable
+                  </span>
+                </p>
+                <Link
+                  to="/dashboard/librarian/books"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-200 hover:text-emerald-100"
+                >
+                  Open catalog
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">Borrow records</CardTitle>
+                  <p className="text-[11px] text-white/60">
+                    Active &amp; pending circulation
+                  </p>
+                </div>
+                <div className="rounded-full border border-sky-400/40 bg-sky-500/15 p-2">
+                  <ListChecks className="h-4 w-4 text-sky-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-semibold">
+                  {borrowOverview.total}
+                  <span className="ml-1 text-xs text-white/60">records</span>
+                </div>
+                <p className="text-[11px] text-white/70">
+                  <span className="inline-flex items-center gap-1">
+                    <Clock3 className="h-3 w-3 text-sky-300" />
+                    {activeBorrowCount} active
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
+                    {borrowOverview.returned} returned
+                  </span>
+                </p>
+                {borrowOverview.totalFine > 0 && (
+                  <p className="text-[11px] text-white/60">
+                    Total fines recorded:{" "}
+                    <span className="font-medium text-amber-200">
+                      {peso(borrowOverview.totalFine)}
+                    </span>
+                  </p>
+                )}
+                <Link
+                  to="/dashboard/librarian/borrow-records"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-200 hover:text-sky-100"
+                >
+                  Open borrow records
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">Fines</CardTitle>
+                  <p className="text-[11px] text-white/60">
+                    Active &amp; pending payments
+                  </p>
+                </div>
+                <div className="rounded-full border border-amber-400/40 bg-amber-500/15 p-2">
+                  <ReceiptText className="h-4 w-4 text-amber-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-semibold">
+                  {finesOverview.total}
+                  <span className="ml-1 text-xs text-white/60">fines</span>
+                </div>
+                <p className="text-[11px] text-white/70">
+                  <span className="inline-flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-amber-300" />
+                    {finesOverview.active} active
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <Clock3 className="h-3 w-3 text-yellow-300" />
+                    {finesOverview.pendingVerification} pending verification
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
+                    {finesOverview.paid} paid
+                  </span>
+                </p>
+                {finesOverview.totalAmount > 0 && (
+                  <p className="text-[11px] text-white/60">
+                    Active:{" "}
+                    <span className="font-medium text-amber-200">
+                      {peso(finesOverview.activeAmount)}
+                    </span>{" "}
+                    · Pending:{" "}
+                    <span className="font-medium text-yellow-200">
+                      {peso(finesOverview.pendingAmount)}
+                    </span>
+                    <br />
+                    Total recorded:{" "}
+                    <span className="font-medium text-emerald-200">
+                      {peso(finesOverview.totalAmount)}
+                    </span>
+                  </p>
+                )}
+                <Link
+                  to="/dashboard/librarian/fines"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-amber-200 hover:text-amber-100"
+                >
+                  Open fines &amp; payments
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">Income</CardTitle>
+                  <p className="text-[11px] text-white/60">
+                    Paid fines &amp; damage fees
+                  </p>
+                </div>
+                <div className="rounded-full border border-emerald-400/40 bg-emerald-500/15 p-2">
+                  <Coins className="h-4 w-4 text-emerald-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-semibold">
+                  {peso(incomeOverview.paidTotal)}
+                </div>
+                <p className="text-[11px] text-white/70">
+                  {incomeOverview.paidCount} paid transaction
+                  {incomeOverview.paidCount === 1 ? "" : "s"}
+                </p>
+                <Link
+                  to="/dashboard/librarian/income"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-200 hover:text-emerald-100"
+                >
+                  Open income summary
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">Damage reports</CardTitle>
+                  <p className="text-[11px] text-white/60">
+                    Pending vs assessed vs paid
+                  </p>
+                </div>
+                <div className="rounded-full border border-red-400/40 bg-red-500/15 p-2">
+                  <ShieldAlert className="h-4 w-4 text-red-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-semibold">
+                  {damageOverview.total}
+                  <span className="ml-1 text-xs text-white/60">reports</span>
+                </div>
+                <p className="text-[11px] text-white/70">
+                  <span className="inline-flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-amber-300" />
+                    {damageOverview.pending} pending
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <BarChart2 className="h-3 w-3 text-sky-300" />
+                    {damageOverview.assessed} assessed
+                  </span>{" "}
+                  ·{" "}
+                  <span className="inline-flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
+                    {damageOverview.paid} paid
+                  </span>
+                </p>
+                <Link
+                  to="/dashboard/librarian/damage-reports"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-red-200 hover:text-red-100"
+                >
+                  Open damage reports
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">Feedback</CardTitle>
+                  <p className="text-[11px] text-white/60">
+                    Ratings &amp; comments
+                  </p>
+                </div>
+                <div className="rounded-full border border-yellow-400/40 bg-yellow-500/15 p-2">
+                  <MessageSquare className="h-4 w-4 text-yellow-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-semibold">{avgRatingLabel}</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-white/70">
+                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                    avg rating
+                  </span>
+                </div>
+                <p className="text-[11px] text-white/70">
+                  {feedbackOverview.total}
+                  <span className="ml-1 text-xs text-white/60">entries</span>
+                </p>
+                <Link
+                  to="/dashboard/librarian/feedbacks"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-yellow-200 hover:text-yellow-100"
+                >
+                  Open feedback
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/60 border-white/10">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="text-sm">Users</CardTitle>
+                  <p className="text-[11px] text-white/60">Roles &amp; access</p>
+                </div>
+                <div className="rounded-full border border-indigo-400/40 bg-indigo-500/15 p-2">
+                  <Users2 className="h-4 w-4 text-indigo-300" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="text-2xl font-semibold">
+                  {usersOverview.total}
+                  <span className="ml-1 text-xs text-white/60">users</span>
+                </div>
+                <div className="space-y-0.5 text-[11px] text-white/70">
+                  {(
+                    [
+                      "student",
+                      "assistant_librarian",
+                      "librarian",
+                      "faculty",
+                      "admin",
+                      "other",
+                    ] as UserRole[]
+                  ).map((role) => {
+                    const count = usersOverview.byRole[role] ?? 0;
+                    if (!count) return null;
+
+                    const labelMap: Record<UserRole, string> = {
+                      student: "Student",
+                      assistant_librarian: "Assistant Librarian",
+                      librarian: "Librarian",
+                      faculty: "Faculty",
+                      admin: "Admin",
+                      other: "Other / guest",
+                    };
+
+                    return (
+                      <div key={role} className="flex items-center justify-between">
+                        <span>{labelMap[role]}</span>
+                        <span className="font-mono">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Link
+                  to="/dashboard/librarian/users"
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-indigo-200 hover:text-indigo-100"
+                >
+                  Open users directory
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="bg-slate-800/60 border-white/10 lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <BarChart2 className="h-4 w-4" />
+                    Borrowing status overview
+                  </CardTitle>
+                  <p className="text-[11px] text-white/60">
+                    Distribution of borrowed, pending, and returned records.
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="border-white/20 text-[11px] text-white/70"
+                >
+                  {borrowOverview.total} records
+                </Badge>
+              </CardHeader>
+              <CardContent className="pt-1">
+                {borrowOverview.total === 0 ? (
+                  <p className="py-10 text-center text-xs text-white/60">
+                    No borrow records yet. Once students start borrowing books,
+                    you&apos;ll see the status distribution here.
+                  </p>
+                ) : (
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={borrowChartData}
+                        margin={{ top: 10, right: 16, left: -16, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                        <XAxis
+                          dataKey="name"
+                          stroke="#e5e7eb"
+                          tickLine={false}
+                          axisLine={{ stroke: "#1f2937" }}
+                          tick={{ fill: "#e5e7eb", fontSize: 12 }}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          stroke="#e5e7eb"
+                          tickLine={false}
+                          axisLine={{ stroke: "#1f2937" }}
+                          tick={{ fill: "#e5e7eb", fontSize: 12 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#020617",
+                            borderRadius: 8,
+                            border: "1px solid #1f2937",
+                            fontSize: 12,
+                            color: "#e5e7eb",
+                          }}
+                          labelStyle={{ color: "#e5e7eb" }}
+                          itemStyle={{ color: "#e5e7eb" }}
+                        />
+                        <Bar
+                          dataKey="value"
+                          radius={[4, 4, 0, 0]}
+                          fill="#38bdf8"
+                          activeBar={{ fill: "#0ea5e9" }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card className="bg-slate-800/60 border-white/10">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Quick librarian actions</CardTitle>

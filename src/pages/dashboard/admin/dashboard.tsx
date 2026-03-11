@@ -284,6 +284,7 @@ export default function AdminDashboard() {
             faculty: 0,
             librarian: 0,
             admin: 0,
+            assistant_librarian: 0
         };
         for (const u of users) {
             const r = getEffectiveRole(u as any);
