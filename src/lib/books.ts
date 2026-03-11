@@ -32,8 +32,8 @@ export type BookDTO = {
   issn?: string;
 
   // Classification
-  subjects?: string; // ✅ new attribute
-  genre: string; // legacy (kept for backward compatibility)
+  subjects?: string;
+  genre: string;
 
   // Publication
   placeOfPublication?: string;
@@ -43,7 +43,7 @@ export type BookDTO = {
 
   // Physical description / notes
   pages?: number | null;
-  otherDetails?: string; // maps to physical_details in DB
+  otherDetails?: string;
   dimensions?: string;
   notes?: string;
   series?: string;
@@ -66,6 +66,21 @@ export type BookDTO = {
   numberOfCopies?: number;
   totalCopies?: number;
   borrowedCopies?: number;
+
+  /**
+   * Library-use-only books are still returned in the choices/list
+   * but must be visually separated in the UI and cannot be borrowed.
+   */
+  isLibraryUseOnly?: boolean;
+  canBorrow?: boolean;
+
+  /**
+   * Borrow tracking:
+   * - activeBorrowCount = how many active borrow rows currently exist
+   * - totalBorrowCount = how many times this book has ever been borrowed
+   */
+  activeBorrowCount?: number;
+  totalBorrowCount?: number;
 
   available: boolean;
 
@@ -177,14 +192,14 @@ export type CreateBookPayload = {
 
   // Classification
   subjects?: string;
-  genre?: string; // legacy
+  genre?: string;
   category?: string;
 
   // Publication
   publicationYear?: number;
   placeOfPublication?: string;
   publisher?: string;
-  copyrightYear?: number | null; // legacy support
+  copyrightYear?: number | null;
 
   // Physical description / notes
   pages?: number | null;
@@ -211,6 +226,13 @@ export type CreateBookPayload = {
    * Availability may be computed by backend based on remaining copies.
    */
   available?: boolean;
+
+  /**
+   * Library-use-only books remain visible in book choices
+   * but are blocked from actual borrowing.
+   */
+  isLibraryUseOnly?: boolean;
+  canBorrow?: boolean;
 
   /**
    * Default loan duration in days.
