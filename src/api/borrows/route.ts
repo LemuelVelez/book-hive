@@ -14,7 +14,12 @@ export const BORROW_ROUTES = {
         api(`/borrow-records/${encodeURIComponent(String(id))}`), // DELETE (optional)
 
     my: api("/borrow-records/my"), // GET (current user's borrow records)
-    createSelf: api("/borrow-records/self"), // POST (student self-service borrow)
+    createSelf: api("/borrow-records/self"), // POST (student/faculty self-service borrow)
+
+    // ✅ optional policy endpoints for role-based borrowing rules
+    policies: api("/borrow-records/policies"), // GET
+    policyByRole: (role: string) =>
+        api(`/borrow-records/policies/${encodeURIComponent(String(role))}`), // GET
 
     // ✅ extend due date
     // - student/guest/faculty: creates an extension REQUEST (pending)

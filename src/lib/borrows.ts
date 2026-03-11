@@ -11,6 +11,14 @@ export type BorrowStatus =
 
 export type ExtensionRequestStatus = "none" | "pending" | "approved" | "disapproved";
 
+export type BorrowerRole =
+    | "student"
+    | "faculty"
+    | "librarian"
+    | "admin"
+    | "guest"
+    | "other";
+
 export type BorrowRecordDTO = {
     id: string;
     userId: string;
@@ -48,6 +56,27 @@ export type BorrowRecordDTO = {
     returnRequestNote?: string | null;
 };
 
+export type BorrowPolicyDTO = {
+    role: BorrowerRole;
+    /**
+     * Maximum simultaneously active borrow records allowed for the role.
+     * Faculty requirement: maximum 10 books.
+     */
+    maxActiveBorrows: number;
+
+    /**
+     * Default borrow period in days for the role.
+     * Faculty default here is 30 days unless backend returns a different value.
+     */
+    defaultBorrowDurationDays: number;
+
+    /**
+     * Optional cap for how many copies can be requested in one action.
+     * Falls back to maxActiveBorrows when omitted.
+     */
+    maxPerAction?: number | null;
+};
+
 type JsonOk<T> = { ok: true } & T;
 
 type FetchInit = Omit<RequestInit, "body" | "credentials"> & {
@@ -60,6 +89,45 @@ type BorrowCreateResponse = JsonOk<{
     records?: BorrowRecordDTO[] | null;
     createdCount?: number;
 }>;
+
+const DEFAULT_BORROW_POLICIES: Record<BorrowerRole, BorrowPolicyDTO> = {
+    student: {
+        role: "student",
+        maxActiveBorrows: 3,
+        defaultBorrowDurationDays: 7,
+        maxPerAction: 3,
+    },
+    faculty: {
+        role: "faculty",
+        maxActiveBorrows: 10,
+        defaultBorrowDurationDays: 30,
+        maxPerAction: 10,
+    },
+    librarian: {
+        role: "librarian",
+        maxActiveBorrows: 10,
+        defaultBorrowDurationDays: 30,
+        maxPerAction: 10,
+    },
+    admin: {
+        role: "admin",
+        maxActiveBorrows: 10,
+        defaultBorrowDurationDays: 30,
+        maxPerAction: 10,
+    },
+    guest: {
+        role: "guest",
+        maxActiveBorrows: 1,
+        defaultBorrowDurationDays: 3,
+        maxPerAction: 1,
+    },
+    other: {
+        role: "other",
+        maxActiveBorrows: 1,
+        defaultBorrowDurationDays: 7,
+        maxPerAction: 1,
+    },
+};
 
 function getErrorMessage(e: unknown): string {
     if (!e) return "";
@@ -91,6 +159,22 @@ function normalizeCreatedBorrowRecords(payload: {
     }
 
     return [];
+}
+
+function normalizeBorrowPolicies(
+    policies: BorrowPolicyDTO[] | null | undefined
+): BorrowPolicyDTO[] {
+    if (!Array.isArray(policies)) return [];
+    return policies.filter(
+        (item): item is BorrowPolicyDTO =>
+            Boolean(
+                item &&
+                    typeof item === "object" &&
+                    typeof item.role === "string" &&
+                    typeof item.maxActiveBorrows === "number" &&
+                    typeof item.defaultBorrowDurationDays === "number"
+            )
+    );
 }
 
 async function requestJSON<T = unknown>(
@@ -174,6 +258,81 @@ export type UpdateBorrowPayload = Partial<{
     dueDate: string; // YYYY-MM-DD
 }>;
 
+export function getDefaultBorrowPolicy(role: BorrowerRole): BorrowPolicyDTO {
+    return DEFAULT_BORROW_POLICIES[role] ?? DEFAULT_BORROW_POLICIES.other;
+}
+
+export function getFacultyBorrowPolicy(): BorrowPolicyDTO {
+    return getDefaultBorrowPolicy("faculty");
+}
+
+export function getFacultyBorrowMaxBooks(): number {
+    return getFacultyBorrowPolicy().maxActiveBorrows;
+}
+
+export function getFacultyBorrowDurationDays(): number {
+    return getFacultyBorrowPolicy().defaultBorrowDurationDays;
+}
+
+export function validateBorrowQuantityForRole(
+    role: BorrowerRole,
+    quantity: number
+): void {
+    const policy = getDefaultBorrowPolicy(role);
+    const allowed = policy.maxPerAction ?? policy.maxActiveBorrows;
+    const normalized = Math.floor(Number(quantity));
+
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+        throw new Error("Quantity must be a positive whole number.");
+    }
+
+    if (normalized > allowed) {
+        throw new Error(
+            `${role.charAt(0).toUpperCase() + role.slice(1)} can only borrow up to ${allowed} book${allowed === 1 ? "" : "s"} per request.`
+        );
+    }
+}
+
+export async function fetchBorrowPolicies(): Promise<BorrowPolicyDTO[]> {
+    type Resp = JsonOk<{ policies?: BorrowPolicyDTO[] | null }>;
+
+    try {
+        const res = await requestJSON<Resp>(BORROW_ROUTES.policies, { method: "GET" });
+        const normalized = normalizeBorrowPolicies(res.policies);
+        return normalized.length > 0
+            ? normalized
+            : Object.values(DEFAULT_BORROW_POLICIES);
+    } catch {
+        return Object.values(DEFAULT_BORROW_POLICIES);
+    }
+}
+
+export async function fetchBorrowPolicyForRole(
+    role: BorrowerRole
+): Promise<BorrowPolicyDTO> {
+    type Resp = JsonOk<{ policy?: BorrowPolicyDTO | null }>;
+
+    try {
+        const res = await requestJSON<Resp>(BORROW_ROUTES.policyByRole(role), {
+            method: "GET",
+        });
+
+        if (
+            res.policy &&
+            typeof res.policy === "object" &&
+            typeof res.policy.role === "string" &&
+            typeof res.policy.maxActiveBorrows === "number" &&
+            typeof res.policy.defaultBorrowDurationDays === "number"
+        ) {
+            return res.policy;
+        }
+    } catch {
+        // fall back to local defaults below
+    }
+
+    return getDefaultBorrowPolicy(role);
+}
+
 export async function fetchBorrowRecords(): Promise<BorrowRecordDTO[]> {
     type Resp = JsonOk<{ records: BorrowRecordDTO[] }>;
     const res = await requestJSON<Resp>(BORROW_ROUTES.list, { method: "GET" });
@@ -208,17 +367,24 @@ export async function createBorrowRecord(
 }
 
 /**
- * Student self-service borrow:
+ * Student/faculty self-service borrow:
  * - userId is taken from the session on the server.
- * - server computes dueDate based on per-book borrow_duration_days.
+ * - server computes dueDate based on policy / per-book duration.
  * - starts in "pending_pickup".
  *
- * ✅ quantity lets the student reserve multiple copies (if available).
+ * ✅ quantity lets the borrower reserve multiple copies (if available).
+ *
+ * Client-side default policy now includes:
+ * - faculty maximum: 10 books
+ * - faculty default duration: 30 days
  */
 export async function createSelfBorrow(
     bookId: string | number,
-    quantity: number = 1
+    quantity: number = 1,
+    role: BorrowerRole = "student"
 ): Promise<BorrowRecordDTO> {
+    validateBorrowQuantityForRole(role, quantity);
+
     const res = await requestJSON<BorrowCreateResponse>(BORROW_ROUTES.createSelf, {
         method: "POST",
         body: { bookId, quantity },
@@ -233,13 +399,16 @@ export async function createSelfBorrow(
 }
 
 /**
- * Student self-service borrow that always returns all created records.
+ * Student/faculty self-service borrow that always returns all created records.
  * This is useful when the backend creates multiple borrow rows for one request.
  */
 export async function createSelfBorrowRecords(
     bookId: string | number,
-    quantity: number = 1
+    quantity: number = 1,
+    role: BorrowerRole = "student"
 ): Promise<BorrowRecordDTO[]> {
+    validateBorrowQuantityForRole(role, quantity);
+
     const res = await requestJSON<BorrowCreateResponse>(BORROW_ROUTES.createSelf, {
         method: "POST",
         body: { bookId, quantity },
