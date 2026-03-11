@@ -27,15 +27,33 @@ type Item = {
     label: string
     icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
     to: string
-    /** If true, active only when pathname === to */
     exact?: boolean
+}
+
+const ROLE_STORAGE_KEY = "bookhive.currentRole"
+
+function readCachedRole(): Role | null | undefined {
+    if (typeof window === "undefined") return undefined
+    const raw = window.sessionStorage.getItem(ROLE_STORAGE_KEY)?.trim()
+    return raw ? (raw as Role) : undefined
+}
+
+function writeCachedRole(role: Role | null | undefined) {
+    if (typeof window === "undefined") return
+
+    if (role) {
+        window.sessionStorage.setItem(ROLE_STORAGE_KEY, role)
+        return
+    }
+
+    window.sessionStorage.removeItem(ROLE_STORAGE_KEY)
 }
 
 export function NavMain() {
     const location = useLocation()
     const pathname = location.pathname
 
-    const [currentRole, setCurrentRole] = React.useState<Role | null | undefined>(undefined)
+    const [currentRole, setCurrentRole] = React.useState<Role | null | undefined>(() => readCachedRole())
 
     React.useEffect(() => {
         let cancelled = false
@@ -46,9 +64,12 @@ export function NavMain() {
                 if (!cancelled) {
                     const role = (user?.role ?? user?.accountType ?? null) as Role | null
                     setCurrentRole(role)
+                    writeCachedRole(role)
                 }
             } catch {
-                if (!cancelled) setCurrentRole(null)
+                if (!cancelled) {
+                    setCurrentRole((prev) => prev ?? null)
+                }
             }
         })()
 
@@ -59,12 +80,9 @@ export function NavMain() {
 
     let groupLabel = "Dashboard"
     let items: Item[] = [
-        // Fallback for /dashboard root or unknown
         { label: "Dashboard", icon: Home, to: "/dashboard", exact: true },
     ]
 
-    // Borrower (Student + Other) section:
-    // All borrower routes are under /dashboard (excluding librarian/faculty/admin subpaths)
     const isLibrarian = pathname.startsWith("/dashboard/librarian")
     const isFaculty = pathname.startsWith("/dashboard/faculty")
     const isAdmin = pathname.startsWith("/dashboard/admin")
@@ -74,8 +92,26 @@ export function NavMain() {
 
     const isAssistantLibrarian = currentRole === "assistant_librarian"
 
+    const assistantLibrarianItems: Item[] = [
+        {
+            label: "Dashboard",
+            icon: Home,
+            to: "/dashboard/librarian",
+            exact: true,
+        },
+        {
+            label: "Borrow Records",
+            icon: ListChecks,
+            to: "/dashboard/librarian/borrow-records",
+        },
+        {
+            label: "Settings",
+            icon: Settings,
+            to: "/dashboard/librarian/settings",
+        },
+    ]
+
     if (isBorrowerSection) {
-        // Shared navigation for "student" and "other" roles
         groupLabel = "My Library"
         items = [
             {
@@ -111,26 +147,9 @@ export function NavMain() {
             },
         ]
     } else if (isLibrarian) {
-        if (isAssistantLibrarian) {
-            groupLabel = "Assistant Librarian"
-            items = [
-                {
-                    label: "Dashboard",
-                    icon: Home,
-                    to: "/dashboard/librarian",
-                    exact: true,
-                },
-                {
-                    label: "Borrow Records",
-                    icon: ListChecks,
-                    to: "/dashboard/librarian/borrow-records",
-                },
-                {
-                    label: "Settings",
-                    icon: Settings,
-                    to: "/dashboard/librarian/settings",
-                },
-            ]
+        if (currentRole === undefined || currentRole === null || isAssistantLibrarian) {
+            groupLabel = isAssistantLibrarian ? "Assistant Librarian" : "Library"
+            items = assistantLibrarianItems
         } else {
             groupLabel = "Librarian"
             items = [
@@ -249,7 +268,6 @@ export function NavMain() {
             <SidebarGroupLabel className="text-white/70">{groupLabel}</SidebarGroupLabel>
 
             <SidebarGroupContent>
-                {/* Horizontal scroll for tight layouts, styled by .support-scroll */}
                 <div className="support-scroll overflow-x-auto overflow-y-visible whitespace-nowrap pr-1">
                     <SidebarMenu className="min-w-full">
                         {items.map((item) => {

@@ -26,7 +26,6 @@ import {
 import { toast } from "sonner";
 import { API_BASE } from "@/api/auth/route";
 
-// Existing client helpers
 import { fetchBooks, type BookDTO } from "@/lib/books";
 import {
   fetchBorrowRecords,
@@ -35,7 +34,6 @@ import {
 import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
 import { me as fetchMe, type Role as AuthRole } from "@/lib/authentication";
 
-// Recharts (for the bar chart)
 import {
   ResponsiveContainer,
   BarChart,
@@ -169,7 +167,26 @@ const EMPTY_INCOME_OVERVIEW: IncomeOverview = {
   paidCount: 0,
 };
 
+const ROLE_STORAGE_KEY = "bookhive.currentRole";
+
 /* ------------------------ Local helpers ------------------------ */
+
+function readCachedRole(): AuthRole | null | undefined {
+  if (typeof window === "undefined") return undefined;
+  const raw = window.sessionStorage.getItem(ROLE_STORAGE_KEY)?.trim();
+  return raw ? (raw as AuthRole) : undefined;
+}
+
+function writeCachedRole(role: AuthRole | null | undefined) {
+  if (typeof window === "undefined") return;
+
+  if (role) {
+    window.sessionStorage.setItem(ROLE_STORAGE_KEY, role);
+    return;
+  }
+
+  window.sessionStorage.removeItem(ROLE_STORAGE_KEY);
+}
 
 function summarizeBooks(books: BookDTO[]): BooksOverview {
   const total = books.length;
@@ -250,12 +267,6 @@ function normalizeAmount(value: any): number {
   return Number.isNaN(num) ? 0 : num;
 }
 
-/**
- * Simple suggested fee policy (fallback only):
- * - minor: ₱50
- * - moderate: ₱150
- * - major: ₱300
- */
 function suggestedFineFromSeverity(severity?: DamageSeverity | null): number {
   switch (severity) {
     case "minor":
@@ -357,10 +368,6 @@ async function fetchUsersOverview(): Promise<UsersOverview> {
   };
 }
 
-/**
- * Fines overview for librarian dashboard.
- * Fetches all fines from /api/fines and aggregates by status + amounts.
- */
 async function fetchFinesOverview(): Promise<FinesOverview> {
   const endpoint = `${API_BASE}/api/fines`;
   const res = await fetch(endpoint, {
@@ -412,11 +419,6 @@ async function fetchFinesOverview(): Promise<FinesOverview> {
   return summary;
 }
 
-/**
- * Income overview for librarian dashboard.
- * - sums PAID fines from /api/fines
- * - plus PAID damage-report fees that are not yet represented by a fine row
- */
 async function fetchIncomeOverview(): Promise<IncomeOverview> {
   const finesEndpoint = `${API_BASE}/api/fines`;
   const finesRes = await fetch(finesEndpoint, {
@@ -507,7 +509,9 @@ export default function LibrarianDashboard() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [currentRole, setCurrentRole] = React.useState<AuthRole | null>(null);
+  const [currentRole, setCurrentRole] = React.useState<AuthRole | null | undefined>(
+    () => readCachedRole()
+  );
 
   const [booksOverview, setBooksOverview] =
     React.useState<BooksOverview>(EMPTY_BOOKS_OVERVIEW);
@@ -529,15 +533,24 @@ export default function LibrarianDashboard() {
     setError(null);
     setLoading(true);
 
+    let resolvedRole: AuthRole | null | undefined = readCachedRole();
+
     try {
-      const currentUser = await fetchMe();
-      const effectiveRole = (currentUser?.role ??
-        currentUser?.accountType ??
-        "librarian") as AuthRole;
+      try {
+        const currentUser = await fetchMe();
+        resolvedRole = (currentUser?.role ??
+          currentUser?.accountType ??
+          resolvedRole ??
+          "librarian") as AuthRole;
 
-      setCurrentRole(effectiveRole);
+        setCurrentRole(resolvedRole);
+        writeCachedRole(resolvedRole);
+      } catch (authError) {
+        if (!resolvedRole) throw authError;
+        setCurrentRole(resolvedRole);
+      }
 
-      if (effectiveRole === "assistant_librarian") {
+      if (resolvedRole === "assistant_librarian") {
         const borrowList = await fetchBorrowRecords();
 
         setBooksOverview(EMPTY_BOOKS_OVERVIEW);
@@ -574,7 +587,7 @@ export default function LibrarianDashboard() {
 
       setError(msg);
       toast.error(
-        currentRole === "assistant_librarian"
+        resolvedRole === "assistant_librarian"
           ? "Failed to load assistant librarian overview"
           : "Failed to load librarian overview",
         {
@@ -584,7 +597,7 @@ export default function LibrarianDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [currentRole]);
+  }, []);
 
   React.useEffect(() => {
     void loadOverview();
@@ -610,6 +623,18 @@ export default function LibrarianDashboard() {
 
   const activeBorrowCount = borrowOverview.borrowed + borrowOverview.pending;
   const isAssistantLibrarian = currentRole === "assistant_librarian";
+  const dashboardTitle =
+    currentRole === undefined
+      ? "Library dashboard"
+      : isAssistantLibrarian
+        ? "Assistant librarian dashboard"
+        : "Librarian dashboard";
+  const dashboardDescription =
+    currentRole === undefined
+      ? "Overview of your library workspace."
+      : isAssistantLibrarian
+        ? "Overview of borrowing and returning activity for assistant librarian access."
+        : "Overview of catalog health, circulation, fines, and student activity.";
 
   const avgRatingLabel =
     feedbackOverview.avgRating > 0
@@ -620,16 +645,8 @@ export default function LibrarianDashboard() {
     <DashboardLayout>
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">
-            {isAssistantLibrarian
-              ? "Assistant librarian dashboard"
-              : "Librarian dashboard"}
-          </h1>
-          <p className="text-sm text-white/60">
-            {isAssistantLibrarian
-              ? "Overview of borrowing and returning activity for assistant librarian access."
-              : "Overview of catalog health, circulation, fines, and student activity."}
-          </p>
+          <h1 className="text-xl font-semibold text-white">{dashboardTitle}</h1>
+          <p className="text-sm text-white/60">{dashboardDescription}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -660,8 +677,13 @@ export default function LibrarianDashboard() {
 
       {loading ? (
         <>
-          <div className="mb-4 grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            {Array.from({ length: 7 }).map((_, i) => (
+          <div
+            className={`mb-4 grid gap-4 ${isAssistantLibrarian
+              ? "md:grid-cols-2 xl:grid-cols-4"
+              : "md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
+              }`}
+          >
+            {Array.from({ length: isAssistantLibrarian ? 4 : 7 }).map((_, i) => (
               <Card key={i} className="bg-slate-800/60 border-white/10">
                 <CardHeader className="pb-2">
                   <Skeleton className="h-4 w-24" />

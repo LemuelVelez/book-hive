@@ -34,6 +34,25 @@ import {
     X,
 } from "lucide-react";
 
+const ROLE_STORAGE_KEY = "bookhive.currentRole";
+
+function readCachedRole(): Role | null | undefined {
+    if (typeof window === "undefined") return undefined;
+    const raw = window.sessionStorage.getItem(ROLE_STORAGE_KEY)?.trim();
+    return raw ? (raw as Role) : undefined;
+}
+
+function writeCachedRole(role: Role | null | undefined) {
+    if (typeof window === "undefined") return;
+
+    if (role) {
+        window.sessionStorage.setItem(ROLE_STORAGE_KEY, role);
+        return;
+    }
+
+    window.sessionStorage.removeItem(ROLE_STORAGE_KEY);
+}
+
 function fmtValue(v: unknown) {
     if (v === null || v === undefined) return "—";
     const s = String(v).trim();
@@ -44,6 +63,7 @@ function roleLabel(raw: string | undefined) {
     const map: Record<string, string> = {
         student: "Student",
         other: "Guest",
+        assistant_librarian: "Assistant Librarian",
         librarian: "Librarian",
         faculty: "Faculty",
         admin: "Admin",
@@ -70,7 +90,6 @@ function extractVerifyToken(input: string) {
     const s = String(input || "").trim();
     if (!s) return null;
 
-    // If user pasted a full URL
     try {
         const u = new URL(s);
         const t = u.searchParams.get("token");
@@ -79,11 +98,9 @@ function extractVerifyToken(input: string) {
         // ignore
     }
 
-    // If user pasted something containing token=...
     const m = s.match(/[?&]token=([a-f0-9]{16,})/i);
     if (m?.[1]) return m[1].trim();
 
-    // If user pasted raw token
     if (/^[a-f0-9]{32,}$/i.test(s)) return s;
 
     return null;
@@ -316,6 +333,7 @@ async function tryConfirmVerifyEmail(token: string) {
 
 export default function LibrarianSettingsPage() {
     const [user, setUser] = React.useState<any | null | undefined>(undefined);
+    const [cachedRole, setCachedRole] = React.useState<Role | null | undefined>(() => readCachedRole());
 
     const [pwCurrent, setPwCurrent] = React.useState("");
     const [pwNext, setPwNext] = React.useState("");
@@ -326,23 +344,19 @@ export default function LibrarianSettingsPage() {
     const [showNext, setShowNext] = React.useState(false);
     const [showConfirm, setShowConfirm] = React.useState(false);
 
-    // profile edit
     const [editing, setEditing] = React.useState(false);
     const [profileBusy, setProfileBusy] = React.useState(false);
 
     const [fullNameInput, setFullNameInput] = React.useState("");
     const [emailInput, setEmailInput] = React.useState("");
 
-    // avatar upload
     const fileRef = React.useRef<HTMLInputElement | null>(null);
     const [avatarBusy, setAvatarBusy] = React.useState(false);
     const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
     const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
 
-    // alert dialog state for remove
     const [removeConfirmOpen, setRemoveConfirmOpen] = React.useState(false);
 
-    // email verification UI state
     const [resendBusy, setResendBusy] = React.useState(false);
     const [resendCooldown, setResendCooldown] = React.useState(0);
     const [verifyDialogOpen, setVerifyDialogOpen] = React.useState(false);
@@ -356,7 +370,12 @@ export default function LibrarianSettingsPage() {
         (async () => {
             try {
                 const u = await apiMe();
-                if (!cancelled) setUser(u);
+                if (!cancelled) {
+                    setUser(u);
+                    const role = (u?.role ?? u?.accountType ?? null) as Role | null;
+                    setCachedRole(role);
+                    writeCachedRole(role);
+                }
             } catch {
                 if (!cancelled) setUser(null);
             }
@@ -375,13 +394,10 @@ export default function LibrarianSettingsPage() {
         return () => window.clearInterval(t);
     }, [resendCooldown]);
 
-    /**
-     * ✅ Use `role` as the effective authorization role.
-     * `accountType` is informational only.
-     */
     const effectiveRole: Role | undefined =
         (user?.role as Role | undefined) ??
         (user?.accountType as Role | undefined) ??
+        (cachedRole as Role | undefined) ??
         undefined;
 
     const accountType: Role | undefined =
@@ -415,7 +431,16 @@ export default function LibrarianSettingsPage() {
 
     const avatarUrl = avatarPreview || user?.avatarUrl || user?.avatar_url || null;
 
-    // populate inputs from user (avoid overriding while editing)
+    const settingsTitle =
+        effectiveRole === "assistant_librarian"
+            ? "Assistant librarian settings"
+            : "Librarian settings";
+
+    const settingsDescription =
+        effectiveRole === "assistant_librarian"
+            ? "Manage your assistant librarian profile, password, email verification, and display picture."
+            : "Manage your librarian profile, password, email verification, and display picture.";
+
     React.useEffect(() => {
         if (!user) return;
         if (editing) return;
@@ -427,7 +452,6 @@ export default function LibrarianSettingsPage() {
         setEmailInput(String(user?.email || ""));
     }, [user, editing]);
 
-    // cleanup avatar preview
     React.useEffect(() => {
         if (!avatarPreview) return;
         return () => {
@@ -532,6 +556,9 @@ export default function LibrarianSettingsPage() {
             }
 
             setUser(updatedUser);
+            const role = (updatedUser?.role ?? updatedUser?.accountType ?? cachedRole ?? null) as Role | null;
+            setCachedRole(role);
+            writeCachedRole(role);
             setEditing(false);
 
             if (emailChanged) {
@@ -603,6 +630,9 @@ export default function LibrarianSettingsPage() {
 
             const u = await apiMe();
             setUser(u);
+            const role = (u?.role ?? u?.accountType ?? cachedRole ?? null) as Role | null;
+            setCachedRole(role);
+            writeCachedRole(role);
         } catch (err: any) {
             toast.error("Verification failed", {
                 description: String(err?.message || err || "Could not verify email."),
@@ -617,6 +647,9 @@ export default function LibrarianSettingsPage() {
         try {
             const u = await apiMe();
             setUser(u);
+            const role = (u?.role ?? u?.accountType ?? cachedRole ?? null) as Role | null;
+            setCachedRole(role);
+            writeCachedRole(role);
             toast.success("Status refreshed", {
                 description: "Your email verification status was refreshed.",
             });
@@ -668,6 +701,9 @@ export default function LibrarianSettingsPage() {
             }
 
             setUser(updatedUser);
+            const role = (updatedUser?.role ?? updatedUser?.accountType ?? cachedRole ?? null) as Role | null;
+            setCachedRole(role);
+            writeCachedRole(role);
 
             if (avatarPreview) URL.revokeObjectURL(avatarPreview);
             setAvatarPreview(null);
@@ -695,6 +731,9 @@ export default function LibrarianSettingsPage() {
             }
 
             setUser(updatedUser);
+            const role = (updatedUser?.role ?? updatedUser?.accountType ?? cachedRole ?? null) as Role | null;
+            setCachedRole(role);
+            writeCachedRole(role);
 
             if (avatarPreview) URL.revokeObjectURL(avatarPreview);
             setAvatarPreview(null);
@@ -718,17 +757,16 @@ export default function LibrarianSettingsPage() {
     return (
         <DashboardLayout title="Settings">
             <div className="space-y-4">
-                {/* Personal Info */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <CardTitle className="inline-flex items-center gap-2">
                                     <UserRound className="h-5 w-5" />
-                                    Personal information
+                                    {settingsTitle}
                                 </CardTitle>
                                 <p className="text-xs text-white/70">
-                                    Update your profile details and display picture.
+                                    {settingsDescription}
                                     {isGuest ? " (Guest accounts have fewer required fields.)" : ""}
                                 </p>
                             </div>
@@ -775,7 +813,6 @@ export default function LibrarianSettingsPage() {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {/* Avatar row (✅ responsive like admin/settings.tsx) */}
                                 <div className="flex flex-col md:flex-row md:items-center gap-4">
                                     <div className="h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center mx-auto md:mx-0">
                                         {avatarUrl ? (
@@ -883,7 +920,6 @@ export default function LibrarianSettingsPage() {
                                     </div>
                                 </div>
 
-                                {/* Info grid */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                         <div className="text-xs text-white/60">Full name</div>
@@ -936,7 +972,6 @@ export default function LibrarianSettingsPage() {
                                             </div>
                                         )}
 
-                                        {/* Email verification controls */}
                                         {!isEmailVerified ? (
                                             <div className="mt-3 space-y-2">
                                                 <p className="text-[11px] text-amber-200/80">
@@ -1041,7 +1076,6 @@ export default function LibrarianSettingsPage() {
                                         ) : null}
                                     </div>
 
-                                    {/* ✅ Role + Account type (accountType info only) */}
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                         <div className="text-xs text-white/60">Role</div>
                                         <div className="mt-0.5 font-medium">{roleLabel(effectiveRole)}</div>
@@ -1104,7 +1138,6 @@ export default function LibrarianSettingsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Change Password */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
                         <CardTitle className="inline-flex items-center gap-2">
