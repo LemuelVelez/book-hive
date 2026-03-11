@@ -132,6 +132,10 @@ function getDatePaid(record: PrintableIncomeRecord) {
     return record.paidDate || record.resolvedAt || record.createdAt || null
 }
 
+function getPrintableRecordDate(record: PrintableIncomeRecord) {
+    return getDatePaid(record) || record.createdAt || null
+}
+
 function getUserPrimary(record: PrintableIncomeRecord) {
     return (
         (record.studentName && String(record.studentName).trim()) ||
@@ -162,15 +166,24 @@ function getBookPrimary(record: PrintableIncomeRecord) {
     )
 }
 
+function chunkRecords<T>(items: T[], size: number): T[][] {
+    if (!items.length) return [[]]
+    const chunks: T[][] = []
+    for (let i = 0; i < items.length; i += size) {
+        chunks.push(items.slice(i, i + size))
+    }
+    return chunks
+}
+
 const pdfStyles = StyleSheet.create({
     page: {
         paddingTop: 24,
         paddingHorizontal: 24,
         paddingBottom: 24,
-        fontSize: 9.25,
+        fontSize: 9,
         color: "#0f172a",
         fontFamily: "Helvetica",
-        lineHeight: 1.35,
+        lineHeight: 1.3,
     },
     hero: {
         backgroundColor: "#0f172a",
@@ -178,6 +191,10 @@ const pdfStyles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 12,
         marginBottom: 10,
+    },
+    heroCompact: {
+        paddingVertical: 8,
+        marginBottom: 8,
     },
     heroTitle: {
         color: "#f8fafc",
@@ -222,6 +239,12 @@ const pdfStyles = StyleSheet.create({
         fontWeight: 700,
         marginBottom: 6,
     },
+    pageIndicator: {
+        fontSize: 7.7,
+        color: "#475569",
+        textAlign: "right",
+        marginBottom: 4,
+    },
     tableHead: {
         flexDirection: "row",
         backgroundColor: "#e2e8f0",
@@ -240,44 +263,76 @@ const pdfStyles = StyleSheet.create({
         borderColor: "#cbd5e1",
         paddingVertical: 5,
         paddingHorizontal: 6,
-        alignItems: "center",
+        alignItems: "flex-start",
     },
-    colUser: { width: "25%", paddingRight: 6 },
+    colUser: { width: "24%", paddingRight: 6 },
     colDetails: { width: "30%", paddingRight: 6 },
     colType: {
         width: "11%",
         paddingRight: 4,
     },
     colStatus: {
-        width: "11%",
+        width: "12%",
+        paddingRight: 4,
         alignItems: "center",
-        justifyContent: "center",
     },
-    colDate: { width: "11%" },
+    colDate: { width: "11%", paddingRight: 4 },
     colAmount: { width: "12%", alignItems: "flex-end" },
     th: {
-        fontSize: 8.25,
+        fontSize: 8.2,
         fontWeight: 700,
         color: "#1e293b",
     },
+    thCenter: {
+        fontSize: 8.2,
+        fontWeight: 700,
+        color: "#1e293b",
+        textAlign: "center",
+    },
+    thRight: {
+        fontSize: 8.2,
+        fontWeight: 700,
+        color: "#1e293b",
+        textAlign: "right",
+    },
     td: {
-        fontSize: 8.6,
+        fontSize: 8.45,
         color: "#0f172a",
+        lineHeight: 1.25,
     },
     tdSubtle: {
-        fontSize: 7.7,
+        fontSize: 7.55,
         color: "#475569",
         marginTop: 1,
+        lineHeight: 1.2,
+    },
+    tdCenter: {
+        fontSize: 8.45,
+        color: "#0f172a",
+        lineHeight: 1.25,
+        textAlign: "center",
+    },
+    tdRight: {
+        fontSize: 8.45,
+        color: "#0f172a",
+        lineHeight: 1.25,
+        textAlign: "right",
+    },
+    emptyRowText: {
+        fontSize: 8.4,
+        color: "#475569",
+        textAlign: "center",
     },
     statusBadgeWrap: {
         minHeight: 14,
         borderRadius: 999,
         paddingHorizontal: 8,
+        paddingVertical: 3,
         justifyContent: "center",
         alignItems: "center",
     },
     statusBadgeText: {
-        fontSize: 7.3,
+        fontSize: 7.2,
         lineHeight: 1.1,
         color: "#ffffff",
         fontWeight: 700,
@@ -332,6 +387,7 @@ const pdfStyles = StyleSheet.create({
         fontSize: 8,
         color: "#334155",
         marginBottom: 2,
+        lineHeight: 1.25,
     },
     footer: {
         marginTop: 12,
@@ -354,7 +410,7 @@ function IncomePdfDocument({
     reportSubtitle,
 }: IncomePdfDocProps) {
     const sorted = [...records].sort((a, b) =>
-        String(getDatePaid(b) ?? "").localeCompare(String(getDatePaid(a) ?? ""))
+        String(getPrintableRecordDate(b) ?? "").localeCompare(String(getPrintableRecordDate(a) ?? ""))
     )
 
     const paidTotal = sorted
@@ -374,7 +430,7 @@ function IncomePdfDocument({
     const cancelledCount = sorted.filter((r) => r.status === "cancelled").length
 
     const dateValues = sorted
-        .map((r) => getDatePaid(r))
+        .map((r) => getPrintableRecordDate(r))
         .filter(Boolean)
         .map((value) => new Date(String(value)))
         .filter((date) => !Number.isNaN(date.getTime()))
@@ -388,181 +444,266 @@ function IncomePdfDocument({
             : "—"
 
     const defaultTitle = "BookHive Library • Income Report"
-    const defaultSubtitle = "Printable report for collected fines and damage fee records."
+    const defaultSubtitle =
+        "Printable report for overall, monthly, and weekly income records."
+
+    const pages = chunkRecords(sorted, 12)
 
     return (
         <Document title={reportTitle || defaultTitle}>
-            <Page size="A4" style={pdfStyles.page}>
-                <View style={pdfStyles.hero}>
-                    <Text style={pdfStyles.heroTitle}>{reportTitle || defaultTitle}</Text>
-                    <Text style={pdfStyles.heroSub}>{reportSubtitle || defaultSubtitle}</Text>
-                </View>
+            {pages.map((pageRows, pageIndex) => {
+                const isFirstPage = pageIndex === 0
+                const isLastPage = pageIndex === pages.length - 1
+                const heroStyle = isFirstPage
+                    ? pdfStyles.hero
+                    : [pdfStyles.hero, pdfStyles.heroCompact]
 
-                <View style={pdfStyles.metaGrid}>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Generated</Text>
-                        <Text style={pdfStyles.metaValue}>{fmtDateTime(generatedAtIso)}</Text>
-                    </View>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Rows in View</Text>
-                        <Text style={pdfStyles.metaValue}>{sorted.length}</Text>
-                    </View>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Collected Income</Text>
-                        <Text style={pdfStyles.metaValue}>{formatPHP(paidTotal)}</Text>
-                    </View>
-                    <View style={[pdfStyles.metaCard, pdfStyles.metaCardLast]}>
-                        <Text style={pdfStyles.metaLabel}>Outstanding</Text>
-                        <Text style={pdfStyles.metaValue}>{formatPHP(outstandingTotal)}</Text>
-                    </View>
-                </View>
+                return (
+                    <Page key={`income-page-${pageIndex + 1}`} size="A4" style={pdfStyles.page}>
+                        <View style={heroStyle}>
+                            <Text style={pdfStyles.heroTitle}>{reportTitle || defaultTitle}</Text>
+                            <Text style={pdfStyles.heroSub}>
+                                {reportSubtitle || defaultSubtitle}
+                                {pages.length > 1
+                                    ? ` • Page ${pageIndex + 1} of ${pages.length}`
+                                    : ""}
+                            </Text>
+                        </View>
 
-                <View style={pdfStyles.metaGrid}>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Date Coverage</Text>
-                        <Text style={pdfStyles.metaValue}>{dateRange}</Text>
-                    </View>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Paid Records</Text>
-                        <Text style={pdfStyles.metaValue}>{paidCount}</Text>
-                    </View>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Active Records</Text>
-                        <Text style={pdfStyles.metaValue}>{activeCount}</Text>
-                    </View>
-                    <View style={[pdfStyles.metaCard, pdfStyles.metaCardLast]}>
-                        <Text style={pdfStyles.metaLabel}>Cancelled Records</Text>
-                        <Text style={pdfStyles.metaValue}>{cancelledCount}</Text>
-                    </View>
-                </View>
+                        {isFirstPage ? (
+                            <>
+                                <View style={pdfStyles.metaGrid}>
+                                    <View style={pdfStyles.metaCard}>
+                                        <Text style={pdfStyles.metaLabel}>Generated</Text>
+                                        <Text style={pdfStyles.metaValue}>
+                                            {fmtDateTime(generatedAtIso)}
+                                        </Text>
+                                    </View>
+                                    <View style={pdfStyles.metaCard}>
+                                        <Text style={pdfStyles.metaLabel}>Rows in View</Text>
+                                        <Text style={pdfStyles.metaValue}>{sorted.length}</Text>
+                                    </View>
+                                    <View style={pdfStyles.metaCard}>
+                                        <Text style={pdfStyles.metaLabel}>Collected Income</Text>
+                                        <Text style={pdfStyles.metaValue}>{formatPHP(paidTotal)}</Text>
+                                    </View>
+                                    <View style={[pdfStyles.metaCard, pdfStyles.metaCardLast]}>
+                                        <Text style={pdfStyles.metaLabel}>Outstanding</Text>
+                                        <Text style={pdfStyles.metaValue}>
+                                            {formatPHP(outstandingTotal)}
+                                        </Text>
+                                    </View>
+                                </View>
 
-                <Text style={pdfStyles.sectionTitle}>Income Items</Text>
+                                <View style={pdfStyles.metaGrid}>
+                                    <View style={pdfStyles.metaCard}>
+                                        <Text style={pdfStyles.metaLabel}>Date Coverage</Text>
+                                        <Text style={pdfStyles.metaValue}>{dateRange}</Text>
+                                    </View>
+                                    <View style={pdfStyles.metaCard}>
+                                        <Text style={pdfStyles.metaLabel}>Paid Records</Text>
+                                        <Text style={pdfStyles.metaValue}>{paidCount}</Text>
+                                    </View>
+                                    <View style={pdfStyles.metaCard}>
+                                        <Text style={pdfStyles.metaLabel}>Active Records</Text>
+                                        <Text style={pdfStyles.metaValue}>{activeCount}</Text>
+                                    </View>
+                                    <View style={[pdfStyles.metaCard, pdfStyles.metaCardLast]}>
+                                        <Text style={pdfStyles.metaLabel}>Cancelled Records</Text>
+                                        <Text style={pdfStyles.metaValue}>{cancelledCount}</Text>
+                                    </View>
+                                </View>
+                            </>
+                        ) : (
+                            <Text style={pdfStyles.pageIndicator}>
+                                Continuation of income items
+                            </Text>
+                        )}
 
-                <View style={pdfStyles.tableHead}>
-                    <View style={pdfStyles.colUser}>
-                        <Text style={pdfStyles.th}>User</Text>
-                    </View>
-                    <View style={pdfStyles.colDetails}>
-                        <Text style={pdfStyles.th}>Book / Notes</Text>
-                    </View>
-                    <View style={pdfStyles.colType}>
-                        <Text style={pdfStyles.th}>Type</Text>
-                    </View>
-                    <View style={pdfStyles.colStatus}>
-                        <Text style={pdfStyles.th}>Status</Text>
-                    </View>
-                    <View style={pdfStyles.colDate}>
-                        <Text style={pdfStyles.th}>Date Paid</Text>
-                    </View>
-                    <View style={pdfStyles.colAmount}>
-                        <Text style={pdfStyles.th}>Amount</Text>
-                    </View>
-                </View>
+                        <Text style={pdfStyles.sectionTitle}>Income Items</Text>
 
-                {sorted.map((record) => {
-                    const statusStyle =
-                        record.status === "paid"
-                            ? pdfStyles.statusPaid
-                            : record.status === "active"
-                              ? pdfStyles.statusActive
-                              : record.status === "cancelled"
-                                ? pdfStyles.statusCancelled
-                                : pdfStyles.statusDefault
-
-                    return (
-                        <View key={String(record.id)} style={pdfStyles.row}>
+                        <View style={pdfStyles.tableHead}>
                             <View style={pdfStyles.colUser}>
-                                <Text style={pdfStyles.td}>{getUserPrimary(record)}</Text>
-                                {!!getUserSecondary(record) && (
-                                    <Text style={pdfStyles.tdSubtle}>{getUserSecondary(record)}</Text>
-                                )}
+                                <Text style={pdfStyles.th}>User</Text>
                             </View>
-
                             <View style={pdfStyles.colDetails}>
-                                <Text style={pdfStyles.td}>{getBookPrimary(record)}</Text>
-                                {!!record.reason && (
-                                    <Text style={pdfStyles.tdSubtle}>Notes: {record.reason}</Text>
-                                )}
-                                {!!record.referenceLabel && (
-                                    <Text style={pdfStyles.tdSubtle}>Reference: {record.referenceLabel}</Text>
-                                )}
+                                <Text style={pdfStyles.th}>Book / Notes</Text>
                             </View>
-
                             <View style={pdfStyles.colType}>
-                                <Text style={pdfStyles.td}>{sourceText(record.sourceLabel)}</Text>
-                                {!!record.damageSeverity && (
-                                    <Text style={pdfStyles.tdSubtle}>{record.damageSeverity}</Text>
-                                )}
+                                <Text style={pdfStyles.th}>Type</Text>
                             </View>
-
                             <View style={pdfStyles.colStatus}>
-                                <View style={[pdfStyles.statusBadgeWrap, statusStyle]}>
-                                    <Text style={pdfStyles.statusBadgeText}>
-                                        {statusText(record.status)}
+                                <Text style={pdfStyles.thCenter}>Status</Text>
+                            </View>
+                            <View style={pdfStyles.colDate}>
+                                <Text style={pdfStyles.th}>Record Date</Text>
+                            </View>
+                            <View style={pdfStyles.colAmount}>
+                                <Text style={pdfStyles.thRight}>Amount</Text>
+                            </View>
+                        </View>
+
+                        {pageRows.length ? (
+                            pageRows.map((record) => {
+                                const statusStyle =
+                                    record.status === "paid"
+                                        ? pdfStyles.statusPaid
+                                        : record.status === "active"
+                                          ? pdfStyles.statusActive
+                                          : record.status === "cancelled"
+                                            ? pdfStyles.statusCancelled
+                                            : pdfStyles.statusDefault
+
+                                return (
+                                    <View
+                                        key={`${String(record.id)}-${pageIndex}`}
+                                        style={pdfStyles.row}
+                                        wrap={false}
+                                    >
+                                        <View style={pdfStyles.colUser}>
+                                            <Text style={pdfStyles.td}>{getUserPrimary(record)}</Text>
+                                            {!!getUserSecondary(record) && (
+                                                <Text style={pdfStyles.tdSubtle}>
+                                                    {getUserSecondary(record)}
+                                                </Text>
+                                            )}
+                                        </View>
+
+                                        <View style={pdfStyles.colDetails}>
+                                            <Text style={pdfStyles.td}>{getBookPrimary(record)}</Text>
+                                            {!!record.reason && (
+                                                <Text style={pdfStyles.tdSubtle}>
+                                                    Notes: {record.reason}
+                                                </Text>
+                                            )}
+                                            {!!record.referenceLabel && (
+                                                <Text style={pdfStyles.tdSubtle}>
+                                                    Reference: {record.referenceLabel}
+                                                </Text>
+                                            )}
+                                        </View>
+
+                                        <View style={pdfStyles.colType}>
+                                            <Text style={pdfStyles.td}>
+                                                {sourceText(record.sourceLabel)}
+                                            </Text>
+                                            {!!record.damageSeverity && (
+                                                <Text style={pdfStyles.tdSubtle}>
+                                                    {record.damageSeverity}
+                                                </Text>
+                                            )}
+                                        </View>
+
+                                        <View style={pdfStyles.colStatus}>
+                                            <View style={[pdfStyles.statusBadgeWrap, statusStyle]}>
+                                                <Text style={pdfStyles.statusBadgeText}>
+                                                    {statusText(record.status)}
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={pdfStyles.colDate}>
+                                            <Text style={pdfStyles.td}>
+                                                {fmtDate(getPrintableRecordDate(record))}
+                                            </Text>
+                                        </View>
+
+                                        <View style={pdfStyles.colAmount}>
+                                            <Text style={pdfStyles.tdRight}>
+                                                {formatPHP(normalizeAmount(record.amount))}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )
+                            })
+                        ) : (
+                            <View style={pdfStyles.row}>
+                                <View style={{ width: "100%" }}>
+                                    <Text style={pdfStyles.emptyRowText}>
+                                        No income records available for this report.
                                     </Text>
                                 </View>
                             </View>
+                        )}
 
-                            <View style={pdfStyles.colDate}>
-                                <Text style={pdfStyles.td}>{fmtDate(getDatePaid(record))}</Text>
-                            </View>
+                        {isLastPage ? (
+                            <>
+                                <View style={pdfStyles.totalsWrap}>
+                                    <View style={pdfStyles.totalsLine}>
+                                        <Text style={pdfStyles.totalsLabel}>Paid Total</Text>
+                                        <Text style={pdfStyles.totalsValue}>
+                                            {formatPHP(paidTotal)}
+                                        </Text>
+                                    </View>
+                                    <View style={pdfStyles.totalsLine}>
+                                        <Text style={pdfStyles.totalsLabel}>Outstanding Total</Text>
+                                        <Text style={pdfStyles.totalsValue}>
+                                            {formatPHP(outstandingTotal)}
+                                        </Text>
+                                    </View>
+                                    <View style={pdfStyles.totalsLine}>
+                                        <Text style={pdfStyles.totalsLabel}>Cancelled Total</Text>
+                                        <Text style={pdfStyles.totalsValue}>
+                                            {formatPHP(cancelledTotal)}
+                                        </Text>
+                                    </View>
+                                    <View style={[pdfStyles.totalsLine, pdfStyles.totalsGrand]}>
+                                        <Text
+                                            style={[
+                                                pdfStyles.totalsLabel,
+                                                { fontWeight: 700 },
+                                            ]}
+                                        >
+                                            Visible Records Total
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                pdfStyles.totalsValue,
+                                                { fontSize: 10 },
+                                            ]}
+                                        >
+                                            {formatPHP(
+                                                paidTotal + outstandingTotal + cancelledTotal
+                                            )}
+                                        </Text>
+                                    </View>
+                                </View>
 
-                            <View style={pdfStyles.colAmount}>
-                                <Text style={pdfStyles.td}>
-                                    {formatPHP(normalizeAmount(record.amount))}
-                                </Text>
-                            </View>
+                                <View style={pdfStyles.notesWrap}>
+                                    <Text style={pdfStyles.notesTitle}>Processing Notes</Text>
+                                    <Text style={pdfStyles.noteText}>
+                                        1) Paid records represent collected library income.
+                                    </Text>
+                                    <Text style={pdfStyles.noteText}>
+                                        2) Active records are outstanding balances not yet collected.
+                                    </Text>
+                                    <Text style={pdfStyles.noteText}>
+                                        3) Damage fee rows are included when a paid damage report exists in the income view.
+                                    </Text>
+                                    <Text style={pdfStyles.noteText}>
+                                        4) This PDF reflects the current overall, monthly, or weekly income filter shown in the dashboard.
+                                    </Text>
+                                    <Text style={pdfStyles.noteText}>
+                                        5) Long text fields are wrapped to fit the printable layout.
+                                    </Text>
+                                    <Text style={pdfStyles.noteText}>
+                                        (Cebuano) Ang gi-print nga report kay base sa current filtered income list ug naka-wrap ang taas nga text aron dili mo-slide.
+                                    </Text>
+                                </View>
+                            </>
+                        ) : null}
+
+                        <View style={pdfStyles.footer}>
+                            <Text style={pdfStyles.footerText}>
+                                BookHive Library • Generated via Income Module
+                            </Text>
+                            <Text style={pdfStyles.footerText}>
+                                Printed: {fmtDateTime(generatedAtIso)}
+                            </Text>
                         </View>
-                    )
-                })}
-
-                <View style={pdfStyles.totalsWrap}>
-                    <View style={pdfStyles.totalsLine}>
-                        <Text style={pdfStyles.totalsLabel}>Paid Total</Text>
-                        <Text style={pdfStyles.totalsValue}>{formatPHP(paidTotal)}</Text>
-                    </View>
-                    <View style={pdfStyles.totalsLine}>
-                        <Text style={pdfStyles.totalsLabel}>Outstanding Total</Text>
-                        <Text style={pdfStyles.totalsValue}>{formatPHP(outstandingTotal)}</Text>
-                    </View>
-                    <View style={pdfStyles.totalsLine}>
-                        <Text style={pdfStyles.totalsLabel}>Cancelled Total</Text>
-                        <Text style={pdfStyles.totalsValue}>{formatPHP(cancelledTotal)}</Text>
-                    </View>
-                    <View style={[pdfStyles.totalsLine, pdfStyles.totalsGrand]}>
-                        <Text style={[pdfStyles.totalsLabel, { fontWeight: 700 }]}>
-                            Visible Records Total
-                        </Text>
-                        <Text style={[pdfStyles.totalsValue, { fontSize: 10 }]}>
-                            {formatPHP(paidTotal + outstandingTotal + cancelledTotal)}
-                        </Text>
-                    </View>
-                </View>
-
-                <View style={pdfStyles.notesWrap}>
-                    <Text style={pdfStyles.notesTitle}>Processing Notes</Text>
-                    <Text style={pdfStyles.noteText}>
-                        1) Paid records represent collected library income.
-                    </Text>
-                    <Text style={pdfStyles.noteText}>
-                        2) Active records are outstanding balances not yet collected.
-                    </Text>
-                    <Text style={pdfStyles.noteText}>
-                        3) Damage fee rows are included when a paid damage report exists in the income view.
-                    </Text>
-                    <Text style={pdfStyles.noteText}>
-                        4) This PDF reflects the current filtered income table shown in the dashboard.
-                    </Text>
-                    <Text style={pdfStyles.noteText}>
-                        (Cebuano) Ang gi-print nga report kay base sa current filtered income list sa librarian dashboard.
-                    </Text>
-                </View>
-
-                <View style={pdfStyles.footer}>
-                    <Text style={pdfStyles.footerText}>BookHive Library • Generated via Income Module</Text>
-                    <Text style={pdfStyles.footerText}>Printed: {fmtDateTime(generatedAtIso)}</Text>
-                </View>
-            </Page>
+                    </Page>
+                )
+            })}
         </Document>
     )
 }
@@ -574,7 +715,7 @@ export function ExportPreviewIncome({
     autoPrintOnOpen = false,
     fileNamePrefix = "bookhive-income-report",
     reportTitle = "BookHive Library • Income Report",
-    reportSubtitle = "Printable report for collected fines and damage fee records.",
+    reportSubtitle = "Printable report for overall, monthly, and weekly income records.",
 }: ExportPreviewIncomeProps) {
     const [smartView, setSmartView] = React.useState(true)
     const [viewerHeight, setViewerHeight] = React.useState(720)
@@ -728,7 +869,7 @@ export function ExportPreviewIncome({
                         </DialogTitle>
                         <DialogDescription className="text-white/70">
                             Smart View uses a fit-width pre-rendered preview. Standard View uses PDF React Viewer
-                            with toolbar.
+                            with toolbar for the current overall, monthly, or weekly income selection.
                         </DialogDescription>
                     </DialogHeader>
                 </div>
@@ -846,7 +987,7 @@ export function ExportPreviewIncome({
                                 <PDFViewer
                                     style={{
                                         width: "100%",
-                                        height: 720,
+                                        height: viewerHeight,
                                         border: "none",
                                     }}
                                     showToolbar

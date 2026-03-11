@@ -51,7 +51,8 @@ import {
 } from "@/components/income-preview/export-preview-income"
 
 type StatusFilter = "paid" | "all" | FineStatus
-type MonthFilter = "all" | string // "YYYY-MM"
+type PeriodFilter = "overall" | "monthly" | "weekly"
+type PeriodValue = "all" | string
 
 type DamageReportRow = DamageReportDTO & {
     photoUrl?: string | null
@@ -106,12 +107,6 @@ function getOfficialReceiptLabel(raw: unknown): string | null {
     return value ? `OR ${value}` : null
 }
 
-/**
- * Simple suggested fine policy (fallback only):
- * - minor: ₱50
- * - moderate: ₱150
- * - major: ₱300
- */
 function suggestedFineFromSeverity(severity?: DamageSeverity | null): number {
     switch (severity) {
         case "minor":
@@ -134,6 +129,10 @@ function getRowSortDate(r: IncomeRow): string | null {
     return (getRowDatePaid(r) || (r as any).createdAt || null) as any
 }
 
+function getRowPeriodDate(r: IncomeRow): string | null {
+    return getRowDatePaid(r) || (r as any).createdAt || null
+}
+
 function toMonthKey(dateStr?: string | null): string | null {
     if (!dateStr) return null
     const d = new Date(dateStr)
@@ -143,17 +142,68 @@ function toMonthKey(dateStr?: string | null): string | null {
     return `${y}-${m}`
 }
 
+function formatLocalDateKey(date: Date) {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, "0")
+    const d = String(date.getDate()).padStart(2, "0")
+    return `${y}-${m}-${d}`
+}
+
+function toWeekKey(dateStr?: string | null): string | null {
+    if (!dateStr) return null
+    const date = new Date(dateStr)
+    if (Number.isNaN(date.getTime())) return null
+
+    const start = new Date(date)
+    start.setHours(0, 0, 0, 0)
+
+    const day = start.getDay()
+    const diffToMonday = day === 0 ? -6 : 1 - day
+    start.setDate(start.getDate() + diffToMonday)
+
+    return formatLocalDateKey(start)
+}
+
 function monthLabel(key: string) {
-    // key = YYYY-MM
     const [yy, mm] = key.split("-")
     const y = Number(yy)
     const m = Number(mm)
     if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return key
     try {
-        return new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric" }).format(new Date(y, m - 1, 1))
+        return new Intl.DateTimeFormat("en-PH", {
+            month: "long",
+            year: "numeric",
+        }).format(new Date(y, m - 1, 1))
     } catch {
         return key
     }
+}
+
+function weekLabel(key: string) {
+    const start = new Date(`${key}T00:00:00`)
+    if (Number.isNaN(start.getTime())) return key
+
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+
+    try {
+        const formatter = new Intl.DateTimeFormat("en-PH", {
+            month: "short",
+            day: "2-digit",
+            year: "numeric",
+        })
+        return `${formatter.format(start)} - ${formatter.format(end)}`
+    } catch {
+        return `${fmtDate(start.toISOString())} - ${fmtDate(end.toISOString())}`
+    }
+}
+
+function periodFilterLabel(periodFilter: PeriodFilter, periodValue: PeriodValue) {
+    if (periodFilter === "overall") return "Overall records"
+    if (periodFilter === "monthly") {
+        return periodValue !== "all" ? `Monthly • ${monthLabel(periodValue)}` : "Monthly • All months"
+    }
+    return periodValue !== "all" ? `Weekly • ${weekLabel(periodValue)}` : "Weekly • All weeks"
 }
 
 /* ------------------------ Damage → Income helpers ------------------------ */
@@ -203,10 +253,6 @@ async function fetchDamageReportsForIncome(): Promise<DamageReportRow[]> {
     return data.reports ?? []
 }
 
-/**
- * If backend did not create a Fine row yet for a paid damage report,
- * build a “virtual income row” so it still shows up in Income.
- */
 function buildVirtualDamageIncomeRows(
     reports: DamageReportRow[],
     existingFines: FineDTO[]
@@ -333,7 +379,8 @@ export default function LibrarianIncomePage() {
 
     const [search, setSearch] = React.useState("")
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("paid")
-    const [monthFilter, setMonthFilter] = React.useState<MonthFilter>("all")
+    const [periodFilter, setPeriodFilter] = React.useState<PeriodFilter>("overall")
+    const [periodValue, setPeriodValue] = React.useState<PeriodValue>("all")
 
     const [exportOpen, setExportOpen] = React.useState(false)
     const [exportAutoPrint, setExportAutoPrint] = React.useState(false)
@@ -385,17 +432,38 @@ export default function LibrarianIncomePage() {
     const monthOptions = React.useMemo(() => {
         const set = new Set<string>()
         for (const r of rows) {
-            if (r.status !== "paid") continue
-            const key = toMonthKey(getRowDatePaid(r))
+            const key = toMonthKey(getRowPeriodDate(r))
             if (key) set.add(key)
         }
         return Array.from(set).sort((a, b) => b.localeCompare(a))
     }, [rows])
 
+    const weekOptions = React.useMemo(() => {
+        const set = new Set<string>()
+        for (const r of rows) {
+            const key = toWeekKey(getRowPeriodDate(r))
+            if (key) set.add(key)
+        }
+        return Array.from(set).sort((a, b) => b.localeCompare(a))
+    }, [rows])
+
+    const availablePeriodOptions = React.useMemo(() => {
+        if (periodFilter === "monthly") return monthOptions
+        if (periodFilter === "weekly") return weekOptions
+        return []
+    }, [periodFilter, monthOptions, weekOptions])
+
     React.useEffect(() => {
-        if (monthFilter === "all") return
-        if (!monthOptions.includes(monthFilter)) setMonthFilter("all")
-    }, [monthFilter, monthOptions])
+        if (periodFilter === "overall") {
+            if (periodValue !== "all") setPeriodValue("all")
+            return
+        }
+
+        if (periodValue === "all") return
+        if (!availablePeriodOptions.includes(periodValue)) {
+            setPeriodValue("all")
+        }
+    }, [periodFilter, periodValue, availablePeriodOptions])
 
     const statsAll = React.useMemo(() => {
         let paidTotal = 0
@@ -428,11 +496,12 @@ export default function LibrarianIncomePage() {
             }
         }
 
-        if (monthFilter !== "all") {
-            list = list.filter((r) => {
-                const key = toMonthKey(getRowDatePaid(r))
-                return key === monthFilter
-            })
+        if (periodFilter === "monthly" && periodValue !== "all") {
+            list = list.filter((r) => toMonthKey(getRowPeriodDate(r)) === periodValue)
+        }
+
+        if (periodFilter === "weekly" && periodValue !== "all") {
+            list = list.filter((r) => toWeekKey(getRowPeriodDate(r)) === periodValue)
         }
 
         const q = search.trim().toLowerCase()
@@ -453,7 +522,7 @@ export default function LibrarianIncomePage() {
             const db = (getRowSortDate(b) || "").toString()
             return db.localeCompare(da)
         })
-    }, [rows, search, statusFilter, monthFilter])
+    }, [rows, search, statusFilter, periodFilter, periodValue])
 
     const statsView = React.useMemo(() => {
         let paidTotal = 0
@@ -475,12 +544,8 @@ export default function LibrarianIncomePage() {
         return { paidTotal, paidCount, activeTotal, activeCount, totalCount: filtered.length }
     }, [filtered])
 
-    const printableSourceRows = React.useMemo(() => {
-        return filtered.filter((r) => r.status === "paid")
-    }, [filtered])
-
     const printableRecords = React.useMemo<PrintableIncomeRecord[]>(() => {
-        return printableSourceRows.map((r) => {
+        return filtered.map((r) => {
             const receiptLabel = getOfficialReceiptLabel(r.officialReceiptNumber)
 
             return {
@@ -502,15 +567,25 @@ export default function LibrarianIncomePage() {
                 damageSeverity: r.damageSeverity ?? null,
             }
         })
-    }, [printableSourceRows])
+    }, [filtered])
+
+    const exportReportTitle = React.useMemo(() => {
+        if (periodFilter === "monthly") return "BookHive Library • Monthly Income Report"
+        if (periodFilter === "weekly") return "BookHive Library • Weekly Income Report"
+        return "BookHive Library • Overall Income Report"
+    }, [periodFilter])
 
     const exportSubtitle = React.useMemo(() => {
-        const parts: string[] = ["Paid income only"]
+        const parts: string[] = [periodFilterLabel(periodFilter, periodValue)]
 
-        if (monthFilter !== "all") {
-            parts.push(monthLabel(monthFilter))
+        if (statusFilter === "all") {
+            parts.push("All statuses")
+        } else if (statusFilter === "paid") {
+            parts.push("Paid income")
+        } else if (statusFilter === "active") {
+            parts.push("Active only")
         } else {
-            parts.push("All months")
+            parts.push("Cancelled only")
         }
 
         const searchText = search.trim()
@@ -519,18 +594,26 @@ export default function LibrarianIncomePage() {
             parts.push(`Search: ${compactSearch}`)
         }
 
-        if (statusFilter !== "paid") {
-            parts.push(`Source view: ${statusFilter}`)
-        }
-
         return `Current librarian income report • ${parts.join(" • ")}`
-    }, [monthFilter, search, statusFilter])
+    }, [periodFilter, periodValue, statusFilter, search])
 
     const exportFileNamePrefix = React.useMemo(() => {
-        let value = "bookhive-income-report-paid"
-        if (monthFilter !== "all") value += `-${monthFilter}`
+        let value = "bookhive-income-report"
+
+        if (periodFilter === "monthly") {
+            value += periodValue !== "all" ? `-monthly-${periodValue}` : "-monthly"
+        } else if (periodFilter === "weekly") {
+            value += periodValue !== "all" ? `-weekly-${periodValue}` : "-weekly"
+        } else {
+            value += "-overall"
+        }
+
+        if (statusFilter !== "all") {
+            value += `-${statusFilter}`
+        }
+
         return value
-    }, [monthFilter])
+    }, [periodFilter, periodValue, statusFilter])
 
     const handleOpenExportPreview = React.useCallback(() => {
         setExportAutoPrint(false)
@@ -542,14 +625,7 @@ export default function LibrarianIncomePage() {
         setExportOpen(true)
     }, [])
 
-    const cellScrollbarClasses =
-        "overflow-x-auto whitespace-nowrap " +
-        "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
-        "[&::-webkit-scrollbar]:h-1.5 " +
-        "[&::-webkit-scrollbar-track]:bg-transparent " +
-        "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
-        "[&::-webkit-scrollbar-thumb]:rounded-full " +
-        "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+    const currentScopeLabel = periodFilterLabel(periodFilter, periodValue)
 
     return (
         <DashboardLayout title="Income">
@@ -559,7 +635,7 @@ export default function LibrarianIncomePage() {
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Income Records</h2>
                         <p className="text-xs text-white/70">
-                            Track collected income from paid fines and paid damage fees with PDF preview, print, and export.
+                            Track overall, monthly, and weekly income records with PDF preview, print, and export.
                         </p>
                         <p className="mt-1 text-[11px] text-amber-200/90">
                             Borrow overdue fines follow <span className="font-semibold">{formatPHP(DEFAULT_FINE_PER_HOUR)} per hour</span>.
@@ -584,13 +660,16 @@ export default function LibrarianIncomePage() {
                             <span className="text-white/60"> · </span>
                             Outstanding: {formatPHP(statsView.activeTotal)} ({statsView.activeCount})
                         </span>
+                        <span className="mt-1 text-[11px] text-sky-200/90">
+                            Scope: <span className="font-semibold">{currentScopeLabel}</span>
+                        </span>
                     </div>
 
-                    <div className="flex-col-1 gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             type="button"
                             variant="outline"
-                            className="border-white/20 m-1 text-white/90 hover:bg-white/10"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
                             onClick={handleOpenExportPreview}
                             disabled={loading || printableRecords.length === 0}
                         >
@@ -601,7 +680,7 @@ export default function LibrarianIncomePage() {
                         <Button
                             type="button"
                             variant="outline"
-                            className="border-emerald-400/40 m-1 text-emerald-100 hover:bg-emerald-500/10"
+                            className="border-emerald-400/40 text-emerald-100 hover:bg-emerald-500/10"
                             onClick={handleQuickPrint}
                             disabled={loading || printableRecords.length === 0}
                         >
@@ -613,7 +692,7 @@ export default function LibrarianIncomePage() {
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="border-white/20 m-1 text-white/90 hover:bg-white/10"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
                             onClick={handleRefresh}
                             disabled={refreshing || loading}
                         >
@@ -644,7 +723,7 @@ export default function LibrarianIncomePage() {
                                 />
                             </div>
 
-                            <div className="w-full md:w-56">
+                            <div className="w-full md:w-52">
                                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
                                     <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
                                         <SelectValue placeholder="Status" />
@@ -658,30 +737,68 @@ export default function LibrarianIncomePage() {
                                 </Select>
                             </div>
 
-                            <div className="w-full md:w-56">
+                            <div className="w-full md:w-52">
                                 <Select
-                                    value={monthFilter}
-                                    onValueChange={(v) => setMonthFilter(v as MonthFilter)}
-                                    disabled={loading || monthOptions.length === 0}
+                                    value={periodFilter}
+                                    onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}
                                 >
                                     <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
-                                        <SelectValue placeholder="Month" />
+                                        <SelectValue placeholder="View scope" />
                                     </SelectTrigger>
                                     <SelectContent className="bg-slate-900 text-white border-white/10">
-                                        <SelectItem value="all">All months</SelectItem>
-                                        {monthOptions.map((m) => (
-                                            <SelectItem key={m} value={m}>
-                                                {monthLabel(m)}
-                                            </SelectItem>
-                                        ))}
+                                        <SelectItem value="overall">Overall</SelectItem>
+                                        <SelectItem value="monthly">Monthly</SelectItem>
+                                        <SelectItem value="weekly">Weekly</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {periodFilter !== "overall" && (
+                                <div className="w-full md:w-60">
+                                    <Select
+                                        value={periodValue}
+                                        onValueChange={(v) => setPeriodValue(v as PeriodValue)}
+                                        disabled={loading || availablePeriodOptions.length === 0}
+                                    >
+                                        <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                                            <SelectValue
+                                                placeholder={
+                                                    periodFilter === "monthly" ? "Choose month" : "Choose week"
+                                                }
+                                            />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-white/10">
+                                            <SelectItem value="all">
+                                                {periodFilter === "monthly" ? "All months" : "All weeks"}
+                                            </SelectItem>
+                                            {availablePeriodOptions.map((value) => (
+                                                <SelectItem key={value} value={value}>
+                                                    {periodFilter === "monthly"
+                                                        ? monthLabel(value)
+                                                        : weekLabel(value)}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </CardHeader>
 
                 <CardContent className="overflow-x-auto">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <Badge className="bg-sky-500/20 text-sky-100 border-sky-300/40">
+                            {currentScopeLabel}
+                        </Badge>
+                        <Badge className="bg-emerald-500/20 text-emerald-100 border-emerald-300/40">
+                            Visible records: {statsView.totalCount}
+                        </Badge>
+                        <Badge className="bg-purple-500/20 text-purple-100 border-purple-300/40">
+                            Visible paid total: {formatPHP(statsView.paidTotal)}
+                        </Badge>
+                    </div>
+
                     {loading ? (
                         <div className="space-y-2">
                             <Skeleton className="h-9 w-full" />
@@ -694,12 +811,14 @@ export default function LibrarianIncomePage() {
                         <div className="py-10 text-center text-sm text-white/70">
                             No income records matched your filters.
                             <br />
-                            <span className="text-xs opacity-80">Try clearing search, changing status, or selecting “All months”.</span>
+                            <span className="text-xs opacity-80">
+                                Try clearing search, changing status, or switching overall/monthly/weekly filters.
+                            </span>
                         </div>
                     ) : (
                         <Table>
                             <TableCaption className="text-xs text-white/60">
-                                Showing {filtered.length} record{filtered.length === 1 ? "" : "s"}.
+                                Showing {filtered.length} record{filtered.length === 1 ? "" : "s"} • {currentScopeLabel}
                             </TableCaption>
 
                             <TableHeader>
@@ -743,47 +862,72 @@ export default function LibrarianIncomePage() {
                                     return (
                                         <TableRow
                                             key={`${r.id}-${r._source ?? "fine"}`}
-                                            className="border-white/5 hover:bg-white/5 transition-colors"
+                                            className="border-white/5 hover:bg-white/5 transition-colors align-top"
                                         >
-                                            <TableCell className="text-sm">
+                                            <TableCell className="text-sm align-top whitespace-normal wrap-break-word">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className="font-medium">{userPrimary}</span>
+                                                    <span className="font-medium whitespace-normal wrap-break-word">
+                                                        {userPrimary}
+                                                    </span>
                                                     {userMeta.length > 0 && (
-                                                        <span className="text-xs text-white/70">{userMeta.join(" · ")}</span>
+                                                        <span className="text-xs text-white/70 whitespace-normal wrap-break-word">
+                                                            {userMeta.join(" · ")}
+                                                        </span>
                                                     )}
                                                 </div>
                                             </TableCell>
 
-                                            <TableCell className={"text-sm w-44 max-w-72 " + cellScrollbarClasses}>
+                                            <TableCell className="text-sm align-top max-w-72 whitespace-normal wrap-break-word">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span>{bookPrimary}</span>
-                                                    <span className="text-xs text-white/60">{bookMeta.join(" · ")}</span>
+                                                    <span className="whitespace-normal wrap-break-word">{bookPrimary}</span>
+                                                    <span className="text-xs text-white/60 whitespace-normal wrap-break-word">
+                                                        {bookMeta.join(" · ")}
+                                                    </span>
                                                 </div>
                                             </TableCell>
 
-                                            <TableCell className="text-xs opacity-80">
+                                            <TableCell className="text-xs opacity-80 align-top whitespace-normal wrap-break-word">
                                                 {fmtDate(r.borrowDueDate ?? null)}
                                             </TableCell>
 
-                                            <TableCell>{renderStatusBadge(r.status)}</TableCell>
+                                            <TableCell className="align-top">{renderStatusBadge(r.status)}</TableCell>
 
-                                            <TableCell className="text-sm">{formatPHP(amount)}</TableCell>
+                                            <TableCell className="text-sm align-top whitespace-normal wrap-break-word">
+                                                {formatPHP(amount)}
+                                            </TableCell>
 
-                                            <TableCell className="text-xs opacity-80">{fmtDate(datePaid)}</TableCell>
+                                            <TableCell className="text-xs opacity-80 align-top whitespace-normal wrap-break-word">
+                                                {fmtDate(datePaid)}
+                                            </TableCell>
 
-                                            <TableCell className={"text-xs text-white/70 w-44 max-w-80 " + cellScrollbarClasses}>
+                                            <TableCell className="text-xs text-white/70 align-top max-w-80 whitespace-normal wrap-break-word">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span>{r.reason ? r.reason : "—"}</span>
+                                                    <span className="whitespace-normal wrap-break-word">
+                                                        {r.reason ? r.reason : "—"}
+                                                    </span>
                                                 </div>
                                             </TableCell>
 
-                                            <TableCell className="text-xs text-white/60">
+                                            <TableCell className="text-xs text-white/60 align-top whitespace-normal wrap-break-word">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className={receiptLabel ? "text-emerald-200/90 font-medium" : "opacity-60"}>
+                                                    <span
+                                                        className={
+                                                            receiptLabel
+                                                                ? "text-emerald-200/90 font-medium whitespace-normal wrap-break-word"
+                                                                : "opacity-60 whitespace-normal wrap-break-word"
+                                                        }
+                                                    >
                                                         {receiptLabel ?? "—"}
                                                     </span>
-                                                    {monthFilter !== "all" && (
-                                                        <span className="text-xs text-white/50">{monthLabel(monthFilter)}</span>
+                                                    {periodFilter === "monthly" && periodValue !== "all" && (
+                                                        <span className="text-xs text-white/50">
+                                                            {monthLabel(periodValue)}
+                                                        </span>
+                                                    )}
+                                                    {periodFilter === "weekly" && periodValue !== "all" && (
+                                                        <span className="text-xs text-white/50">
+                                                            {weekLabel(periodValue)}
+                                                        </span>
                                                     )}
                                                 </div>
                                             </TableCell>
@@ -805,7 +949,7 @@ export default function LibrarianIncomePage() {
                 records={printableRecords}
                 autoPrintOnOpen={exportAutoPrint}
                 fileNamePrefix={exportFileNamePrefix}
-                reportTitle="BookHive Library • Income Report"
+                reportTitle={exportReportTitle}
                 reportSubtitle={exportSubtitle}
             />
         </DashboardLayout>
