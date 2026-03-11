@@ -193,17 +193,67 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     const showWelcome = !!roleLabel || !!displayName
     const showReserve = rawRole === "student" || rawRole === "other" || rawRole === "faculty"
 
-    const availableBooks = React.useMemo(() => books.filter((b) => b.available), [books])
+    const borrowableBooks = React.useMemo(
+        () => books.filter((b) => b.available && !b.isLibraryUseOnly && b.canBorrow !== false),
+        [books]
+    )
+
+    const libraryUseOnlyBooks = React.useMemo(
+        () => books.filter((b) => b.isLibraryUseOnly || b.canBorrow === false),
+        [books]
+    )
+
+    const hasBookChoices = books.length > 0
 
     const selectedBook = React.useMemo(() => {
         if (!selectedBookId) return null
         return books.find((b) => b.id === selectedBookId) ?? null
     }, [books, selectedBookId])
 
-    const maxReserveCopies = React.useMemo(() => {
-        const n = (selectedBook as any)?.numberOfCopies
-        return typeof n === "number" && n > 0 ? n : 1
+    const selectedBookIsLibraryUseOnly = React.useMemo(() => {
+        return !!selectedBook && (selectedBook.isLibraryUseOnly || selectedBook.canBorrow === false)
     }, [selectedBook])
+
+    const selectedBookIsBorrowable = React.useMemo(() => {
+        return !!selectedBook && selectedBook.available && !selectedBookIsLibraryUseOnly
+    }, [selectedBook, selectedBookIsLibraryUseOnly])
+
+    const selectedBookAvailableCopies = React.useMemo(() => {
+        if (!selectedBook) return 0
+        const n = selectedBook.numberOfCopies
+        if (typeof n === "number" && n >= 0) return n
+        return selectedBook.available ? 1 : 0
+    }, [selectedBook])
+
+    const selectedBookTotalCopies = React.useMemo(() => {
+        if (!selectedBook) return 0
+        const total = selectedBook.totalCopies
+        if (typeof total === "number" && total >= 0) return total
+        const remaining = selectedBook.numberOfCopies
+        if (typeof remaining === "number" && remaining >= 0) return remaining
+        return 0
+    }, [selectedBook])
+
+    const selectedBookActiveBorrowCount = React.useMemo(() => {
+        if (!selectedBook) return 0
+        const active = selectedBook.activeBorrowCount
+        if (typeof active === "number" && active >= 0) return active
+        const borrowed = selectedBook.borrowedCopies
+        if (typeof borrowed === "number" && borrowed >= 0) return borrowed
+        return 0
+    }, [selectedBook])
+
+    const selectedBookTotalBorrowCount = React.useMemo(() => {
+        if (!selectedBook) return 0
+        const total = selectedBook.totalBorrowCount
+        return typeof total === "number" && total >= 0 ? total : 0
+    }, [selectedBook])
+
+    const maxReserveCopies = React.useMemo(() => {
+        if (!selectedBook || !selectedBookIsBorrowable) return 1
+        const n = selectedBook.numberOfCopies
+        return typeof n === "number" && n > 0 ? n : 1
+    }, [selectedBook, selectedBookIsBorrowable])
 
     const reserveQty = clampInt(reserveCopies, 1, maxReserveCopies)
 
@@ -245,6 +295,13 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             return
         }
 
+        if (chosen.isLibraryUseOnly || chosen.canBorrow === false) {
+            toast.info("Library use only", {
+                description: `"${chosen.title}" is marked as Library use only and cannot be reserved or borrowed.`,
+            })
+            return
+        }
+
         if (!chosen.available) {
             toast.info("Book is not available right now.", {
                 description: "You can only reserve books marked as Available.",
@@ -253,8 +310,8 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
         }
 
         const maxCopies =
-            typeof (chosen as any)?.numberOfCopies === "number" && (chosen as any).numberOfCopies > 0
-                ? (chosen as any).numberOfCopies
+            typeof chosen.numberOfCopies === "number" && chosen.numberOfCopies > 0
+                ? chosen.numberOfCopies
                 : 1
 
         const requestedCopies = clampInt(reserveCopies, 1, maxCopies)
@@ -415,18 +472,19 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                 <DialogHeaderUI>
                                     <DialogTitle className="text-sm md:text-base">Quick reserve</DialogTitle>
                                     <DialogDescription className="text-white/70 text-xs md:text-sm">
-                                        Choose a book to reserve/borrow. This works the same as borrowing from the{" "}
-                                        <span className="font-semibold">Browse Books</span> page.
+                                        Choose a book to reserve/borrow. Borrowable books are listed first, while{" "}
+                                        <span className="font-semibold text-amber-300">Library use only</span> books are
+                                        shown in a separate section for reference.
                                     </DialogDescription>
                                 </DialogHeaderUI>
 
                                 <div className="mt-3 space-y-3 text-sm">
                                     {reserveLoading ? (
-                                        <p className="text-xs text-white/60">Loading available books…</p>
-                                    ) : availableBooks.length === 0 ? (
+                                        <p className="text-xs text-white/60">Loading books…</p>
+                                    ) : !hasBookChoices ? (
                                         <p className="text-xs text-white/60">
-                                            There are currently no books available to reserve. Try again later or browse
-                                            the catalog.
+                                            There are currently no books in the catalog to show here. Try again later or
+                                            browse the catalog.
                                         </p>
                                     ) : (
                                         <div className="space-y-3">
@@ -444,22 +502,122 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                     <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
                                                         <SelectValue placeholder="Choose a book" />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-slate-900 text-white border-white/10 max-h-64">
-                                                        {availableBooks.map((b) => (
+                                                    <SelectContent className="bg-slate-900 text-white border-white/10 max-h-72">
+                                                        {borrowableBooks.length > 0 && (
+                                                            <SelectItem
+                                                                value="__borrowable_header"
+                                                                disabled
+                                                                className="opacity-100 text-[11px] font-semibold uppercase tracking-wide text-emerald-300"
+                                                            >
+                                                                Available to borrow
+                                                            </SelectItem>
+                                                        )}
+                                                        {borrowableBooks.map((b) => (
                                                             <SelectItem key={b.id} value={b.id}>
                                                                 {b.title} — {b.author}
                                                             </SelectItem>
                                                         ))}
+
+                                                        {libraryUseOnlyBooks.length > 0 && (
+                                                            <SelectItem
+                                                                value="__library_use_only_header"
+                                                                disabled
+                                                                className="opacity-100 text-[11px] font-semibold uppercase tracking-wide text-amber-300"
+                                                            >
+                                                                Library use only
+                                                            </SelectItem>
+                                                        )}
+                                                        {libraryUseOnlyBooks.map((b) => (
+                                                            <SelectItem key={b.id} value={b.id}>
+                                                                {b.title} — {b.author} • Library use only
+                                                            </SelectItem>
+                                                        ))}
                                                     </SelectContent>
                                                 </Select>
+
                                                 <p className="text-[11px] text-white/50">
-                                                    Only books currently marked as{" "}
-                                                    <span className="font-semibold text-emerald-300">Available</span> are shown
-                                                    here.
+                                                    Borrowable books appear first. Books tagged{" "}
+                                                    <span className="font-semibold text-amber-300">Library use only</span>{" "}
+                                                    stay in the choices but cannot be reserved here.
                                                 </p>
                                             </div>
 
-                                            {/* ✅ copies selector */}
+                                            {selectedBook && (
+                                                <div className="rounded-lg border border-white/10 bg-slate-950/40 p-3 space-y-3">
+                                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold text-white truncate">
+                                                                {selectedBook.title}
+                                                            </p>
+                                                            <p className="text-xs text-white/60 truncate">
+                                                                {selectedBook.author}
+                                                            </p>
+                                                        </div>
+
+                                                        <span
+                                                            className={[
+                                                                "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                                                selectedBookIsLibraryUseOnly
+                                                                    ? "bg-amber-500/15 text-amber-300 border border-amber-500/20"
+                                                                    : selectedBook.available
+                                                                        ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20"
+                                                                        : "bg-red-500/15 text-red-300 border border-red-500/20",
+                                                            ].join(" ")}
+                                                        >
+                                                            {selectedBookIsLibraryUseOnly
+                                                                ? "Library use only"
+                                                                : selectedBook.available
+                                                                    ? "Available"
+                                                                    : "Unavailable"}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                                                        <div className="rounded-md border border-white/10 bg-slate-900/70 p-2">
+                                                            <div className="text-white/50">Available copies</div>
+                                                            <div className="mt-1 font-semibold text-white">
+                                                                {selectedBookAvailableCopies}
+                                                            </div>
+                                                        </div>
+                                                        <div className="rounded-md border border-white/10 bg-slate-900/70 p-2">
+                                                            <div className="text-white/50">Total copies</div>
+                                                            <div className="mt-1 font-semibold text-white">
+                                                                {selectedBookTotalCopies}
+                                                            </div>
+                                                        </div>
+                                                        <div className="rounded-md border border-white/10 bg-slate-900/70 p-2">
+                                                            <div className="text-white/50">Currently borrowed</div>
+                                                            <div className="mt-1 font-semibold text-white">
+                                                                {selectedBookActiveBorrowCount}
+                                                            </div>
+                                                        </div>
+                                                        <div className="rounded-md border border-white/10 bg-slate-900/70 p-2">
+                                                            <div className="text-white/50">Times borrowed</div>
+                                                            <div className="mt-1 font-semibold text-white">
+                                                                {selectedBookTotalBorrowCount}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {selectedBook.borrowDurationDays ? (
+                                                        <p className="text-[11px] text-white/60">
+                                                            Default borrow duration:{" "}
+                                                            <span className="font-medium text-white">
+                                                                {selectedBook.borrowDurationDays} day
+                                                                {selectedBook.borrowDurationDays === 1 ? "" : "s"}
+                                                            </span>
+                                                        </p>
+                                                    ) : null}
+
+                                                    {selectedBookIsLibraryUseOnly && (
+                                                        <p className="text-[11px] text-amber-300">
+                                                            This book is for in-library use only. It appears in the list,
+                                                            but reserve/borrow is disabled.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             <div className="pt-1">
                                                 <div className="text-xs font-medium text-white/80 mb-1">
                                                     Copies to borrow
@@ -475,6 +633,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                             reserveSubmitting ||
                                                             reserveLoading ||
                                                             !selectedBookId ||
+                                                            !selectedBookIsBorrowable ||
                                                             reserveQty <= 1
                                                         }
                                                         aria-label="Decrease copies"
@@ -492,7 +651,12 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                         inputMode="numeric"
                                                         className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
                                                         aria-label="Copies to borrow"
-                                                        disabled={reserveSubmitting || reserveLoading || !selectedBookId}
+                                                        disabled={
+                                                            reserveSubmitting ||
+                                                            reserveLoading ||
+                                                            !selectedBookId ||
+                                                            !selectedBookIsBorrowable
+                                                        }
                                                     />
 
                                                     <Button
@@ -505,6 +669,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                             reserveSubmitting ||
                                                             reserveLoading ||
                                                             !selectedBookId ||
+                                                            !selectedBookIsBorrowable ||
                                                             reserveQty >= maxReserveCopies
                                                         }
                                                         aria-label="Increase copies"
@@ -512,12 +677,25 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                         <Plus className="h-4 w-4" aria-hidden="true" />
                                                     </Button>
 
-                                                    <span className="text-xs text-white/60">Max {maxReserveCopies}</span>
+                                                    <span className="text-xs text-white/60">
+                                                        Max {selectedBookIsBorrowable ? maxReserveCopies : 0}
+                                                    </span>
                                                 </div>
 
-                                                <p className="text-[11px] text-white/60 mt-1">
-                                                    Total physical copies in the library: {maxReserveCopies}.
-                                                </p>
+                                                {selectedBookIsBorrowable ? (
+                                                    <p className="text-[11px] text-white/60 mt-1">
+                                                        Total physical copies in the library: {selectedBookTotalCopies}.
+                                                    </p>
+                                                ) : selectedBook ? (
+                                                    <p className="text-[11px] text-amber-300 mt-1">
+                                                        Copy quantity is disabled because this title cannot be borrowed from
+                                                        the quick reserve dialog.
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-[11px] text-white/60 mt-1">
+                                                        Select a book first to choose how many copies to borrow.
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -540,8 +718,8 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                         disabled={
                                             reserveSubmitting ||
                                             reserveLoading ||
-                                            availableBooks.length === 0 ||
-                                            !selectedBookId
+                                            !selectedBookId ||
+                                            !selectedBookIsBorrowable
                                         }
                                     >
                                         {reserveSubmitting ? (
@@ -565,7 +743,6 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                 aria-label={`${headerName} account menu`}
                             >
                                 <Avatar className="h-8 w-8">
-                                    {/* ✅ crop instead of stretch */}
                                     <AvatarImage src={avatarSrc} alt={headerName} className="object-cover object-center" />
                                     <AvatarFallback>
                                         {user === undefined ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : initials}
