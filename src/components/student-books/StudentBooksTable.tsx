@@ -22,7 +22,11 @@ import {
     fmtDate,
     fmtLibraryArea,
     getBookBorrowMeta,
+    getBorrowedCopies,
+    getHistoricalBorrowCount,
     getSubjects,
+    getTotalCopies,
+    isLibraryUseOnly,
     peso,
 } from "@/components/student-books/utils";
 import BorrowBookDialog from "@/components/student-books/BorrowBookDialog";
@@ -141,7 +145,7 @@ export default function StudentBooksTable({
         <div className="hidden md:block">
             <Table
                 ref={containerRef}
-                className="min-w-[1500px]"
+                className="min-w-[1800px]"
                 containerClassName={`rounded-md ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"
                     }`}
                 containerProps={{
@@ -189,7 +193,13 @@ export default function StudentBooksTable({
                             Area
                         </TableHead>
                         <TableHead className="text-xs font-semibold text-white/70">
+                            Policy
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold text-white/70">
                             Availability
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold text-white/70">
+                            Borrow stats
                         </TableHead>
                         <TableHead className="text-xs font-semibold text-white/70">
                             Due date
@@ -221,6 +231,10 @@ export default function StudentBooksTable({
                         } = getBookBorrowMeta(book);
 
                         const maxCopies = remaining;
+                        const libraryUseOnly = isLibraryUseOnly(book);
+                        const totalCopies = getTotalCopies(book);
+                        const borrowedCopies = getBorrowedCopies(book);
+                        const historicalBorrowCount = getHistoricalBorrowCount(book);
 
                         return (
                             <TableRow
@@ -279,15 +293,49 @@ export default function StudentBooksTable({
                                 </TableCell>
 
                                 <TableCell className="whitespace-nowrap text-xs">
+                                    {libraryUseOnly ? (
+                                        <Badge
+                                            variant="secondary"
+                                            className="border-amber-300/70 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15"
+                                        >
+                                            Library use only
+                                        </Badge>
+                                    ) : (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-white/15 text-white/80"
+                                        >
+                                            Borrowable
+                                        </Badge>
+                                    )}
+                                </TableCell>
+
+                                <TableCell className="whitespace-nowrap text-xs">
                                     <Badge
-                                        variant={borrowableNow ? "default" : "outline"}
+                                        variant={
+                                            libraryUseOnly
+                                                ? "secondary"
+                                                : borrowableNow
+                                                    ? "default"
+                                                    : "outline"
+                                        }
                                         className={
-                                            borrowableNow
-                                                ? "border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500"
-                                                : "border-red-400/70 text-red-200 hover:bg-red-500/10"
+                                            libraryUseOnly
+                                                ? "border-amber-300/70 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15"
+                                                : borrowableNow
+                                                    ? "border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500"
+                                                    : "border-red-400/70 text-red-200 hover:bg-red-500/10"
                                         }
                                     >
-                                        {borrowableNow ? (
+                                        {libraryUseOnly ? (
+                                            <span className="inline-flex items-center gap-1">
+                                                <CircleOff
+                                                    className="h-3 w-3"
+                                                    aria-hidden="true"
+                                                />
+                                                In-library only
+                                            </span>
+                                        ) : borrowableNow ? (
                                             <span className="inline-flex items-center gap-1">
                                                 <CheckCircle2
                                                     className="h-3 w-3"
@@ -310,6 +358,25 @@ export default function StudentBooksTable({
                                     </Badge>
                                 </TableCell>
 
+                                <TableCell className="min-w-[220px] text-xs">
+                                    <div className="space-y-1 text-white/80">
+                                        <div>
+                                            Now borrowed:{" "}
+                                            <span className="font-medium text-white">
+                                                {borrowedCopies}
+                                                {totalCopies > 0
+                                                    ? ` / ${totalCopies}`
+                                                    : ""}
+                                            </span>
+                                        </div>
+                                        <div className="text-white/60">
+                                            {historicalBorrowCount === null
+                                                ? "All-time borrow count not provided."
+                                                : `Recorded history: ${historicalBorrowCount} borrow${historicalBorrowCount === 1 ? "" : "s"}`}
+                                        </div>
+                                    </div>
+                                </TableCell>
+
                                 <TableCell className="whitespace-nowrap text-sm">
                                     {dueCell === "—" ? (
                                         <span className="opacity-50">—</span>
@@ -319,9 +386,17 @@ export default function StudentBooksTable({
                                 </TableCell>
 
                                 <TableCell className="min-w-60 text-xs">
-                                    {activeRecords.length === 0 && book.myStatus === "never" && (
-                                        <span className="text-white/60">Not yet borrowed</span>
+                                    {libraryUseOnly && activeRecords.length === 0 && (
+                                        <span className="text-amber-100/80">
+                                            Visible for catalog reference only.
+                                        </span>
                                     )}
+
+                                    {!libraryUseOnly &&
+                                        activeRecords.length === 0 &&
+                                        book.myStatus === "never" && (
+                                            <span className="text-white/60">Not yet borrowed</span>
+                                        )}
 
                                     {activeRecords.length > 0 && (
                                         <div className="space-y-1">
@@ -414,7 +489,17 @@ export default function StudentBooksTable({
                                 </TableCell>
 
                                 <TableCell className="whitespace-nowrap text-right align-top">
-                                    {borrowableNow ? (
+                                    {libraryUseOnly ? (
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled
+                                            className="border-amber-300/30 text-amber-100/70"
+                                        >
+                                            Library use only
+                                        </Button>
+                                    ) : borrowableNow ? (
                                         <BorrowBookDialog
                                             book={book}
                                             maxCopies={maxCopies}

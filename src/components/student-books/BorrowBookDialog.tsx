@@ -18,7 +18,11 @@ import {
     clampInt,
     fmtDurationDays,
     fmtLibraryArea,
+    getBorrowedCopies,
+    getHistoricalBorrowCount,
     getSubjects,
+    getTotalCopies,
+    isLibraryUseOnly,
 } from "@/components/student-books/utils";
 
 type BorrowBookDialogProps = {
@@ -41,6 +45,10 @@ export default function BorrowBookDialog({
 
     const safeMaxCopies = Math.max(1, maxCopies);
     const safeQty = clampInt(qty, 1, safeMaxCopies);
+    const libraryUseOnly = isLibraryUseOnly(book);
+    const totalCopies = getTotalCopies(book);
+    const borrowedCopies = getBorrowedCopies(book);
+    const historicalBorrowCount = getHistoricalBorrowCount(book);
 
     const stopPointerPropagation = React.useCallback(
         (e: React.PointerEvent<HTMLElement>) => {
@@ -70,7 +78,7 @@ export default function BorrowBookDialog({
     async function handleConfirm(e: React.MouseEvent<HTMLButtonElement>) {
         e.stopPropagation();
 
-        if (busy || maxCopies <= 0) return;
+        if (busy || maxCopies <= 0 || libraryUseOnly) return;
 
         const ok = await onConfirm(book, safeQty);
 
@@ -100,7 +108,7 @@ export default function BorrowBookDialog({
                     onPointerDown={stopPointerPropagation}
                     onClick={stopMousePropagation}
                     className="cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
-                    disabled={busy || maxCopies <= 0}
+                    disabled={busy || maxCopies <= 0 || libraryUseOnly}
                 >
                     {triggerLabel}
                 </Button>
@@ -139,6 +147,10 @@ export default function BorrowBookDialog({
                         {fmtLibraryArea(book.libraryArea)}
                     </p>
                     <p>
+                        <span className="text-white/60">Borrowing policy:</span>{" "}
+                        {libraryUseOnly ? "Library use only" : "Borrowable"}
+                    </p>
+                    <p>
                         <span className="text-white/60">ISBN:</span> {book.isbn || "—"}
                     </p>
                     <p>
@@ -156,6 +168,19 @@ export default function BorrowBookDialog({
                     <p>
                         <span className="text-white/60">Publication year:</span>{" "}
                         {book.publicationYear || "—"}
+                    </p>
+                    <p>
+                        <span className="text-white/60">Tracked now:</span>{" "}
+                        {borrowedCopies}
+                        {totalCopies > 0
+                            ? ` of ${totalCopies} cop${totalCopies === 1 ? "y" : "ies"} currently borrowed`
+                            : " currently borrowed"}
+                    </p>
+                    <p>
+                        <span className="text-white/60">Recorded borrow history:</span>{" "}
+                        {historicalBorrowCount === null
+                            ? "—"
+                            : `${historicalBorrowCount} borrow${historicalBorrowCount === 1 ? "" : "s"}`}
                     </p>
                     <p>
                         <span className="text-white/60">Default loan duration:</span>{" "}
@@ -179,7 +204,7 @@ export default function BorrowBookDialog({
                                     setQty((value) => clampInt(value - 1, 1, safeMaxCopies));
                                 }}
                                 className="border-white/20 text-white hover:bg-white/10"
-                                disabled={busy || safeQty <= 1}
+                                disabled={busy || safeQty <= 1 || libraryUseOnly}
                                 aria-label="Decrease copies"
                             >
                                 <Minus className="h-4 w-4" aria-hidden="true" />
@@ -202,7 +227,7 @@ export default function BorrowBookDialog({
                                 inputMode="numeric"
                                 className="h-9 w-16 border-white/20 bg-slate-900/70 text-center text-white"
                                 aria-label="Copies to borrow"
-                                disabled={busy}
+                                disabled={busy || libraryUseOnly}
                             />
 
                             <Button
@@ -216,7 +241,7 @@ export default function BorrowBookDialog({
                                     setQty((value) => clampInt(value + 1, 1, safeMaxCopies));
                                 }}
                                 className="border-white/20 text-white hover:bg-white/10"
-                                disabled={busy || safeQty >= safeMaxCopies}
+                                disabled={busy || safeQty >= safeMaxCopies || libraryUseOnly}
                                 aria-label="Increase copies"
                             >
                                 <Plus className="h-4 w-4" aria-hidden="true" />
@@ -253,7 +278,7 @@ export default function BorrowBookDialog({
                         onPointerDown={stopPointerPropagation}
                         onClick={handleConfirm}
                         className="bg-purple-600 text-white hover:bg-purple-700"
-                        disabled={busy || maxCopies <= 0}
+                        disabled={busy || maxCopies <= 0 || libraryUseOnly}
                     >
                         {busy ? (
                             <span className="inline-flex items-center gap-2">

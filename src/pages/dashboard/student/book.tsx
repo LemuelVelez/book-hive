@@ -37,9 +37,13 @@ import {
     compareText,
     fmtDate,
     fmtLibraryArea,
+    getBorrowedCopies,
+    getHistoricalBorrowCount,
     getRemainingCopies,
     getSubjects,
+    getTotalCopies,
     isBorrowable,
+    isLibraryUseOnly,
     matchesAllTokens,
     normalizeSearchText,
     sortRecordsNewestFirst,
@@ -53,7 +57,8 @@ type FilterMode =
     | "available"
     | "unavailable"
     | "borrowedByMe"
-    | "history";
+    | "history"
+    | "libraryUseOnly";
 
 type CatalogAvailabilityFilter = "all" | "available" | "unavailable";
 type CatalogSortOption =
@@ -165,6 +170,9 @@ export default function StudentBooksPage() {
             case "history":
                 filtered = filtered.filter((b) => Boolean(b.lastRecord));
                 break;
+            case "libraryUseOnly":
+                filtered = filtered.filter((b) => isLibraryUseOnly(b));
+                break;
             case "all":
             default:
                 break;
@@ -185,6 +193,8 @@ export default function StudentBooksPage() {
         const tokens = tokenizeSearch(search);
         if (tokens.length > 0) {
             filtered = filtered.filter((b) => {
+                const historicalBorrowCount = getHistoricalBorrowCount(b);
+
                 const hay = [
                     b.callNumber,
                     b.accessionNumber,
@@ -203,8 +213,10 @@ export default function StudentBooksPage() {
                     b.volumeNumber,
                     b.libraryArea ? fmtLibraryArea(b.libraryArea) : "",
                     String(getRemainingCopies(b)),
-                    String(typeof b.totalCopies === "number" ? b.totalCopies : ""),
-                    String(typeof b.borrowedCopies === "number" ? b.borrowedCopies : ""),
+                    String(getTotalCopies(b)),
+                    String(getBorrowedCopies(b)),
+                    historicalBorrowCount === null ? "" : String(historicalBorrowCount),
+                    isLibraryUseOnly(b) ? "library use only in library reference only" : "borrowable",
                     b.activeRecords.length > 0 ? "borrowed" : "",
                     b.myStatus,
                 ]
@@ -332,6 +344,37 @@ export default function StudentBooksPage() {
         }
     }, [libraryAreaChoices, libraryAreaFilter]);
 
+    const borrowableRows = React.useMemo(
+        () => rows.filter((book) => !isLibraryUseOnly(book)),
+        [rows]
+    );
+
+    const libraryUseOnlyRows = React.useMemo(
+        () => rows.filter((book) => isLibraryUseOnly(book)),
+        [rows]
+    );
+
+    const trackedBorrowSummary = React.useMemo(() => {
+        return rows.reduce(
+            (acc, book) => {
+                acc.currentlyBorrowedCopies += getBorrowedCopies(book);
+
+                const historicalBorrowCount = getHistoricalBorrowCount(book);
+                if (historicalBorrowCount !== null) {
+                    acc.hasHistoricalTracking = true;
+                    acc.totalHistoricalBorrows += historicalBorrowCount;
+                }
+
+                return acc;
+            },
+            {
+                currentlyBorrowedCopies: 0,
+                totalHistoricalBorrows: 0,
+                hasHistoricalTracking: false,
+            }
+        );
+    }, [rows]);
+
     const clearCatalogControls = React.useCallback(() => {
         setSearch("");
         setFilterMode("all");
@@ -351,6 +394,14 @@ export default function StudentBooksPage() {
         book: BookWithStatus,
         copiesRequested = 1
     ): Promise<boolean> {
+        if (isLibraryUseOnly(book)) {
+            toast.info("Library use only", {
+                description:
+                    "This title is for in-library use only and cannot be borrowed online.",
+            });
+            return false;
+        }
+
         const remaining = getRemainingCopies(book);
 
         if (!isBorrowable(book) || remaining <= 0) {
@@ -427,8 +478,11 @@ export default function StudentBooksPage() {
                                 Library catalog
                             </h2>
                             <p className="text-xs text-white/70">
-                                Browse all books, see availability, and borrow as many copies as
-                                you need while copies remain.
+                                Browse all books, including titles marked as{" "}
+                                <span className="font-semibold text-amber-200">
+                                    Library use only
+                                </span>
+                                . Borrowable books and in-library-only books are shown separately.
                             </p>
                         </div>
                     </div>
@@ -463,7 +517,19 @@ export default function StudentBooksPage() {
                                 <CardTitle>Books you can borrow</CardTitle>
                                 <p className="text-xs text-white/70">
                                     Showing {rows.length} of {books.length}{" "}
-                                    {books.length === 1 ? "book" : "books"}.
+                                    {books.length === 1 ? "book" : "books"} ·{" "}
+                                    {borrowableRows.length} borrowable · {libraryUseOnlyRows.length}{" "}
+                                    library use only.
+                                </p>
+                                <p className="text-[11px] text-white/55">
+                                    Tracked right now: {trackedBorrowSummary.currentlyBorrowedCopies}{" "}
+                                    copy
+                                    {trackedBorrowSummary.currentlyBorrowedCopies === 1 ? "" : "ies"}{" "}
+                                    currently borrowed
+                                    {trackedBorrowSummary.hasHistoricalTracking
+                                        ? ` · ${trackedBorrowSummary.totalHistoricalBorrows} total recorded borrow${trackedBorrowSummary.totalHistoricalBorrows === 1 ? "" : "s"}`
+                                        : ""}
+                                    .
                                 </p>
                             </div>
 
@@ -474,7 +540,7 @@ export default function StudentBooksPage() {
                                         type="search"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search call no., accession no., title, subject, publication year, author…"
+                                        placeholder="Search call no., accession no., title, subject, publication year, author, library use only…"
                                         autoComplete="off"
                                         aria-label="Search books"
                                         className="border-white/20 bg-slate-900/70 pl-9 text-white"
@@ -534,6 +600,7 @@ export default function StudentBooksPage() {
                                         <SelectItem value="all">All books</SelectItem>
                                         <SelectItem value="borrowedByMe">Borrowed by me (active)</SelectItem>
                                         <SelectItem value="history">My history</SelectItem>
+                                        <SelectItem value="libraryUseOnly">Library use only</SelectItem>
                                         <SelectItem value="available">Available only (my view)</SelectItem>
                                         <SelectItem value="unavailable">Unavailable only (my view)</SelectItem>
                                     </SelectContent>
@@ -588,7 +655,12 @@ export default function StudentBooksPage() {
                             </span>{" "}
                             until a librarian confirms pickup. After confirmation it will
                             appear as{" "}
-                            <span className="font-semibold text-emerald-200">Borrowed</span>.
+                            <span className="font-semibold text-emerald-200">Borrowed</span>. Books
+                            marked{" "}
+                            <span className="font-semibold text-amber-200">
+                                Library use only
+                            </span>{" "}
+                            stay visible in the catalog but cannot be borrowed online.
                         </p>
                     </CardHeader>
 
@@ -603,9 +675,9 @@ export default function StudentBooksPage() {
                             <div className="py-6 text-center text-sm text-red-300">
                                 {error}
                             </div>
-                        ) : rows.length === 0 ? (
+                        ) : borrowableRows.length === 0 ? (
                             <div className="py-10 text-center text-sm text-white/70">
-                                No books matched your filters.
+                                No borrowable books matched your filters.
                                 <br />
                                 <span className="text-xs opacity-80">
                                     Try clearing the search or changing the filter.
@@ -614,13 +686,13 @@ export default function StudentBooksPage() {
                         ) : (
                             <>
                                 <StudentBooksTable
-                                    rows={rows}
+                                    rows={borrowableRows}
                                     borrowBusyId={borrowBusyId}
                                     onBorrow={handleBorrow}
                                 />
 
                                 <StudentBooksCardList
-                                    rows={rows}
+                                    rows={borrowableRows}
                                     borrowBusyId={borrowBusyId}
                                     onBorrow={handleBorrow}
                                 />
@@ -628,6 +700,45 @@ export default function StudentBooksPage() {
                         )}
                     </CardContent>
                 </Card>
+
+                {(!loading && !error && libraryUseOnlyRows.length > 0) ||
+                    (!loading && !error && filterMode === "libraryUseOnly") ? (
+                    <Card className="mt-4 border-amber-400/20 bg-amber-500/5">
+                        <CardHeader className="pb-2">
+                            <div className="flex flex-col gap-1">
+                                <CardTitle className="text-amber-100">
+                                    Library use only
+                                </CardTitle>
+                                <p className="text-xs text-amber-100/70">
+                                    These titles are visible in the catalog but are for in-library
+                                    use only and cannot be borrowed online.
+                                </p>
+                            </div>
+                        </CardHeader>
+
+                        <CardContent>
+                            {libraryUseOnlyRows.length === 0 ? (
+                                <div className="py-8 text-center text-sm text-amber-100/70">
+                                    No library-use-only books matched your filters.
+                                </div>
+                            ) : (
+                                <>
+                                    <StudentBooksTable
+                                        rows={libraryUseOnlyRows}
+                                        borrowBusyId={borrowBusyId}
+                                        onBorrow={handleBorrow}
+                                    />
+
+                                    <StudentBooksCardList
+                                        rows={libraryUseOnlyRows}
+                                        borrowBusyId={borrowBusyId}
+                                        onBorrow={handleBorrow}
+                                    />
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                ) : null}
             </div>
         </DashboardLayout>
     );

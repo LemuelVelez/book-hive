@@ -55,6 +55,34 @@ export function computeOverdueDays(d?: string | null) {
     return rawDays > 0 ? rawDays : 0;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== "object") return {};
+    return value as Record<string, unknown>;
+}
+
+function firstFiniteNumber(values: unknown[]): number | null {
+    for (const value of values) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+            return value;
+        }
+
+        if (typeof value === "string" && value.trim() !== "") {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+    }
+
+    return null;
+}
+
+function firstTruthyString(values: unknown[]): string {
+    for (const value of values) {
+        if (typeof value === "string" && value.trim()) return value.trim();
+    }
+
+    return "";
+}
+
 export function fmtLibraryArea(area?: BookDTO["libraryArea"] | null) {
     if (!area) return "—";
 
@@ -97,7 +125,129 @@ export function getSubjects(book: Pick<BookDTO, "subjects" | "genre" | "category
     return v || "—";
 }
 
+export function getTotalCopies(book: BookDTO): number {
+    const raw = asRecord(book);
+
+    const explicitTotal = firstFiniteNumber([
+        raw.totalCopies,
+        raw.total_copies,
+        raw.copyTotal,
+        raw.copy_total,
+        raw.totalStock,
+        raw.total_stock,
+    ]);
+
+    if (explicitTotal !== null) {
+        return Math.max(0, Math.floor(explicitTotal));
+    }
+
+    if (typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)) {
+        return Math.max(0, Math.floor(book.numberOfCopies));
+    }
+
+    const borrowed = firstFiniteNumber([
+        raw.borrowedCopies,
+        raw.borrowed_copies,
+        raw.activeBorrowedCopies,
+        raw.active_borrowed_copies,
+        raw.currentBorrowedCopies,
+        raw.current_borrowed_copies,
+    ]);
+
+    if (borrowed !== null) {
+        return Math.max(0, Math.floor(borrowed));
+    }
+
+    return book.available ? 1 : 0;
+}
+
+export function getBorrowedCopies(book: BookDTO): number {
+    const raw = asRecord(book);
+
+    const explicitBorrowed = firstFiniteNumber([
+        raw.borrowedCopies,
+        raw.borrowed_copies,
+        raw.activeBorrowedCopies,
+        raw.active_borrowed_copies,
+        raw.currentBorrowedCopies,
+        raw.current_borrowed_copies,
+    ]);
+
+    if (explicitBorrowed !== null) {
+        const total = getTotalCopies(book);
+        const safeBorrowed = Math.max(0, Math.floor(explicitBorrowed));
+        return total > 0 ? Math.min(total, safeBorrowed) : safeBorrowed;
+    }
+
+    const explicitTotal = firstFiniteNumber([
+        raw.totalCopies,
+        raw.total_copies,
+        raw.copyTotal,
+        raw.copy_total,
+        raw.totalStock,
+        raw.total_stock,
+    ]);
+
+    if (
+        explicitTotal !== null &&
+        typeof book.numberOfCopies === "number" &&
+        Number.isFinite(book.numberOfCopies)
+    ) {
+        return Math.max(0, Math.floor(explicitTotal) - Math.floor(book.numberOfCopies));
+    }
+
+    return 0;
+}
+
+export function getHistoricalBorrowCount(book: BookDTO): number | null {
+    const raw = asRecord(book);
+
+    const count = firstFiniteNumber([
+        raw.borrowCount,
+        raw.borrow_count,
+        raw.timesBorrowed,
+        raw.times_borrowed,
+        raw.totalBorrows,
+        raw.total_borrows,
+        raw.totalBorrowCount,
+        raw.total_borrow_count,
+        raw.borrowedCount,
+        raw.borrowed_count,
+    ]);
+
+    if (count === null) return null;
+
+    return Math.max(0, Math.floor(count));
+}
+
 export function getRemainingCopies(book: BookDTO): number {
+    const raw = asRecord(book);
+
+    const explicitTotal = firstFiniteNumber([
+        raw.totalCopies,
+        raw.total_copies,
+        raw.copyTotal,
+        raw.copy_total,
+        raw.totalStock,
+        raw.total_stock,
+    ]);
+
+    const explicitBorrowed = firstFiniteNumber([
+        raw.borrowedCopies,
+        raw.borrowed_copies,
+        raw.activeBorrowedCopies,
+        raw.active_borrowed_copies,
+        raw.currentBorrowedCopies,
+        raw.current_borrowed_copies,
+    ]);
+
+    if (explicitTotal !== null && explicitBorrowed !== null) {
+        return Math.max(
+            0,
+            Math.floor(explicitTotal) - Math.floor(explicitBorrowed)
+        );
+    }
+
     if (typeof book.numberOfCopies === "number" && Number.isFinite(book.numberOfCopies)) {
         return Math.max(0, Math.floor(book.numberOfCopies));
     }
@@ -105,8 +255,55 @@ export function getRemainingCopies(book: BookDTO): number {
     return book.available ? 1 : 0;
 }
 
+export function isLibraryUseOnly(book: BookDTO): boolean {
+    const raw = asRecord(book);
+
+    const booleanFlags = [
+        raw.libraryUseOnly,
+        raw.library_use_only,
+        raw.isLibraryUseOnly,
+        raw.is_library_use_only,
+        raw.referenceOnly,
+        raw.reference_only,
+    ];
+
+    if (booleanFlags.some((value) => value === true)) {
+        return true;
+    }
+
+    const policyText = normalizeSearchText(
+        firstTruthyString([
+            raw.borrowingPolicy,
+            raw.borrowing_policy,
+            raw.borrowPolicy,
+            raw.borrow_policy,
+            raw.circulationType,
+            raw.circulation_type,
+            raw.policy,
+            raw.policyLabel,
+            raw.policy_label,
+            raw.availabilityLabel,
+            raw.availability_label,
+            raw.remarks,
+            raw.note,
+            raw.notes,
+            raw.status,
+            raw.statusLabel,
+            raw.status_label,
+        ])
+    );
+
+    return (
+        policyText.includes("library use only") ||
+        policyText.includes("reference only") ||
+        policyText.includes("not for borrowing") ||
+        policyText.includes("for room use only") ||
+        policyText.includes("in library use only")
+    );
+}
+
 export function isBorrowable(book: BookDTO): boolean {
-    return Boolean(book.available) && getRemainingCopies(book) > 0;
+    return !isLibraryUseOnly(book) && Boolean(book.available) && getRemainingCopies(book) > 0;
 }
 
 export function sortRecordsNewestFirst(records: BorrowRecordDTO[]) {

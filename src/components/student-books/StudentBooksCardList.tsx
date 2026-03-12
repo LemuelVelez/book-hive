@@ -13,7 +13,11 @@ import {
     fmtDurationDays,
     fmtLibraryArea,
     getBookBorrowMeta,
+    getBorrowedCopies,
+    getHistoricalBorrowCount,
     getSubjects,
+    getTotalCopies,
+    isLibraryUseOnly,
     peso,
 } from "@/components/student-books/utils";
 import BorrowBookDialog from "@/components/student-books/BorrowBookDialog";
@@ -48,6 +52,10 @@ export default function StudentBooksCardList({
                 } = getBookBorrowMeta(book);
 
                 const maxCopies = remaining;
+                const libraryUseOnly = isLibraryUseOnly(book);
+                const totalCopies = getTotalCopies(book);
+                const borrowedCopies = getBorrowedCopies(book);
+                const historicalBorrowCount = getHistoricalBorrowCount(book);
 
                 return (
                     <div
@@ -72,14 +80,27 @@ export default function StudentBooksCardList({
                             </div>
 
                             <Badge
-                                variant={borrowableNow ? "default" : "outline"}
+                                variant={
+                                    libraryUseOnly
+                                        ? "secondary"
+                                        : borrowableNow
+                                            ? "default"
+                                            : "outline"
+                                }
                                 className={
-                                    borrowableNow
-                                        ? "border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500"
-                                        : "border-red-400/70 text-red-200 hover:bg-red-500/10"
+                                    libraryUseOnly
+                                        ? "border-amber-300/70 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15"
+                                        : borrowableNow
+                                            ? "border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500"
+                                            : "border-red-400/70 text-red-200 hover:bg-red-500/10"
                                 }
                             >
-                                {borrowableNow ? (
+                                {libraryUseOnly ? (
+                                    <span className="inline-flex items-center gap-1">
+                                        <CircleOff className="h-3 w-3" aria-hidden="true" />
+                                        Library use only
+                                    </span>
+                                ) : borrowableNow ? (
                                     <span className="inline-flex items-center gap-1">
                                         <CheckCircle2
                                             className="h-3 w-3"
@@ -103,9 +124,16 @@ export default function StudentBooksCardList({
                         </div>
 
                         <div className="text-[11px] text-white/70">
-                            {activeRecords.length === 0 && book.myStatus === "never" && (
-                                <span>Not yet borrowed</span>
+                            {libraryUseOnly && activeRecords.length === 0 && (
+                                <span className="text-amber-100/80">
+                                    This title is visible in the catalog for in-library reading
+                                    only.
+                                </span>
                             )}
+
+                            {!libraryUseOnly &&
+                                activeRecords.length === 0 &&
+                                book.myStatus === "never" && <span>Not yet borrowed</span>}
 
                             {activeRecords.length > 0 && (
                                 <>
@@ -251,6 +279,38 @@ export default function StudentBooksCardList({
                                 </div>
                             </div>
 
+                            <div>
+                                <div className="text-[10px] uppercase text-white/40">
+                                    Policy
+                                </div>
+                                <div className="wrap-break-word text-xs">
+                                    {libraryUseOnly ? "Library use only" : "Borrowable"}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="text-[10px] uppercase text-white/40">
+                                    Now borrowed
+                                </div>
+                                <div className="wrap-break-word text-xs">
+                                    {borrowedCopies}
+                                    {totalCopies > 0
+                                        ? ` of ${totalCopies} copy${totalCopies === 1 ? "" : "ies"}`
+                                        : ""}
+                                </div>
+                            </div>
+
+                            <div className="col-span-2">
+                                <div className="text-[10px] uppercase text-white/40">
+                                    Borrow tracking
+                                </div>
+                                <div className="wrap-break-word text-xs">
+                                    {historicalBorrowCount === null
+                                        ? "Current borrow count is tracked."
+                                        : `Borrowed ${historicalBorrowCount} time${historicalBorrowCount === 1 ? "" : "s"} in recorded history.`}
+                                </div>
+                            </div>
+
                             <div className="col-span-2">
                                 <div className="text-[10px] uppercase text-white/40">
                                     Due date
@@ -275,7 +335,17 @@ export default function StudentBooksCardList({
                         </div>
 
                         <div className="flex justify-end pt-1">
-                            {borrowableNow ? (
+                            {libraryUseOnly ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled
+                                    className="border-amber-300/30 text-amber-100/70"
+                                >
+                                    Library use only
+                                </Button>
+                            ) : borrowableNow ? (
                                 <BorrowBookDialog
                                     book={book}
                                     maxCopies={maxCopies}
