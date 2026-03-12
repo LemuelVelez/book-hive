@@ -198,6 +198,11 @@ export function NavMain() {
                     to: "/dashboard/librarian/feedbacks",
                 },
                 {
+                    label: "Statistics",
+                    icon: BarChart3,
+                    to: "/dashboard/librarian/statistics",
+                },
+                {
                     label: "Users",
                     icon: Users2,
                     to: "/dashboard/librarian/users",

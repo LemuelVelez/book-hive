@@ -41,6 +41,9 @@ const LibrarianBorrowRecordsPage = lazy(
 const LibrarianFeedbacksPage = lazy(
   () => import('./pages/dashboard/librarian/feedbacks')
 )
+const LibrarianStatisticsPage = lazy(
+  () => import('./pages/dashboard/librarian/statistics')
+)
 const LibrarianDamageReportsPage = lazy(
   () => import('./pages/dashboard/librarian/damageReports')
 )
@@ -249,6 +252,16 @@ function App() {
             element={
               <RequireRole allow={['librarian']}>
                 <LibrarianFeedbacksPage />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Librarian Statistics */}
+          <Route
+            path="/dashboard/librarian/statistics"
+            element={
+              <RequireRole allow={['librarian']}>
+                <LibrarianStatisticsPage />
               </RequireRole>
             }
           />
