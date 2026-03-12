@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
+import { FileText } from "lucide-react";
 import { toast } from "sonner";
 
 import DashboardLayout from "@/components/dashboard-layout";
+import { Button } from "@/components/ui/button";
 import type { UserListItemDTO } from "@/lib/authentication";
 import { listUsers } from "@/lib/authentication";
 import type { FineDTO } from "@/lib/fines";
@@ -14,6 +16,9 @@ import { DamageReportsHeader } from "@/components/librarian/damage-reports/heade
 import { DamageReportsSection } from "@/components/librarian/damage-reports/list-section";
 import { PhotoPreviewDialog } from "@/components/librarian/damage-reports/photo-preview-dialog";
 import { AssessmentDialog } from "@/components/librarian/damage-reports/assessment-dialog";
+import ExportPreviewDamageReports, {
+    type PrintableDamageRecord,
+} from "@/components/librarian/damage-reports-preview/export-preview-damage-reports";
 
 import type {
     ActiveStatusFilter,
@@ -65,6 +70,8 @@ export default function LibrarianDamageReportsPage() {
 
     const [assessSaving, setAssessSaving] = React.useState(false);
     const [feeEdited, setFeeEdited] = React.useState(false);
+
+    const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false);
 
     const LIABLE_ALLOWED = React.useMemo(() => new Set<string>(["student", "faculty", "other"]), []);
 
@@ -344,23 +351,23 @@ export default function LibrarianDamageReportsPage() {
             current.map((r) =>
                 r.id === assessReport.id
                     ? {
-                        ...r,
-                        severity: assessSeverity,
-                        status: assessStatus,
-                        fee: parsedFee,
-                        notes: assessNotes.trim() || null,
-                        liableUserId: liablePayload == null ? null : String(liablePayload),
-                        archived: markingPaid ? true : (r as any).archived,
-                        paidAt: markingPaid ? ((r as any).paidAt ?? optimisticPaidAt) : (r as any).paidAt,
-                        liableStudentName:
-                            liablePayload == null
-                                ? null
-                                : selectedUser?.fullName ?? (r as any).liableStudentName ?? null,
-                        liableStudentEmail:
-                            liablePayload == null
-                                ? null
-                                : selectedUser?.email ?? (r as any).liableStudentEmail ?? null,
-                    }
+                          ...r,
+                          severity: assessSeverity,
+                          status: assessStatus,
+                          fee: parsedFee,
+                          notes: assessNotes.trim() || null,
+                          liableUserId: liablePayload == null ? null : String(liablePayload),
+                          archived: markingPaid ? true : (r as any).archived,
+                          paidAt: markingPaid ? ((r as any).paidAt ?? optimisticPaidAt) : (r as any).paidAt,
+                          liableStudentName:
+                              liablePayload == null
+                                  ? null
+                                  : selectedUser?.fullName ?? (r as any).liableStudentName ?? null,
+                          liableStudentEmail:
+                              liablePayload == null
+                                  ? null
+                                  : selectedUser?.email ?? (r as any).liableStudentEmail ?? null,
+                      }
                     : r
             )
         );
@@ -485,6 +492,74 @@ export default function LibrarianDamageReportsPage() {
         return getUiArchiveInfo(assessReport);
     }, [assessReport, getUiArchiveInfo]);
 
+    const exportRecords = React.useMemo<PrintableDamageRecord[]>(() => {
+        const mapRowToPrintable = (
+            record: DamageReportRow,
+            scopeLabel: "active" | "paid_archive"
+        ): PrintableDamageRecord => {
+            const anyRecord = record as any;
+            const ui = getUiArchiveInfo(record);
+
+            const rawPhotos: string[] = (
+                record.photoUrls && record.photoUrls.length ? record.photoUrls : record.photoUrl ? [record.photoUrl] : []
+            ).filter(Boolean) as string[];
+
+            return {
+                id: record.id,
+                reportedBy: getReportedByName(record),
+                reportedByEmail:
+                    record.studentEmail ??
+                    anyRecord.student_email ??
+                    anyRecord.reportedByEmail ??
+                    null,
+                reportedBySchoolId:
+                    record.studentId ??
+                    anyRecord.student_id ??
+                    anyRecord.reportedBySchoolId ??
+                    null,
+                liableUser: getLiableName(record),
+                liableUserEmail:
+                    record.liableStudentEmail ??
+                    anyRecord.liable_email ??
+                    anyRecord.liableUserEmail ??
+                    null,
+                liableUserSchoolId:
+                    record.liableStudentId ??
+                    anyRecord.liable_student_id ??
+                    anyRecord.liableUserSchoolId ??
+                    null,
+                bookTitle: record.bookTitle ?? null,
+                bookId: record.bookId ?? null,
+                damageType: record.damageType ?? null,
+                severity: record.severity,
+                status: ui.status,
+                archived: ui.archived,
+                fee: typeof record.fee === "number" ? record.fee : Number(record.fee ?? 0),
+                reportedAt: record.reportedAt ?? null,
+                paidAt: ui.paidAt ?? null,
+                notes: record.notes ?? null,
+                photoCount: rawPhotos.length,
+                scopeLabel,
+            };
+        };
+
+        return [
+            ...activeList.map((record) => mapRowToPrintable(record, "active")),
+            ...paidArchiveList.map((record) => mapRowToPrintable(record, "paid_archive")),
+        ];
+    }, [activeList, paidArchiveList, getUiArchiveInfo]);
+
+    const exportSubtitle = React.useMemo(() => {
+        const activeFilterLabel =
+            activeStatusFilter === "all"
+                ? "all active statuses"
+                : `active status: ${activeStatusFilter}`;
+
+        const searchLabel = search.trim() ? `search: "${search.trim()}"` : "no search filter";
+
+        return `Printable report for the current filtered damage reports view (${activeFilterLabel}; ${searchLabel}).`;
+    }, [activeStatusFilter, search]);
+
     return (
         <DashboardLayout title="Damage Reports">
             <DamageReportsHeader
@@ -497,6 +572,23 @@ export default function LibrarianDamageReportsPage() {
                 onRefresh={handleRefresh}
                 counts={counts}
             />
+
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3">
+                <div className="text-xs text-white/65">
+                    Export uses the current filtered list from both <span className="font-semibold text-white/85">Active</span> and{" "}
+                    <span className="font-semibold text-white/85">Paid archive</span> sections.
+                </div>
+
+                <Button
+                    type="button"
+                    onClick={() => setExportPreviewOpen(true)}
+                    className="bg-sky-600 hover:bg-sky-700 text-white"
+                    disabled={loading || (!!error && exportRecords.length === 0)}
+                >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Preview / Export PDF
+                </Button>
+            </div>
 
             <DamageReportsSection
                 title="Active damage reports (unpaid)"
@@ -581,6 +673,15 @@ export default function LibrarianDamageReportsPage() {
                     setAssessLiableUserId(String(assessReport.userId));
                 }}
                 onClearLiableUser={() => setAssessLiableUserId("")}
+            />
+
+            <ExportPreviewDamageReports
+                open={exportPreviewOpen}
+                onOpenChange={setExportPreviewOpen}
+                records={exportRecords}
+                fileNamePrefix="bookhive-damage-reports"
+                reportTitle="BookHive Library • Damage Reports"
+                reportSubtitle={exportSubtitle}
             />
         </DashboardLayout>
     );
