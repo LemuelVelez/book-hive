@@ -53,6 +53,7 @@ import {
   Edit,
   Check,
   X,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -68,6 +69,9 @@ import {
 } from "@/lib/borrows";
 
 import { Calendar } from "@/components/ui/calendar";
+import ExportPreviewBorrowRecords, {
+  type PrintableBorrowRecord,
+} from "@/components/borrow-preview/export-preview-borrow-records";
 
 const FINE_PER_DAY = 5;
 const FIXED_EXTENSION_DAYS = 1;
@@ -188,6 +192,7 @@ export default function LibrarianBorrowRecordsPage() {
   const [statusFilter, setStatusFilter] = React.useState<
     "all" | "borrowed" | "returned"
   >("all");
+  const [previewOpen, setPreviewOpen] = React.useState(false);
 
   const [markBorrowBusyId, setMarkBorrowBusyId] =
     React.useState<string | null>(null);
@@ -540,6 +545,43 @@ export default function LibrarianBorrowRecordsPage() {
     return groups;
   }, [filtered]);
 
+  const printableBorrowRecords = React.useMemo<PrintableBorrowRecord[]>(
+    () =>
+      filtered.map((rec) => ({
+        id: rec.id,
+        userId: rec.userId,
+        studentId: rec.studentId ?? null,
+        studentName: rec.studentName ?? null,
+        studentEmail: rec.studentEmail ?? null,
+        bookTitle: rec.bookTitle ?? null,
+        bookId: rec.bookId ?? null,
+        status: rec.status,
+        borrowDate: rec.borrowDate ?? null,
+        dueDate: rec.dueDate ?? null,
+        returnDate: rec.returnDate ?? null,
+        fine: normalizeFine(rec.fine),
+        extensionRequestStatus: rec.extensionRequestStatus ?? null,
+        returnRequestedAt: rec.returnRequestedAt ?? null,
+        returnRequestNote: rec.returnRequestNote ?? null,
+      })),
+    [filtered]
+  );
+
+  const borrowPdfSubtitle = React.useMemo(() => {
+    const statusLabel =
+      statusFilter === "all"
+        ? "All records"
+        : statusFilter === "borrowed"
+          ? "Active (Borrowed + Pending)"
+          : "Returned only";
+
+    const searchLabel = search.trim()
+      ? ` • Search: "${search.trim()}"`
+      : "";
+
+    return `Current filtered borrow records view • ${statusLabel}${searchLabel}`;
+  }, [statusFilter, search]);
+
   const cellScrollbarClasses =
     "overflow-x-auto whitespace-nowrap " +
     "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
@@ -574,6 +616,17 @@ export default function LibrarianBorrowRecordsPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="border-sky-400/30 text-sky-100 hover:bg-sky-500/10"
+            onClick={() => setPreviewOpen(true)}
+            disabled={loading || filtered.length === 0}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            Preview PDF
+          </Button>
+
           <Button
             type="button"
             variant="outline"
@@ -790,8 +843,8 @@ export default function LibrarianBorrowRecordsPage() {
 
                               const hasReturnRequester =
                                 Boolean((rec.returnRequestedByName || "").trim()) ||
-                                rec.returnRequestedBy !== null &&
-                                  rec.returnRequestedBy !== undefined;
+                                (rec.returnRequestedBy !== null &&
+                                  rec.returnRequestedBy !== undefined);
 
                               return (
                                 <TableRow
@@ -1634,6 +1687,15 @@ export default function LibrarianBorrowRecordsPage() {
           </AlertDialogContent>
         )}
       </AlertDialog>
+
+      <ExportPreviewBorrowRecords
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        records={printableBorrowRecords}
+        fileNamePrefix="bookhive-borrow-records"
+        reportTitle="BookHive Library • Borrow Records Report"
+        reportSubtitle={borrowPdfSubtitle}
+      />
     </DashboardLayout>
   );
 }
