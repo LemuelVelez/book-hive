@@ -22,10 +22,13 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 
-import { Loader2, RefreshCcw, Search, Star } from "lucide-react";
+import { FileText, Loader2, RefreshCcw, Search, Star } from "lucide-react";
 import { toast } from "sonner";
 
 import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
+import ExportPreviewFeedbacks, {
+    type PrintableFeedbackRecord,
+} from "@/components/feedbacks-preview/export-preview-feedbacks";
 
 /**
  * Local row extension:
@@ -104,6 +107,7 @@ export default function LibrarianFeedbacksPage() {
     const [ratingFilter, setRatingFilter] = React.useState<
         "all" | "5" | "4" | "3" | "2" | "1"
     >("all");
+    const [previewOpen, setPreviewOpen] = React.useState(false);
 
     const load = React.useCallback(async () => {
         setError(null);
@@ -165,6 +169,23 @@ export default function LibrarianFeedbacksPage() {
         });
     }, [rows, ratingFilter, search]);
 
+    const printableFeedbacks = React.useMemo<PrintableFeedbackRecord[]>(
+        () =>
+            filtered.map((f) => ({
+                id: f.id,
+                userId: f.userId ?? null,
+                studentId: f.studentId ?? null,
+                studentName: getUserName(f),
+                studentEmail: f.studentEmail ?? null,
+                bookTitle: f.bookTitle ?? null,
+                bookId: f.bookId ?? null,
+                rating: f.rating ?? 0,
+                comment: f.comment ?? null,
+                createdAt: (f.createdAt as string | null | undefined) ?? null,
+            })),
+        [filtered]
+    );
+
     return (
         <DashboardLayout title="Feedbacks">
             {/* Header: vertical on mobile, horizontal on desktop */}
@@ -177,6 +198,17 @@ export default function LibrarianFeedbacksPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="border-sky-400/30 text-sky-100 hover:bg-sky-500/10"
+                        onClick={() => setPreviewOpen(true)}
+                        disabled={loading || !printableFeedbacks.length}
+                    >
+                        <FileText className="mr-2 h-4 w-4" />
+                        Preview PDF
+                    </Button>
+
                     <Button
                         type="button"
                         variant="outline"
@@ -397,6 +429,15 @@ export default function LibrarianFeedbacksPage() {
                     )}
                 </CardContent>
             </Card>
+
+            <ExportPreviewFeedbacks
+                open={previewOpen}
+                onOpenChange={setPreviewOpen}
+                records={printableFeedbacks}
+                fileNamePrefix="bookhive-feedbacks-report"
+                reportTitle="BookHive Library • Feedbacks Report"
+                reportSubtitle="Printable report for the current feedback filters in the librarian dashboard."
+            />
         </DashboardLayout>
     );
 }
