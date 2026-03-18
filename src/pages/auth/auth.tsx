@@ -52,7 +52,7 @@ import {
     type Role,
     useSession,
     setSessionUser,
-    getUserRole, // ✅ NEW: prefer user.role over accountType
+    getUserRole,
 } from "@/hooks/use-session";
 
 import logo from "@/assets/images/logo.svg";
@@ -60,7 +60,11 @@ import logo from "@/assets/images/logo.svg";
 // -------------------------
 // Constants & type helpers
 // -------------------------
-type AccountType = "student" | "other";
+type AccountType =
+    | "student"
+    | "faculty"
+    | "librarian"
+    | "assistant-librarian";
 
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th", "5th"] as const;
 type YearLevel = (typeof YEAR_LEVELS)[number];
@@ -126,9 +130,7 @@ function sanitizeRedirect(raw: string | null): string | null {
 
 // Helper to compute destination dashboard path for a role
 function resolveDashboardForRole(role: Role): string {
-    // In this auth page we treat student + other as `/dashboard` (shared route),
-    // and use dashboardForRole() for staff roles.
-    if (role === "student" || role === "other") return "/dashboard";
+    if (role === "student") return "/dashboard";
     return dashboardForRole(role);
 }
 
@@ -179,7 +181,7 @@ export default function AuthPage() {
 
     // Redirect handling
     const redirectParam = sanitizeRedirect(qs.get("redirect") || qs.get("next"));
-    const bootRedirectedRef = useRef(false); // ensure we only auto-redirect once
+    const bootRedirectedRef = useRef(false);
 
     // -------------
     // Effects
@@ -195,7 +197,6 @@ export default function AuthPage() {
 
         if (!sessionUser) return;
 
-        // ✅ FIX: use ROLE (user.role) first, fallback to accountType
         const rawRole = (getUserRole(sessionUser) ?? "student") as Role;
         const dest = redirectParam ?? resolveDashboardForRole(rawRole);
 
@@ -216,7 +217,6 @@ export default function AuthPage() {
                 setRememberMe(true);
             }
         } catch (err) {
-            // storage not available (private mode / SSR / etc.)
             noop(err);
         }
     }, []);
@@ -237,7 +237,6 @@ export default function AuthPage() {
                 localStorage.removeItem(REMEMBER_EMAIL_KEY);
             }
         } catch (err) {
-            // ignore persistence errors
             noop(err);
         }
     };
@@ -250,7 +249,6 @@ export default function AuthPage() {
             try {
                 localStorage.setItem(REMEMBER_EMAIL_KEY, value);
             } catch (err) {
-                // ignore persistence errors
                 noop(err);
             }
         }
@@ -293,10 +291,8 @@ export default function AuthPage() {
             const resp = await apiLogin(email, password);
             const user = resp.user;
 
-            // ✅ update global session cache so dashboard guards see the new session
             setSessionUser(user);
 
-            // Persist remember-me choice after a successful login
             try {
                 if (rememberMe) {
                     localStorage.setItem(REMEMBER_FLAG_KEY, "1");
@@ -309,14 +305,12 @@ export default function AuthPage() {
                 noop(err);
             }
 
-            // Toast + redirect (role aware)
             toast.success("Welcome back!", {
                 description: redirectParam
                     ? "Redirecting to your previous page…"
                     : "Redirecting to your dashboard…",
             });
 
-            // ✅ FIX: use ROLE (user.role) first, fallback to accountType
             const rawRole = (getUserRole(user) ?? "student") as Role;
             const dest = redirectParam ?? resolveDashboardForRole(rawRole);
 
@@ -324,14 +318,12 @@ export default function AuthPage() {
         } catch (err: any) {
             const rawMsg = String(err?.message || "Login failed. Please try again.");
 
-            // Handle "email not verified" specifically — route to verify page
             const looksUnverified =
                 /verify/i.test(rawMsg) || /not\s*verified/i.test(rawMsg);
             if (looksUnverified) {
                 toast.warning("Email not verified", {
                     description: "We’ve sent a verification link. Please verify to continue.",
                 });
-                // best-effort re-send (non-blocking)
                 try {
                     await apiResendVerifyEmail(email.trim());
                 } catch (e) {
@@ -345,7 +337,6 @@ export default function AuthPage() {
                 return;
             }
 
-            // ✅ Friendlier handling for "user not found"
             const isUserNotFound =
                 /user not found/i.test(rawMsg) ||
                 /account not found/i.test(rawMsg) ||
@@ -363,7 +354,6 @@ export default function AuthPage() {
                 return;
             }
 
-            // ✅ Friendlier handling for invalid credentials / forgot password
             const isInvalidCreds =
                 /invalid email or password/i.test(rawMsg) ||
                 /invalid credentials/i.test(rawMsg);
@@ -380,7 +370,6 @@ export default function AuthPage() {
                 return;
             }
 
-            // Fallback for any other server error
             setLoginError(rawMsg);
             toast.error("Login failed", { description: rawMsg });
         } finally {
@@ -392,7 +381,6 @@ export default function AuthPage() {
     const triggerRegister = async () => {
         setRegError("");
 
-        // Quick client validations to reduce round-trips
         if (regPassword !== confirmPassword) {
             const msg = "Passwords do not match.";
             setRegError(msg);
@@ -412,7 +400,6 @@ export default function AuthPage() {
             return;
         }
 
-        // Student-only required fields
         if (accountType === "student") {
             const finalCollege =
                 college === "Others" ? customCollege.trim() : college;
@@ -461,15 +448,14 @@ export default function AuthPage() {
             const finalYearLevel =
                 yearLevel === "Others" ? customYearLevel.trim() : yearLevel;
 
-            // ✅ Map accountType -> role to send both to backend
-            const role: Role = accountType === "student" ? "student" : "other";
+            const role: Role = accountType as Role;
 
             const payload: Record<string, unknown> = {
                 fullName: fullName.trim(),
                 email: regEmail.trim(),
                 password: regPassword,
                 accountType,
-                role, // ✅ ensure role is in sync with accountType
+                role,
             };
 
             if (accountType === "student") {
@@ -480,12 +466,10 @@ export default function AuthPage() {
 
             await apiRegister(payload as any);
 
-            // Backend already creates a verification token and sends the email.
             toast.success("Account created", {
                 description: "We sent a verification link to your email.",
             });
 
-            // Route to verify page with email pre-filled
             navigate(
                 `/auth/verify-email?email=${encodeURIComponent(
                     regEmail.trim()
@@ -806,15 +790,21 @@ export default function AuthPage() {
                                                         )
                                                     }
                                                 >
-                                                    <SelectTrigger className="bg-slate-900/70 border-white/10 text:white">
+                                                    <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                                                         <SelectValue placeholder="Select account type" />
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-slate-900 text-white border-white/10">
                                                         <SelectItem value="student">
                                                             Student
                                                         </SelectItem>
-                                                        <SelectItem value="other">
-                                                            Other
+                                                        <SelectItem value="faculty">
+                                                            Faculty
+                                                        </SelectItem>
+                                                        <SelectItem value="librarian">
+                                                            Librarian
+                                                        </SelectItem>
+                                                        <SelectItem value="assistant-librarian">
+                                                            Assistant Librarian
                                                         </SelectItem>
                                                     </SelectContent>
                                                 </Select>
@@ -868,10 +858,11 @@ export default function AuthPage() {
                                                         studentIdAvailable !==
                                                         null ? (
                                                         <span
-                                                            className={`text-xs ${studentIdAvailable
-                                                                ? "text-emerald-300"
-                                                                : "text-red-300"
-                                                                }`}
+                                                            className={`text-xs ${
+                                                                studentIdAvailable
+                                                                    ? "text-emerald-300"
+                                                                    : "text-red-300"
+                                                            }`}
                                                         >
                                                             {studentIdAvailable
                                                                 ? "Student ID is available"
@@ -921,7 +912,7 @@ export default function AuthPage() {
                                                                         <span className="md:hidden block text-base">
                                                                             {
                                                                                 COLLEGE_ACRONYM[
-                                                                                c
+                                                                                    c
                                                                                 ]
                                                                             }
                                                                         </span>
@@ -934,7 +925,7 @@ export default function AuthPage() {
                                                                             <span className="text-xs opacity-70">
                                                                                 {
                                                                                     COLLEGE_ACRONYM[
-                                                                                    c
+                                                                                        c
                                                                                     ]
                                                                                 }
                                                                             </span>
@@ -955,26 +946,26 @@ export default function AuthPage() {
                                                         </Select>
                                                         {college ===
                                                             "Others" && (
-                                                                <div className="mt-2">
-                                                                    <Input
-                                                                        placeholder="Please specify your college"
-                                                                        value={
-                                                                            customCollege
-                                                                        }
-                                                                        onChange={(
+                                                            <div className="mt-2">
+                                                                <Input
+                                                                    placeholder="Please specify your college"
+                                                                    value={
+                                                                        customCollege
+                                                                    }
+                                                                    onChange={(
+                                                                        e
+                                                                    ) =>
+                                                                        setCustomCollege(
                                                                             e
-                                                                        ) =>
-                                                                            setCustomCollege(
-                                                                                e
-                                                                                    .target
-                                                                                    .value
-                                                                            )
-                                                                        }
-                                                                        autoComplete="organization"
-                                                                        className="bg-slate-900/70 border-white/10 text-white"
-                                                                    />
-                                                                </div>
-                                                            )}
+                                                                                .target
+                                                                                .value
+                                                                        )
+                                                                    }
+                                                                    autoComplete="organization"
+                                                                    className="bg-slate-900/70 border-white/10 text-white"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </FieldContent>
                                                 </Field>
 
@@ -1043,26 +1034,26 @@ export default function AuthPage() {
                                                         </Select>
                                                         {program ===
                                                             "Others" && (
-                                                                <div className="mt-2">
-                                                                    <Input
-                                                                        placeholder="Please specify your program"
-                                                                        value={
-                                                                            customProgram
-                                                                        }
-                                                                        onChange={(
+                                                            <div className="mt-2">
+                                                                <Input
+                                                                    placeholder="Please specify your program"
+                                                                    value={
+                                                                        customProgram
+                                                                    }
+                                                                    onChange={(
+                                                                        e
+                                                                    ) =>
+                                                                        setCustomProgram(
                                                                             e
-                                                                        ) =>
-                                                                            setCustomProgram(
-                                                                                e
-                                                                                    .target
-                                                                                    .value
-                                                                            )
-                                                                        }
-                                                                        autoComplete="off"
-                                                                        className="bg-slate-900/70 border-white/10 text:white"
-                                                                    />
-                                                                </div>
-                                                            )}
+                                                                                .target
+                                                                                .value
+                                                                        )
+                                                                    }
+                                                                    autoComplete="off"
+                                                                    className="bg-slate-900/70 border-white/10 text-white"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </FieldContent>
                                                 </Field>
 
@@ -1118,26 +1109,26 @@ export default function AuthPage() {
                                                         </Select>
                                                         {yearLevel ===
                                                             "Others" && (
-                                                                <div className="mt-2">
-                                                                    <Input
-                                                                        placeholder="Please specify your year level"
-                                                                        value={
-                                                                            customYearLevel
-                                                                        }
-                                                                        onChange={(
+                                                            <div className="mt-2">
+                                                                <Input
+                                                                    placeholder="Please specify your year level"
+                                                                    value={
+                                                                        customYearLevel
+                                                                    }
+                                                                    onChange={(
+                                                                        e
+                                                                    ) =>
+                                                                        setCustomYearLevel(
                                                                             e
-                                                                        ) =>
-                                                                            setCustomYearLevel(
-                                                                                e
-                                                                                    .target
-                                                                                    .value
-                                                                            )
-                                                                        }
-                                                                        autoComplete="off"
-                                                                        className="bg-slate-900/70 border-white/10 text-white"
-                                                                    />
-                                                                </div>
-                                                            )}
+                                                                                .target
+                                                                                .value
+                                                                        )
+                                                                    }
+                                                                    autoComplete="off"
+                                                                    className="bg-slate-900/70 border-white/10 text-white"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </FieldContent>
                                                 </Field>
                                             </>
@@ -1293,10 +1284,10 @@ export default function AuthPage() {
                                             {regPassword !==
                                                 confirmPassword &&
                                                 confirmPassword.length > 0 && (
-                                                    <FieldError>
-                                                        Passwords do not match.
-                                                    </FieldError>
-                                                )}
+                                                <FieldError>
+                                                    Passwords do not match.
+                                                </FieldError>
+                                            )}
                                         </Field>
 
                                         {/* Register CTA */}
