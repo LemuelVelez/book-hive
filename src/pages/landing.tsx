@@ -313,7 +313,7 @@ export default function LandingPage() {
                                 {!isAuthed ? (
                                     <Button
                                         size="lg"
-                                        className="cursor-pointer px-7 py-6 text-base bg-yellow-400 text-blue-950 hover:bg-yellow-300"
+                                        className="cursor-pointer text-base bg-yellow-400 text-blue-950 hover:bg-yellow-300"
                                         onClick={() => navigate("/auth")}
                                     >
                                         Get Started
