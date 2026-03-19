@@ -76,7 +76,14 @@ import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
 
 type TimeRange = "6m" | "12m" | "24m";
 
-const ROLE_ORDER: Role[] = ["student", "other", "faculty", "librarian", "admin"];
+const ROLE_ORDER: Role[] = [
+    "student",
+    "other",
+    "faculty",
+    "librarian",
+    "assistant_librarian",
+    "admin",
+];
 
 /**
  * FIX:
@@ -115,6 +122,7 @@ function normalizeRole(raw: unknown): Role {
     const v = String(raw ?? "").trim().toLowerCase();
     if (v === "student") return "student";
     if (v === "librarian") return "librarian";
+    if (v === "assistant_librarian") return "assistant_librarian";
     if (v === "faculty") return "faculty";
     if (v === "admin") return "admin";
     return "other";
@@ -265,6 +273,7 @@ export default function AdminAnalyticsPage() {
             other: 0,
             faculty: 0,
             librarian: 0,
+            assistant_librarian: 0,
             admin: 0,
         };
         for (const u of users) {
