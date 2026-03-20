@@ -131,6 +131,15 @@ const ROLE_OPTIONS: Role[] = [
   "admin",
 ];
 
+const ACCOUNT_TYPE_OPTIONS: Role[] = [
+  "student",
+  "other",
+  "faculty",
+  "assistant_librarian",
+  "librarian",
+  "admin",
+];
+
 type BusyState =
   | { id: string; action: "approve" | "disapprove" | "delete" | "role" | "credentials" }
   | null;
@@ -154,6 +163,19 @@ function normalizeRole(raw: unknown): Role {
   if (v === "faculty") return "faculty";
   if (v === "admin") return "admin";
   return "other";
+}
+
+function accountTypeFromRole(role: Role): Role {
+  switch (role) {
+    case "student":
+    case "faculty":
+    case "assistant_librarian":
+    case "librarian":
+    case "admin":
+      return role;
+    default:
+      return "other";
+  }
 }
 
 function initialsFromName(name: string) {
@@ -338,8 +360,8 @@ export default function AdminUsersPage() {
   const [cAutoPassword, setCAutoPassword] = React.useState(true);
   const [cRole, setCRole] = React.useState<Role>("student");
 
-  // accountType is informational only — keep simple: student/other
-  const [cAccountType, setCAccountType] = React.useState<"student" | "other">("student");
+  // accountType is informational only
+  const [cAccountType, setCAccountType] = React.useState<Role>("student");
 
   // Optional student fields (only if cAccountType === "student")
   const [cStudentId, setCStudentId] = React.useState("");
@@ -363,10 +385,7 @@ export default function AdminUsersPage() {
 
   React.useEffect(() => {
     // keep accountType sensible by default when changing role
-    // - role=student => accountType=student
-    // - other roles => accountType=other
-    if (cRole === "student") setCAccountType("student");
-    else setCAccountType("other");
+    setCAccountType(accountTypeFromRole(cRole));
   }, [cRole]);
 
   React.useEffect(() => {
@@ -866,16 +885,21 @@ export default function AdminUsersPage() {
 
                 <div className="grid gap-2">
                   <Label>Account type (informational only)</Label>
-                  <Select value={cAccountType} onValueChange={(v) => setCAccountType(v as "student" | "other")}>
+                  <Select value={cAccountType} onValueChange={(v) => setCAccountType(v as Role)}>
                     <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                       <SelectValue placeholder="Select account type" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-900 text-white border-white/10">
-                      <SelectItem value="student">student</SelectItem>
-                      <SelectItem value="other">other</SelectItem>
+                      {ACCOUNT_TYPE_OPTIONS.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {roleLabel(type)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-white/50">This does not affect permissions — only the role does.</p>
+                  <p className="text-xs text-white/50">
+                    This classifies the user profile only and does not control permissions.
+                  </p>
                 </div>
 
                 {cAccountType === "student" && (
