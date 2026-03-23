@@ -90,8 +90,6 @@ function roleBadgeClasses(role: Role) {
       return "bg-indigo-600/80 hover:bg-indigo-600 text-white border-indigo-500/70";
     case "faculty":
       return "bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70";
-    case "other":
-      return "bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70";
     default:
       return "bg-blue-600/80 hover:bg-blue-600 text-white border-blue-500/70";
   }
@@ -101,8 +99,6 @@ function roleLabel(role: Role) {
   switch (role) {
     case "assistant_librarian":
       return "assistant librarian";
-    case "other":
-      return "faculty";
     default:
       return role;
   }
@@ -114,8 +110,12 @@ function approvalBadgeClasses(approved: boolean) {
     : "bg-orange-600/80 hover:bg-orange-600 text-white border-orange-500/70";
 }
 
-function isPrivilegedRole(role: Role) {
+function isProtectedRole(role: Role) {
   return role === "assistant_librarian" || role === "librarian" || role === "admin";
+}
+
+function isLibrarianAssignableRole(role: Role) {
+  return role === "student" || role === "faculty" || role === "assistant_librarian";
 }
 
 function normalizeRole(raw: unknown): Role {
@@ -136,6 +136,13 @@ function normalizeRole(raw: unknown): Role {
 
 function uniqueRoleOptions(roles: Role[]) {
   return Array.from(new Set(roles)) as Role[];
+}
+
+function createRoleDraftMap(users: UserRowDTO[]) {
+  return users.reduce<Record<string, Role>>((acc, user) => {
+    acc[user.id] = user.role;
+    return acc;
+  }, {});
 }
 
 function initialsFromName(name: string) {
@@ -263,7 +270,6 @@ export default function LibrarianUsersPage() {
   const selfId = sessionUser?.id ? String(sessionUser.id) : "";
   const sessionRole = normalizeRole(sessionUser?.role ?? sessionUser?.accountType ?? "student");
   const isAdminSession = sessionRole === "admin";
-  const isLibrarianSession = sessionRole === "librarian";
 
   const [users, setUsers] = React.useState<UserRowDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -280,11 +286,7 @@ export default function LibrarianUsersPage() {
     try {
       const list = await listUsersWithRole();
       setUsers(list);
-      setRoleDraft((prev) => {
-        const next = { ...prev };
-        for (const user of list) next[user.id] = next[user.id] ?? user.role;
-        return next;
-      });
+      setRoleDraft(createRoleDraftMap(list));
     } catch (err: any) {
       const msg = err?.message || "Failed to load users. Ensure the backend has GET /api/users.";
       setError(msg);
@@ -386,6 +388,7 @@ export default function LibrarianUsersPage() {
     setBusy({ id, action: "role" });
     try {
       await updateUserRoleRoleOnly(id, role);
+      setRoleDraft((prev) => ({ ...prev, [id]: role }));
       toast.success("User role updated");
       await loadUsers();
     } catch (e: any) {
@@ -397,18 +400,12 @@ export default function LibrarianUsersPage() {
 
   return (
     <DashboardLayout title="Users">
-      <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <Users2 className="h-5 w-5" />
           <div>
             <h2 className="text-lg font-semibold leading-tight">Users directory</h2>
             <p className="text-xs text-white/70">
-              {isAdminSession
-                ? "Admins can approve accounts, remove users, and change all user roles."
-                : isLibrarianSession
-                  ? "Librarians can approve accounts, remove pending users, and change eligible student or faculty roles. Assistant librarian remains a separate account type in the directory."
-                  : "Manage users, approvals, and eligible role changes."}
-              {" "}
               Pending: <span className="font-semibold text-orange-200">{pendingCount}</span>
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/70">
@@ -432,7 +429,11 @@ export default function LibrarianUsersPage() {
           aria-label="Refresh"
           title="Refresh"
         >
-          {refreshing || loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+          {refreshing || loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCcw className="h-4 w-4" />
+          )}
         </Button>
       </div>
 
@@ -498,24 +499,24 @@ export default function LibrarianUsersPage() {
                   const roleChanged = roleDraftValue !== u.role;
 
                   const exemptDelete = u.role === "admin" || u.role === "librarian";
-                  const targetIsPrivileged = isPrivilegedRole(u.role);
-                  const draftIsPrivileged = isPrivilegedRole(roleDraftValue);
+                  const targetIsProtected = isProtectedRole(u.role);
+                  const draftNeedsAdmin = roleDraftValue === "librarian" || roleDraftValue === "admin";
                   const selectableRoleOptions = isAdminSession
                     ? ROLE_OPTIONS
-                    : uniqueRoleOptions([u.role, ...ROLE_OPTIONS.filter((role) => !isPrivilegedRole(role))]);
+                    : uniqueRoleOptions([u.role, ...ROLE_OPTIONS.filter((role) => isLibrarianAssignableRole(role))]);
                   const canApprove = !u.isApproved;
                   const canDisapprove = u.isApproved && !isSelf;
                   const canDelete = !u.isApproved && !exemptDelete && !isSelf;
                   const canChangeRole =
                     !isSelf &&
-                    (isAdminSession || (!targetIsPrivileged && !draftIsPrivileged));
-                  const disableRoleSelect = anyBusyForRow || isSelf || (!isAdminSession && targetIsPrivileged);
+                    (isAdminSession || (!targetIsProtected && !draftNeedsAdmin));
+                  const disableRoleSelect = anyBusyForRow || isSelf || (!isAdminSession && targetIsProtected);
                   const roleSaveTitle = isSelf
                     ? "You cannot change your own role"
-                    : !isAdminSession && targetIsPrivileged
+                    : !isAdminSession && targetIsProtected
                       ? "Only admins can change assistant librarian, librarian, or admin accounts"
-                      : !isAdminSession && draftIsPrivileged
-                        ? "Librarians cannot assign assistant librarian, librarian, or admin roles"
+                      : !isAdminSession && draftNeedsAdmin
+                        ? "Librarians cannot assign librarian or admin roles"
                         : roleChanged
                           ? "Save role"
                           : "No role changes";
@@ -557,17 +558,13 @@ export default function LibrarianUsersPage() {
                                   <SelectItem
                                     key={role}
                                     value={role}
-                                    disabled={!isAdminSession && isPrivilegedRole(role)}
+                                    disabled={!isAdminSession && (role === "librarian" || role === "admin")}
                                   >
                                     {roleLabel(role)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                          </div>
-
-                          <div className="text-xs text-white/45">
-                            Account type (info): <span className="text-white/70">{roleLabel(u.accountType)}</span>
                           </div>
 
                           {roleChanged ? (
@@ -577,14 +574,9 @@ export default function LibrarianUsersPage() {
                           ) : null}
 
                           {isSelf ? <div className="text-xs text-white/50">You cannot change your own role.</div> : null}
-                          {!isSelf && !isAdminSession && targetIsPrivileged ? (
+                          {!isSelf && !isAdminSession && targetIsProtected ? (
                             <div className="text-xs text-white/50">
                               Only admins can change assistant librarian, librarian, or admin accounts.
-                            </div>
-                          ) : null}
-                          {!isSelf && isLibrarianSession && !targetIsPrivileged ? (
-                            <div className="text-xs text-white/50">
-                              Librarians can assign student or faculty roles here. Assistant librarian is still a valid account type, but only admins can change assistant librarian, librarian, or admin accounts.
                             </div>
                           ) : null}
                         </div>
