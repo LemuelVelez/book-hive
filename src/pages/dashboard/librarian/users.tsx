@@ -74,7 +74,6 @@ type ConfirmState =
 
 const ROLE_OPTIONS: Role[] = [
   "student",
-  "other",
   "faculty",
   "assistant_librarian",
   "librarian",
@@ -92,7 +91,7 @@ function roleBadgeClasses(role: Role) {
     case "faculty":
       return "bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70";
     case "other":
-      return "bg-slate-600/80 hover:bg-slate-600 text-white border-slate-500/70";
+      return "bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70";
     default:
       return "bg-blue-600/80 hover:bg-blue-600 text-white border-blue-500/70";
   }
@@ -102,6 +101,8 @@ function roleLabel(role: Role) {
   switch (role) {
     case "assistant_librarian":
       return "assistant librarian";
+    case "other":
+      return "faculty";
     default:
       return role;
   }
@@ -128,9 +129,9 @@ function normalizeRole(raw: unknown): Role {
     return "assistant_librarian";
   }
   if (v === "librarian") return "librarian";
-  if (v === "faculty") return "faculty";
+  if (v === "faculty" || v === "other") return "faculty";
   if (v === "admin") return "admin";
-  return "other";
+  return "student";
 }
 
 function uniqueRoleOptions(roles: Role[]) {
@@ -260,7 +261,7 @@ async function updateUserRoleRoleOnly(id: string, role: Role) {
 export default function LibrarianUsersPage() {
   const { user: sessionUser } = useSession();
   const selfId = sessionUser?.id ? String(sessionUser.id) : "";
-  const sessionRole = normalizeRole(sessionUser?.role ?? sessionUser?.accountType ?? "other");
+  const sessionRole = normalizeRole(sessionUser?.role ?? sessionUser?.accountType ?? "student");
   const isAdminSession = sessionRole === "admin";
   const isLibrarianSession = sessionRole === "librarian";
 
@@ -327,9 +328,8 @@ export default function LibrarianUsersPage() {
   const pendingCount = React.useMemo(() => users.filter((u) => !u.isApproved).length, [users]);
 
   const countsByRole = React.useMemo(() => {
-    const map: Record<Role, number> = {
+    const map: Partial<Record<Role, number>> = {
       student: 0,
-      other: 0,
       faculty: 0,
       assistant_librarian: 0,
       librarian: 0,
@@ -406,7 +406,7 @@ export default function LibrarianUsersPage() {
               {isAdminSession
                 ? "Admins can approve accounts, remove users, and change all user roles."
                 : isLibrarianSession
-                  ? "Librarians can approve accounts, remove pending users, and change student, other, and faculty roles."
+                  ? "Librarians can approve accounts, remove pending users, and change eligible student or faculty roles. Assistant librarian remains a separate account type in the directory."
                   : "Manage users, approvals, and eligible role changes."}
               {" "}
               Pending: <span className="font-semibold text-orange-200">{pendingCount}</span>
@@ -584,7 +584,7 @@ export default function LibrarianUsersPage() {
                           ) : null}
                           {!isSelf && isLibrarianSession && !targetIsPrivileged ? (
                             <div className="text-xs text-white/50">
-                              Librarians can assign student, other, or faculty roles only.
+                              Librarians can assign student or faculty roles here. Assistant librarian is still a valid account type, but only admins can change assistant librarian, librarian, or admin accounts.
                             </div>
                           ) : null}
                         </div>
