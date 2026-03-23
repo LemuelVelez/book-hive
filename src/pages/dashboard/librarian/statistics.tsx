@@ -32,6 +32,19 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { fetchBooks, type BookDTO, type LibraryArea } from "@/lib/books";
 import { fetchBorrowRecords, type BorrowRecordDTO } from "@/lib/borrows";
@@ -64,6 +77,16 @@ type AreaBreakdownRow = {
   totalBorrowCount: number;
   activeBorrowCount: number;
 };
+
+type ChartTooltipPayload = {
+  color?: string;
+  dataKey?: string;
+  name?: string;
+  value?: number | string;
+  payload?: Record<string, any>;
+};
+
+const PIE_COLORS = ["#22c55e", "#f59e0b", "#38bdf8", "#a855f7"];
 
 function pickNumber(...values: Array<number | string | null | undefined>) {
   for (const value of values) {
@@ -113,6 +136,11 @@ function normalizeLibraryAreaLabel(area?: LibraryArea | string | null) {
     default:
       return "Unassigned";
   }
+}
+
+function shortenLabel(value: string, maxLength = 18) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
 function buildBorrowCountsMap(records: BorrowRecordDTO[]) {
@@ -217,6 +245,43 @@ function GraphCard({
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
+  );
+}
+
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  valueFormatter = fmtCount,
+}: {
+  active?: boolean;
+  payload?: ChartTooltipPayload[];
+  label?: string;
+  valueFormatter?: (value: number) => string;
+}) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 shadow-xl">
+      {label ? <div className="mb-1 text-xs font-medium text-white">{label}</div> : null}
+      <div className="space-y-1">
+        {payload.map((entry, index) => {
+          const numericValue = typeof entry.value === "number" ? entry.value : Number(entry.value || 0);
+          return (
+            <div key={`${entry.dataKey || entry.name || "item"}-${index}`} className="flex items-center justify-between gap-4 text-xs">
+              <span className="flex items-center gap-2 text-white/75">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: entry.color || "#38bdf8" }}
+                />
+                {entry.name || entry.dataKey || "Value"}
+              </span>
+              <span className="font-semibold text-white">{valueFormatter(Number.isFinite(numericValue) ? numericValue : 0)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -388,6 +453,46 @@ export default function LibrarianStatisticsPage() {
     };
   }, [totals.availableCopies, totals.totalCopies]);
 
+  const topBorrowedChartData = React.useMemo(
+    () =>
+      topBorrowedRows.map((row) => ({
+        name: shortenLabel(row.title, 20),
+        fullTitle: row.title,
+        author: row.author,
+        totalBorrowCount: row.totalBorrowCount,
+        activeBorrowCount: row.activeBorrowCount,
+      })),
+    [topBorrowedRows]
+  );
+
+  const areaBreakdownChartData = React.useMemo(
+    () =>
+      areaBreakdown.map((row) => ({
+        name: shortenLabel(row.label, 18),
+        fullLabel: row.label,
+        totalTitles: row.totalTitles,
+        totalBorrowCount: row.totalBorrowCount,
+        activeBorrowCount: row.activeBorrowCount,
+      })),
+    [areaBreakdown]
+  );
+
+  const inventoryMixData = React.useMemo(
+    () => [
+      {
+        name: "Available",
+        value: inventory.availableNow,
+        subtitle: `${inventory.availabilityPercent.toFixed(1)}% of filtered copies`,
+      },
+      {
+        name: "Borrowed",
+        value: inventory.borrowedNow,
+        subtitle: `${inventory.utilizationPercent.toFixed(1)}% of filtered copies`,
+      },
+    ],
+    [inventory.availabilityPercent, inventory.availableNow, inventory.borrowedNow, inventory.utilizationPercent]
+  );
+
   const printableRecords = React.useMemo<PrintableBookStatisticsRecord[]>(
     () =>
       filtered.map((row) => ({
@@ -472,73 +577,108 @@ export default function LibrarianStatisticsPage() {
       <div className="grid gap-4 mb-4 xl:grid-cols-3">
         <GraphCard
           title="Top borrowed books"
-          subtitle="Quick visual ranking of the most borrowed titles in the current result set."
+          subtitle="Visual ranking of the most borrowed titles in the current result set."
           icon={<BarChart3 className="h-4 w-4" />}
         >
-          {topBorrowedRows.length === 0 ? (
+          {topBorrowedChartData.length === 0 ? (
             <div className="text-sm text-white/60">No data available for this filter.</div>
           ) : (
-            <div className="space-y-3">
-              {topBorrowedRows.map((row, index) => {
-                const max = topBorrowedRows[0]?.totalBorrowCount || 1;
-                const width = toPercent(row.totalBorrowCount, max);
-                return (
-                  <div key={row.id} className="space-y-1.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
-                          {index + 1}. {row.title}
-                        </div>
-                        <div className="text-xs text-white/55 truncate">{row.author}</div>
-                      </div>
-                      <div className="shrink-0 text-sm font-semibold text-sky-100">{fmtCount(row.totalBorrowCount)}</div>
-                    </div>
-                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-linear-to-r from-sky-400 via-cyan-400 to-emerald-400"
-                        style={{ width: `${Math.max(width, 8)}%` }}
-                      />
-                    </div>
+            <>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topBorrowedChartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fill: "#cbd5e1", fontSize: 11 }} axisLine={false} tickLine={false} interval={0} angle={-18} textAnchor="end" height={56} />
+                    <YAxis tick={{ fill: "#cbd5e1", fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip
+                      content={
+                        <ChartTooltip
+                          valueFormatter={fmtCount}
+                        />
+                      }
+                      cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                      formatter={(value: number) => fmtCount(value)}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullTitle || "Book"}
+                    />
+                    <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
+                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[8, 8, 0, 0]} fill="#38bdf8" />
+                    <Bar dataKey="activeBorrowCount" name="Currently Borrowed" radius={[8, 8, 0, 0]} fill="#22c55e" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs text-white/60">Top title</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{topBorrowedRows[0]?.title || "—"}</div>
+                  <div className="mt-1 text-xs text-white/55">
+                    {topBorrowedRows[0]
+                      ? `${fmtCount(topBorrowedRows[0].totalBorrowCount)} all-time borrows`
+                      : "No records yet."}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs text-white/60">Books ranked</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{fmtCount(topBorrowedRows.length)}</div>
+                  <div className="mt-1 text-xs text-white/55">Top results included in the chart.</div>
+                </div>
+              </div>
+            </>
           )}
         </GraphCard>
 
         <GraphCard
           title="Borrowing by area"
-          subtitle="Shows which library areas contribute the most borrowing activity."
+          subtitle="Compares total and active borrowing activity across library sections."
           icon={<Layers3 className="h-4 w-4" />}
         >
-          {areaBreakdown.length === 0 ? (
+          {areaBreakdownChartData.length === 0 ? (
             <div className="text-sm text-white/60">No area breakdown available for this filter.</div>
           ) : (
-            <div className="space-y-3">
-              {areaBreakdown.map((row) => {
-                const max = areaBreakdown[0]?.totalBorrowCount || 1;
-                const width = toPercent(row.totalBorrowCount, max);
-                return (
-                  <div key={row.key} className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-white">{row.label}</div>
-                        <div className="text-xs text-white/55">
-                          {fmtCount(row.totalTitles)} titles • {fmtCount(row.activeBorrowCount)} active
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-sm font-semibold text-violet-100">{fmtCount(row.totalBorrowCount)}</div>
-                    </div>
-                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-linear-to-r from-violet-400 via-fuchsia-400 to-pink-400"
-                        style={{ width: `${Math.max(width, 8)}%` }}
-                      />
-                    </div>
+            <>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={areaBreakdownChartData} layout="vertical" margin={{ top: 8, right: 8, left: 12, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" horizontal={true} vertical={false} />
+                    <XAxis type="number" tick={{ fill: "#cbd5e1", fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fill: "#cbd5e1", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={120}
+                    />
+                    <Tooltip
+                      content={<ChartTooltip valueFormatter={fmtCount} />}
+                      cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                      formatter={(value: number) => fmtCount(value)}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullLabel || "Area"}
+                    />
+                    <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
+                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[0, 8, 8, 0]} fill="#a855f7" />
+                    <Bar dataKey="activeBorrowCount" name="Currently Borrowed" radius={[0, 8, 8, 0]} fill="#f472b6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs text-white/60">Top area</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{areaBreakdown[0]?.label || "—"}</div>
+                  <div className="mt-1 text-xs text-white/55">
+                    {areaBreakdown[0]
+                      ? `${fmtCount(areaBreakdown[0].totalBorrowCount)} all-time borrows`
+                      : "No area data yet."}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs text-white/60">Areas represented</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{fmtCount(areaBreakdown.length)}</div>
+                  <div className="mt-1 text-xs text-white/55">Distinct library sections in the filtered view.</div>
+                </div>
+              </div>
+            </>
           )}
         </GraphCard>
 
@@ -547,44 +687,50 @@ export default function LibrarianStatisticsPage() {
           subtitle="Snapshot of how much of the filtered inventory is currently available versus borrowed."
           icon={<TrendingUp className="h-4 w-4" />}
         >
-          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-white/70">Borrowed now</span>
-              <span className="font-semibold text-white">{fmtCount(inventory.borrowedNow)}</span>
-            </div>
-            <div className="mt-2 h-3 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-linear-to-r from-amber-400 via-orange-400 to-rose-400"
-                style={{ width: `${Math.max(inventory.utilizationPercent, inventory.borrowedNow > 0 ? 6 : 0)}%` }}
-              />
-            </div>
-            <div className="mt-1 text-xs text-white/55">{inventory.utilizationPercent.toFixed(1)}% of filtered copies are currently out.</div>
+          {totals.totalCopies <= 0 ? (
+            <div className="text-sm text-white/60">No inventory data available for this filter.</div>
+          ) : (
+            <>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={inventoryMixData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={68}
+                      outerRadius={96}
+                      paddingAngle={4}
+                      stroke="rgba(15,23,42,0.9)"
+                      strokeWidth={2}
+                    >
+                      {inventoryMixData.map((entry, index) => (
+                        <Cell key={`${entry.name}-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<ChartTooltip valueFormatter={fmtCount} />} formatter={(value: number) => fmtCount(value)} />
+                    <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
 
-            <div className="mt-5 flex items-center justify-between gap-3 text-sm">
-              <span className="text-white/70">Available now</span>
-              <span className="font-semibold text-white">{fmtCount(inventory.availableNow)}</span>
-            </div>
-            <div className="mt-2 h-3 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-linear-to-r from-emerald-400 via-teal-400 to-cyan-400"
-                style={{ width: `${Math.max(inventory.availabilityPercent, inventory.availableNow > 0 ? 6 : 0)}%` }}
-              />
-            </div>
-            <div className="mt-1 text-xs text-white/55">{inventory.availabilityPercent.toFixed(1)}% of filtered copies remain available.</div>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <div className="text-xs text-white/60">Most active title</div>
-              <div className="mt-1 text-sm font-semibold text-white">{topBorrowedRows[0]?.title || "—"}</div>
-              <div className="mt-1 text-xs text-white/55">{topBorrowedRows[0] ? `${fmtCount(topBorrowedRows[0].totalBorrowCount)} all-time borrows` : "No records yet."}</div>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <div className="text-xs text-white/60">Areas represented</div>
-              <div className="mt-1 text-sm font-semibold text-white">{fmtCount(areaBreakdown.length)}</div>
-              <div className="mt-1 text-xs text-white/55">Distinct library sections in the filtered view.</div>
-            </div>
-          </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {inventoryMixData.map((item, index) => (
+                  <div key={item.name} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="flex items-center gap-2 text-xs text-white/60">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+                      />
+                      <span>{item.name}</span>
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-white">{fmtCount(item.value)}</div>
+                    <div className="mt-1 text-xs text-white/55">{item.subtitle}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </GraphCard>
       </div>
 
