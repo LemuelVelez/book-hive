@@ -19,7 +19,7 @@ const VerifyEmailCallbackPage = lazy(
 // Dashboards
 const StudentDashboard = lazy(() => import('./pages/dashboard/student/dashboard'))
 const StudentBooksPage = lazy(() => import('./pages/dashboard/student/book'))
-const StudentCirculationPage = lazy(
+const StudentBorrowedBooksPage = lazy(
   () => import('./pages/dashboard/student/circulation')
 )
 const StudentInsightsHubPage = lazy(
@@ -55,7 +55,7 @@ const LibrarianSettingsPage = lazy(
 
 const FacultyDashboard = lazy(() => import('./pages/dashboard/faculty/dashboard'))
 const FacultyBooksPage = lazy(() => import('./pages/dashboard/faculty/book'))
-const FacultyCirculationPage = lazy(
+const FacultyBorrowedBooksPage = lazy(
   () => import('./pages/dashboard/faculty/circulation')
 )
 const FacultyFinesPage = lazy(() => import('./pages/dashboard/faculty/fines'))
@@ -147,12 +147,12 @@ function App() {
             }
           />
 
-          {/* ✅ Student / Other circulation page */}
+          {/* ✅ Student / Other borrowed books page */}
           <Route
-            path="/dashboard/circulation"
+            path="/dashboard/borrowed-books"
             element={
               <RequireRole allow={['student', 'other']}>
-                <StudentCirculationPage />
+                <StudentBorrowedBooksPage />
               </RequireRole>
             }
           />
@@ -342,12 +342,12 @@ function App() {
             }
           />
 
-          {/* ✅ Faculty circulation page */}
+          {/* ✅ Faculty borrowed books page */}
           <Route
-            path="/dashboard/faculty/circulation"
+            path="/dashboard/faculty/borrowed-books"
             element={
               <RequireRole allow={['faculty']}>
-                <FacultyCirculationPage />
+                <FacultyBorrowedBooksPage />
               </RequireRole>
             }
           />

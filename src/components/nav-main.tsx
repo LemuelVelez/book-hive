@@ -134,9 +134,9 @@ export function NavMain() {
                 to: "/dashboard/books",
             },
             {
-                label: "Circulation",
+                label: "Borrowed Books",
                 icon: ListChecks,
-                to: "/dashboard/circulation",
+                to: "/dashboard/borrowed-books",
             },
             {
                 label: "Fines",
@@ -229,9 +229,9 @@ export function NavMain() {
                 to: "/dashboard/faculty/books",
             },
             {
-                label: "Circulation",
+                label: "Borrowed Books",
                 icon: ListChecks,
-                to: "/dashboard/faculty/circulation",
+                to: "/dashboard/faculty/borrowed-books",
             },
             {
                 label: "Fines",
