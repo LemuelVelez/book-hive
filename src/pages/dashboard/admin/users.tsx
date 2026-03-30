@@ -8,15 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { toast } from "sonner";
 import {
   Users2,
@@ -35,6 +26,9 @@ import {
   Wand2,
   Mail,
   Copy,
+  CalendarDays,
+  BadgeCheck,
+  Clock3,
 } from "lucide-react";
 import {
   Select,
@@ -52,6 +46,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 import { useSession } from "@/hooks/use-session";
 import {
@@ -64,6 +64,13 @@ import {
 } from "@/lib/authentication";
 import { ROUTES } from "@/api/auth/route";
 
+type VisibleRole =
+  | "student"
+  | "faculty"
+  | "assistant_librarian"
+  | "librarian"
+  | "admin";
+
 type UserRowDTO = {
   id: string;
   email: string;
@@ -72,12 +79,12 @@ type UserRowDTO = {
   /**
    * ✅ role is used for authorization, guards, and admin role management
    */
-  role: Role;
+  role: VisibleRole;
 
   /**
    * accountType is informational only
    */
-  accountType: Role;
+  accountType: VisibleRole;
 
   // approval
   isApproved: boolean;
@@ -90,7 +97,7 @@ type UserRowDTO = {
   avatarUrl?: string | null;
 };
 
-function roleBadgeClasses(role: Role) {
+function roleBadgeClasses(role: VisibleRole) {
   switch (role) {
     case "admin":
       return "bg-red-600/80 hover:bg-red-600 text-white border-red-500/70";
@@ -100,19 +107,33 @@ function roleBadgeClasses(role: Role) {
       return "bg-indigo-600/80 hover:bg-indigo-600 text-white border-indigo-500/70";
     case "faculty":
       return "bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70";
-    case "other":
-      return "bg-slate-600/80 hover:bg-slate-600 text-white border-slate-500/70";
     default:
       return "bg-blue-600/80 hover:bg-blue-600 text-white border-blue-500/70"; // student
   }
 }
 
-function roleLabel(role: Role) {
+function roleLabel(role: VisibleRole) {
   switch (role) {
     case "assistant_librarian":
       return "assistant librarian";
     default:
       return role;
+  }
+}
+
+function roleDescription(role: VisibleRole) {
+  switch (role) {
+    case "admin":
+      return "System-wide access and administrative controls.";
+    case "librarian":
+      return "Primary library staff with operational access.";
+    case "assistant_librarian":
+      return "Assistant librarian accounts aligned to the librarian flow.";
+    case "faculty":
+      return "Faculty members with role-based borrowing and account access.";
+    case "student":
+    default:
+      return "Student accounts for regular borrowing and profile access.";
   }
 }
 
@@ -122,18 +143,18 @@ function approvalBadgeClasses(approved: boolean) {
     : "bg-orange-600/80 hover:bg-orange-600 text-white border-orange-500/70";
 }
 
-const ROLE_OPTIONS: Role[] = [
+const ROLE_OPTIONS: VisibleRole[] = [
   "student",
-  "other",
   "faculty",
   "assistant_librarian",
   "librarian",
   "admin",
 ];
 
-const ACCOUNT_TYPE_OPTIONS: Role[] = [
+const DISPLAY_ROLE_GROUPS: VisibleRole[] = ROLE_OPTIONS;
+
+const ACCOUNT_TYPE_OPTIONS: VisibleRole[] = [
   "student",
-  "other",
   "faculty",
   "assistant_librarian",
   "librarian",
@@ -146,10 +167,10 @@ type BusyState =
 
 type ConfirmState =
   | { type: "delete"; id: string }
-  | { type: "role"; id: string; from: Role; to: Role }
+  | { type: "role"; id: string; from: VisibleRole; to: VisibleRole }
   | null;
 
-function normalizeRole(raw: unknown): Role {
+function normalizeRole(raw: unknown): VisibleRole {
   const v = String(raw ?? "").trim().toLowerCase();
   if (v === "student") return "student";
   if (
@@ -162,10 +183,10 @@ function normalizeRole(raw: unknown): Role {
   if (v === "librarian") return "librarian";
   if (v === "faculty") return "faculty";
   if (v === "admin") return "admin";
-  return "other";
+  return "student";
 }
 
-function accountTypeFromRole(role: Role): Role {
+function accountTypeFromRole(role: Role): VisibleRole {
   switch (role) {
     case "student":
     case "faculty":
@@ -174,7 +195,7 @@ function accountTypeFromRole(role: Role): Role {
     case "admin":
       return role;
     default:
-      return "other";
+      return "student";
   }
 }
 
@@ -195,6 +216,16 @@ function resolveAvatarUrl(url?: string | null) {
   return `/${s}`;
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
 function UserAvatar({
   name,
   email,
@@ -213,7 +244,7 @@ function UserAvatar({
 
   return (
     <div
-      className="rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center"
+      className="rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center shrink-0"
       style={{ width: size, height: size }}
       title={label}
     >
@@ -227,6 +258,26 @@ function UserAvatar({
       ) : (
         <span className="text-[11px] font-semibold text-white/80">{initialsFromName(label)}</span>
       )}
+    </div>
+  );
+}
+
+function StatPill({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-white/50">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="mt-1 text-sm font-semibold text-white">{value}</div>
     </div>
   );
 }
@@ -301,7 +352,7 @@ async function listUsersWithRole(): Promise<UserRowDTO[]> {
  * ✅ Update role ONLY (do not change accountType).
  * This bypasses lib/updateUserRoleById which may also send accountType.
  */
-async function updateUserRoleRoleOnly(id: string, role: Role) {
+async function updateUserRoleRoleOnly(id: string, role: VisibleRole) {
   const data = await requestJSON<any>(ROUTES.users.updateRole(id), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -347,7 +398,7 @@ export default function AdminUsersPage() {
   const [busy, setBusy] = React.useState<BusyState>(null);
 
   // Role drafts per user row (for "Change role" UX)
-  const [roleDraft, setRoleDraft] = React.useState<Record<string, Role>>({});
+  const [roleDraft, setRoleDraft] = React.useState<Record<string, VisibleRole>>({});
 
   // Create user dialog state
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -358,10 +409,10 @@ export default function AdminUsersPage() {
   const [cPassword, setCPassword] = React.useState("");
   const [showCreatePassword, setShowCreatePassword] = React.useState(false);
   const [cAutoPassword, setCAutoPassword] = React.useState(true);
-  const [cRole, setCRole] = React.useState<Role>("student");
+  const [cRole, setCRole] = React.useState<VisibleRole>("student");
 
   // accountType is informational only
-  const [cAccountType, setCAccountType] = React.useState<Role>("student");
+  const [cAccountType, setCAccountType] = React.useState<VisibleRole>("student");
 
   // Optional student fields (only if cAccountType === "student")
   const [cStudentId, setCStudentId] = React.useState("");
@@ -434,8 +485,8 @@ export default function AdminUsersPage() {
       const list = await listUsersWithRole();
       setUsers(list);
       setRoleDraft((prev) => {
-        const next: Record<string, Role> = { ...prev };
-        for (const u of list) next[u.id] = (next[u.id] ?? u.role) as Role;
+        const next: Record<string, VisibleRole> = { ...prev };
+        for (const u of list) next[u.id] = next[u.id] ?? u.role;
         return next;
       });
     } catch (err: any) {
@@ -478,9 +529,8 @@ export default function AdminUsersPage() {
   const pendingCount = React.useMemo(() => users.filter((u) => !u.isApproved).length, [users]);
 
   const countsByRole = React.useMemo(() => {
-    const m: Record<Role, number> = {
+    const m: Record<VisibleRole, number> = {
       student: 0,
-      other: 0,
       faculty: 0,
       assistant_librarian: 0,
       librarian: 0,
@@ -489,6 +539,19 @@ export default function AdminUsersPage() {
     for (const u of users) m[u.role] = (m[u.role] ?? 0) + 1;
     return m;
   }, [users]);
+
+  const roleGroups = React.useMemo(() => {
+    return DISPLAY_ROLE_GROUPS.map((role) => {
+      const entries = filtered.filter((u) => u.role === role);
+      return {
+        role,
+        entries,
+        total: entries.length,
+        approved: entries.filter((u) => u.isApproved).length,
+        pending: entries.filter((u) => !u.isApproved).length,
+      };
+    });
+  }, [filtered]);
 
   const onApprove = async (id: string) => {
     setBusy({ id, action: "approve" });
@@ -531,7 +594,7 @@ export default function AdminUsersPage() {
     }
   };
 
-  const onUpdateRole = async (id: string, nextRole: Role) => {
+  const onUpdateRole = async (id: string, nextRole: VisibleRole) => {
     setBusy({ id, action: "role" });
     try {
       await updateUserRoleRoleOnly(id, nextRole);
@@ -620,19 +683,19 @@ export default function AdminUsersPage() {
       if (creds?.requested) {
         if (creds.sent) {
           toast.success("User created & credentials emailed", {
-            description: "If the user didn’t receive it, use the key button in the user row to resend.",
+            description: "If the user didn’t receive it, use the key button in the user card to resend.",
           });
         } else {
           toast.error("User created, but email sending failed", {
             description:
               creds.error ||
-              "Check SMTP settings (GMAIL_USER / GMAIL_APP_PASSWORD) and server logs, then resend from the user row.",
+              "Check SMTP settings (GMAIL_USER / GMAIL_APP_PASSWORD) and server logs, then resend from the user card.",
           });
         }
       } else {
         toast.success("User created", {
           description:
-            "Credentials were not emailed. Use the key button in the user row to send/reset credentials anytime.",
+            "Credentials were not emailed. Use the key button in the user card to send/reset credentials anytime.",
         });
       }
 
@@ -690,25 +753,210 @@ export default function AdminUsersPage() {
     }
   };
 
+  const renderUserAccordion = (u: UserRowDTO) => {
+    const isBusyApprove = busy?.id === u.id && busy?.action === "approve";
+    const isBusyDisapprove = busy?.id === u.id && busy?.action === "disapprove";
+    const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
+    const isBusyRole = busy?.id === u.id && busy?.action === "role";
+    const isBusyCred = busy?.id === u.id && busy?.action === "credentials";
+    const anyBusyForRow = busy?.id === u.id;
+
+    const currentRole = u.role;
+    const draft = roleDraft[u.id] ?? currentRole;
+    const roleChanged = draft !== currentRole;
+
+    const isSelf = !!selfId && u.id === selfId;
+
+    return (
+      <AccordionItem
+        key={u.id}
+        value={u.id}
+        className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
+      >
+        <AccordionTrigger className="px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5">
+          <div className="min-w-0 text-left">
+            <h3 className="truncate text-sm font-semibold text-white">{u.fullName || "Unnamed user"}</h3>
+          </div>
+        </AccordionTrigger>
+
+        <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={44} />
+
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white truncate max-w-full">
+                    {u.fullName || "Unnamed user"}
+                  </h3>
+                  {isSelf ? (
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
+                      You
+                    </span>
+                  ) : null}
+                  <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
+                    {u.isApproved ? "approved" : "pending"}
+                  </Badge>
+                  <Badge variant="default" className={roleBadgeClasses(currentRole)}>
+                    {roleLabel(currentRole)}
+                  </Badge>
+                </div>
+
+                <div className="text-sm text-white/80 break-all">{u.email}</div>
+
+                <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono max-w-full truncate">
+                    ID: {u.id}
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+                    Account type: {roleLabel(u.accountType)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <StatPill
+                icon={<CalendarDays className="h-3.5 w-3.5" />}
+                label="Created"
+                value={formatDateTime(u.createdAt)}
+              />
+              <StatPill
+                icon={<BadgeCheck className="h-3.5 w-3.5" />}
+                label="Approved at"
+                value={formatDateTime(u.approvedAt)}
+              />
+              <StatPill
+                icon={<Clock3 className="h-3.5 w-3.5" />}
+                label="Status"
+                value={u.isApproved ? "Active access" : "Needs review"}
+              />
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wide text-white/55">Change role</Label>
+                <Select
+                  value={draft}
+                  onValueChange={(v) => setRoleDraft((p) => ({ ...p, [u.id]: v as VisibleRole }))}
+                  disabled={isSelf || anyBusyForRow}
+                >
+                  <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 text-white border-white/10">
+                    {ROLE_OPTIONS.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {roleLabel(r)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {roleChanged ? (
+                <span className="block text-xs text-violet-200">
+                  Pending change to <span className="font-semibold">{roleLabel(draft)}</span>
+                </span>
+              ) : (
+                <span className="block text-xs text-white/45">No unsaved role changes.</span>
+              )}
+
+              {isSelf ? (
+                <p className="text-xs text-white/50">You can’t change your own role here.</p>
+              ) : (
+                <p className="text-xs text-white/45">
+                  Permissions follow the selected role. Account type remains informational only.
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                onClick={() => openCredentialsDialog(u)}
+                disabled={anyBusyForRow}
+                title="Send / resend login credentials"
+              >
+                {isBusyCred ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
+                Credentials
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                disabled={!roleChanged || anyBusyForRow || isSelf}
+                onClick={() => {
+                  const from = currentRole;
+                  const to = draft;
+                  setConfirm({ type: "role", id: u.id, from, to });
+                }}
+                title={roleChanged ? "Update role" : "No role changes"}
+              >
+                {isBusyRole ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save role
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                onClick={() => onApprove(u.id)}
+                disabled={u.isApproved || anyBusyForRow}
+                title={u.isApproved ? "Already approved" : "Approve user"}
+              >
+                {isBusyApprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                Approve
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                onClick={() => onDisapprove(u.id)}
+                disabled={!u.isApproved || anyBusyForRow}
+                title={!u.isApproved ? "Already pending" : "Disapprove user"}
+              >
+                {isBusyDisapprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+                Disapprove
+              </Button>
+
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full justify-start hover:opacity-95"
+                onClick={() => setConfirm({ type: "delete", id: u.id })}
+                disabled={anyBusyForRow || isSelf}
+                title={isSelf ? "You can’t delete yourself" : "Delete user"}
+              >
+                {isBusyDelete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Delete
+              </Button>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    );
+  };
+
   return (
     <DashboardLayout title="Users">
-      <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <Users2 className="h-5 w-5" />
           <div>
             <h2 className="text-lg font-semibold leading-tight">Admin user management</h2>
             <p className="text-xs text-white/70">
-              Add users, change roles, approve/disapprove, delete/remove users. Pending:{" "}
-              <span className="font-semibold text-orange-200">{pendingCount}</span>
+              Add users, change roles, approve or disapprove accounts, resend credentials, and remove users.
+              Pending: <span className="font-semibold text-orange-200">{pendingCount}</span>
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
               <span className="inline-flex items-center gap-1">
                 <Badge className={roleBadgeClasses("student")}>{roleLabel("student")}</Badge>
                 <span className="opacity-80">{countsByRole.student}</span>
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("other")}>{roleLabel("other")}</Badge>
-                <span className="opacity-80">{countsByRole.other}</span>
               </span>
               <span className="inline-flex items-center gap-1">
                 <Badge className={roleBadgeClasses("faculty")}>{roleLabel("faculty")}</Badge>
@@ -742,14 +990,14 @@ export default function AdminUsersPage() {
           >
             <DialogTrigger asChild>
               <Button className="bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600">
-                <UserPlus className="h-4 w-4 mr-2" />
+                <UserPlus className="mr-2 h-4 w-4" />
                 Add user
               </Button>
             </DialogTrigger>
 
             <DialogContent className="support-scroll w-[92vw] sm:w-auto max-h-[80dvh] overflow-y-auto bg-slate-900 text-white border-white/10">
               <DialogHeader>
-                <DialogTitle className="text-white flex items-center gap-2">
+                <DialogTitle className="flex items-center gap-2 text-white">
                   <UserPlus className="h-5 w-5" />
                   Create new user
                 </DialogTitle>
@@ -864,7 +1112,7 @@ export default function AdminUsersPage() {
 
                 <div className="grid gap-2">
                   <Label>Role (used for access control)</Label>
-                  <Select value={cRole} onValueChange={(v) => setCRole(v as Role)}>
+                  <Select value={cRole} onValueChange={(v) => setCRole(v as VisibleRole)}>
                     <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
@@ -885,7 +1133,7 @@ export default function AdminUsersPage() {
 
                 <div className="grid gap-2">
                   <Label>Account type (informational only)</Label>
-                  <Select value={cAccountType} onValueChange={(v) => setCAccountType(v as Role)}>
+                  <Select value={cAccountType} onValueChange={(v) => setCAccountType(v as VisibleRole)}>
                     <SelectTrigger className="bg-slate-900/70 border-white/10 text-white">
                       <SelectValue placeholder="Select account type" />
                     </SelectTrigger>
@@ -904,7 +1152,7 @@ export default function AdminUsersPage() {
 
                 {cAccountType === "student" && (
                   <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                    <div className="flex items-center gap-2 text-xs text-white/70 mb-3">
+                    <div className="mb-3 flex items-center gap-2 text-xs text-white/70">
                       <ShieldAlert className="h-4 w-4" />
                       Student fields (required)
                     </div>
@@ -964,7 +1212,7 @@ export default function AdminUsersPage() {
                       </Label>
                       <p className="text-xs text-white/55">
                         Sends an email containing their login email + temporary password (and a verify-email link if needed).
-                        You can resend anytime from the user row using the key button.
+                        You can resend anytime from the user card using the key button.
                       </p>
                     </div>
                   </div>
@@ -1045,12 +1293,12 @@ export default function AdminUsersPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
+            <div className="space-y-3">
+              <Skeleton className="h-28 w-full rounded-xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
             </div>
           ) : error ? (
             <div className="py-6 text-center text-sm text-red-300">{error}</div>
@@ -1061,181 +1309,67 @@ export default function AdminUsersPage() {
               <span className="text-xs opacity-80">Try a different search.</span>
             </div>
           ) : (
-            <Table>
-              <TableCaption className="text-xs text-white/60">
-                Showing {filtered.length} {filtered.length === 1 ? "user" : "users"}.
-              </TableCaption>
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-3">
+                  <div className="text-xs uppercase tracking-wide text-orange-100/80">Pending users</div>
+                  <div className="mt-1 text-2xl font-semibold text-orange-100">{filtered.filter((u) => !u.isApproved).length}</div>
+                  <p className="mt-1 text-xs text-orange-100/70">Still waiting for approval or follow-up actions.</p>
+                </div>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+                  <div className="text-xs uppercase tracking-wide text-emerald-100/80">Approved users</div>
+                  <div className="mt-1 text-2xl font-semibold text-emerald-100">{filtered.filter((u) => u.isApproved).length}</div>
+                  <p className="mt-1 text-xs text-emerald-100/70">Currently approved and ready for role-based access.</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs uppercase tracking-wide text-white/60">Showing results</div>
+                  <div className="mt-1 text-2xl font-semibold text-white">{filtered.length}</div>
+                  <p className="mt-1 text-xs text-white/55">
+                    Role groups stay collapsed by default, and each user opens from their own name accordion.
+                  </p>
+                </div>
+              </div>
 
-              <TableHeader>
-                <TableRow className="border-white/10">
-                  <TableHead className="w-[92px] text-xs font-semibold text-white/70">User ID</TableHead>
-                  <TableHead className="w-16 text-xs font-semibold text-white/70">Photo</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Email</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Full name</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Role</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Approval</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {filtered.map((u) => {
-                  const isBusyApprove = busy?.id === u.id && busy?.action === "approve";
-                  const isBusyDisapprove = busy?.id === u.id && busy?.action === "disapprove";
-                  const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
-                  const isBusyRole = busy?.id === u.id && busy?.action === "role";
-                  const isBusyCred = busy?.id === u.id && busy?.action === "credentials";
-                  const anyBusyForRow = busy?.id === u.id;
-
-                  const currentRole = u.role;
-                  const draft = roleDraft[u.id] ?? currentRole;
-                  const roleChanged = draft !== currentRole;
-
-                  const isSelf = !!selfId && u.id === selfId;
-
-                  return (
-                    <TableRow key={u.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                      <TableCell className="text-xs opacity-80 max-w-[180px] truncate font-mono">
-                        {u.id}
-                        {isSelf ? (
-                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/80">you</span>
-                        ) : null}
-                      </TableCell>
-
-                      <TableCell>
-                        <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={34} />
-                      </TableCell>
-
-                      <TableCell className="text-sm opacity-90">{u.email}</TableCell>
-
-                      <TableCell className="text-sm">{u.fullName || <span className="opacity-50">—</span>}</TableCell>
-
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="default" className={roleBadgeClasses(currentRole)}>
-                              {roleLabel(currentRole)}
-                            </Badge>
-
-                            <Select
-                              value={draft}
-                              onValueChange={(v) => setRoleDraft((p) => ({ ...p, [u.id]: v as Role }))}
-                              disabled={isSelf || anyBusyForRow}
-                            >
-                              <SelectTrigger className="h-8 w-[170px] bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="bg-slate-900 text-white border-white/10">
-                                {ROLE_OPTIONS.map((r) => (
-                                  <SelectItem key={r} value={r}>
-                                    {roleLabel(r)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="text-[11px] text-white/45">
-                            Account type (info): <span className="text-white/70">{roleLabel(u.accountType)}</span>
-                          </div>
+              <Accordion
+                type="multiple"
+                className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+              >
+                {roleGroups.map((group) => (
+                  <AccordionItem
+                    key={group.role}
+                    value={group.role}
+                    className="self-start overflow-hidden rounded-2xl border border-white/10 bg-slate-900/35 px-0"
+                  >
+                    <AccordionTrigger className="px-4 py-3 text-white hover:no-underline">
+                      <div className="flex flex-col items-start gap-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
+                        <Badge className={roleBadgeClasses(group.role)}>{roleLabel(group.role)}</Badge>
+                        <span className="text-sm font-semibold text-white">{group.total} user{group.total === 1 ? "" : "s"}</span>
+                        <span className="text-xs text-white/55">{roleDescription(group.role)}</span>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/65">
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5">
+                            Approved: {group.approved}
+                          </span>
+                          <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5">
+                            Pending: {group.pending}
+                          </span>
                         </div>
-
-                        {isSelf ? <div className="mt-1 text-[11px] text-white/50">You can’t change your own role here.</div> : null}
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
-                          {u.isApproved ? "approved" : "pending"}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="inline-flex items-center gap-2">
-                          {/* Credentials (send/resend) */}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
-                            onClick={() => openCredentialsDialog(u)}
-                            disabled={anyBusyForRow}
-                            title="Send / resend login credentials"
-                            aria-label="Send / resend login credentials"
-                          >
-                            {isBusyCred ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                          </Button>
-
-                          {/* Save role */}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
-                            disabled={!roleChanged || anyBusyForRow || isSelf}
-                            onClick={() => {
-                              const from = currentRole;
-                              const to = draft;
-                              setConfirm({ type: "role", id: u.id, from, to });
-                            }}
-                            title={roleChanged ? "Update role" : "No role changes"}
-                            aria-label="Update role"
-                          >
-                            {isBusyRole ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                          </Button>
-
-                          {/* Approve */}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
-                            onClick={() => onApprove(u.id)}
-                            disabled={u.isApproved || anyBusyForRow}
-                            title={u.isApproved ? "Already approved" : "Approve user"}
-                            aria-label="Approve user"
-                          >
-                            {isBusyApprove ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                          </Button>
-
-                          {/* Disapprove */}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
-                            onClick={() => onDisapprove(u.id)}
-                            disabled={!u.isApproved || anyBusyForRow}
-                            title={!u.isApproved ? "Already pending" : "Disapprove user"}
-                            aria-label="Disapprove user"
-                          >
-                            {isBusyDisapprove ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                          </Button>
-
-                          {/* Delete */}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            className="hover:opacity-95"
-                            onClick={() => setConfirm({ type: "delete", id: u.id })}
-                            disabled={anyBusyForRow || isSelf}
-                            title={isSelf ? "You can’t delete yourself" : "Delete user"}
-                          >
-                            {isBusyDelete ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                      {group.total === 0 ? (
+                        <div className="rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-white/60">
+                          No {roleLabel(group.role)} users match the current search.
                         </div>
-
-                        {roleChanged ? (
-                          <div className="mt-1 text-[11px] text-white/50">
-                            Pending role change: <span className="text-white/80 font-medium">{roleLabel(draft)}</span>
-                          </div>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      ) : (
+                        <Accordion type="multiple" className="space-y-3">
+                          {group.entries.map(renderUserAccordion)}
+                        </Accordion>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
           )}
         </CardContent>
       </Card>
