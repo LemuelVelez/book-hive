@@ -10,7 +10,6 @@ import {
     type InventorySnapshot,
 } from "@/components/librarian-books/book-form-dialog";
 import { BooksCatalogFilters } from "@/components/librarian-books/books-catalog-filters";
-import { BooksCatalogTable } from "@/components/librarian-books/books-catalog-table";
 import {
     LIBRARY_AREA_OTHER_VALUE,
     buildCatalogSortKey,
@@ -32,6 +31,7 @@ import {
     parseYearOrNull,
     tokenizeSearch,
 } from "@/components/librarian-books/books-constants";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -122,6 +122,189 @@ function buildEditFormValues(book: BookDTO): {
             totalBorrowCount: tracking.total,
         },
     };
+}
+
+function formatDetailValue(value: unknown, fallback = "—") {
+    if (typeof value === "number") return String(value);
+    if (typeof value === "string") {
+        const normalized = value.trim();
+        return normalized || fallback;
+    }
+    return fallback;
+}
+
+function getSubjectsValue(book: BookDTO) {
+    return formatDetailValue(
+        book.subjects || book.genre || book.category || ""
+    );
+}
+
+function getLibraryAreaValue(book: BookDTO) {
+    const value = String(book.libraryArea || "").trim();
+    return value ? formatLibraryAreaLabel(value) : "—";
+}
+
+function getInventoryValue(book: BookDTO) {
+    const inventory = getInventory(book);
+    const total = typeof inventory.total === "number" ? inventory.total : 0;
+    const borrowed = typeof inventory.borrowed === "number" ? inventory.borrowed : 0;
+    const remaining = typeof inventory.remaining === "number" ? inventory.remaining : 0;
+    return `Total: ${total} · Borrowed: ${borrowed} · Available: ${remaining}`;
+}
+
+function getBorrowTrackingValue(book: BookDTO) {
+    const tracking = getBorrowTracking(book);
+    const active = typeof tracking.active === "number" ? tracking.active : 0;
+    const total = typeof tracking.total === "number" ? tracking.total : 0;
+    return `Active: ${active} · All-time: ${total}`;
+}
+
+function getLoanDaysValue(book: BookDTO) {
+    return typeof book.borrowDurationDays === "number" && book.borrowDurationDays > 0
+        ? `${book.borrowDurationDays} day${book.borrowDurationDays === 1 ? "" : "s"}`
+        : "—";
+}
+
+function getStatusMeta(book: BookDTO): { label: string; classes: string } {
+    if (isLibraryUseOnlyBook(book)) {
+        return {
+            label: "Library Use Only",
+            classes: "border-amber-400/30 bg-amber-500/15 text-amber-100",
+        };
+    }
+
+    if (isBorrowableByCopies(book)) {
+        return {
+            label: "Available",
+            classes: "border-emerald-400/30 bg-emerald-500/15 text-emerald-100",
+        };
+    }
+
+    return {
+        label: "Unavailable",
+        classes: "border-rose-400/30 bg-rose-500/15 text-rose-100",
+    };
+}
+
+function CatalogDetail({
+    label,
+    value,
+    children,
+    className = "",
+}: {
+    label: string;
+    value?: React.ReactNode;
+    children?: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <div className={`rounded-xl border border-white/10 bg-black/20 p-3 ${className}`.trim()}>
+            <div className="text-[11px] uppercase tracking-wide text-white/55">{label}</div>
+            <div className="mt-1 text-sm text-white/90 wrap-break-word">{children ?? value ?? "—"}</div>
+        </div>
+    );
+}
+
+function BookCatalogCard({
+    book,
+    onEdit,
+    onDelete,
+}: {
+    book: BookDTO;
+    onEdit: (book: BookDTO) => void;
+    onDelete: (book: BookDTO) => void;
+}) {
+    const status = getStatusMeta(book);
+
+    return (
+        <AccordionItem
+            value={book.id}
+            className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
+        >
+            <AccordionTrigger className="px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5">
+                <div className="min-w-0 flex-1 text-left">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                                    {formatDetailValue(book.callNumber)}
+                                </span>
+                                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
+                                    {status.label}
+                                </span>
+                            </div>
+                            <h3 className="text-sm font-semibold leading-snug text-white wrap-break-word whitespace-normal sm:truncate">
+                                {formatDetailValue(book.title)}
+                            </h3>
+                            <p className="truncate text-xs text-white/60">
+                                {formatDetailValue(book.author)}
+                            </p>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:gap-3">
+                            <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
+                            <CatalogDetail label="Pub. year" value={formatDetailValue(book.publicationYear)} />
+                            <CatalogDetail label="Library area" value={getLibraryAreaValue(book)} />
+                            <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
+                        </div>
+                    </div>
+                </div>
+            </AccordionTrigger>
+
+            <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
+                    <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
+                    <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
+                    <CatalogDetail label="Sub." value={formatDetailValue(book.subtitle)} />
+                    <CatalogDetail label="Pub. year" value={formatDetailValue(book.publicationYear)} />
+                    <CatalogDetail label="Author" value={formatDetailValue(book.author)} />
+                    <CatalogDetail label="Subjects" value={getSubjectsValue(book)} />
+                    <CatalogDetail label="Publisher" value={formatDetailValue(book.publisher)} />
+                    <CatalogDetail label="Library area" value={getLibraryAreaValue(book)} />
+                    <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
+                    <CatalogDetail label="Borrow tracking" value={getBorrowTrackingValue(book)} />
+                    <CatalogDetail label="Barcode" value={formatDetailValue(book.barcode)} />
+                    <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
+                    <CatalogDetail label="Loan days" value={getLoanDaysValue(book)} />
+                    <CatalogDetail label="Status">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.classes}`}>
+                            {status.label}
+                        </span>
+                    </CatalogDetail>
+                    <CatalogDetail label="Actions">
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="border-white/20 text-white/90 hover:bg-white/10"
+                                onClick={() => onEdit(book)}
+                            >
+                                Edit
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={() => {
+                                    if (
+                                        typeof window !== "undefined" &&
+                                        !window.confirm(
+                                            `Delete \"${formatDetailValue(book.title, "this book")}\" from the catalog?`
+                                        )
+                                    ) {
+                                        return;
+                                    }
+                                    onDelete(book);
+                                }}
+                            >
+                                Delete
+                            </Button>
+                        </div>
+                    </CatalogDetail>
+                </div>
+            </AccordionContent>
+        </AccordionItem>
+    );
 }
 
 export default function LibrarianBooksPage() {
@@ -919,12 +1102,12 @@ export default function LibrarianBooksPage() {
                     hasApplied={hasCatalogControlsApplied}
                 />
 
-                <CardContent className="overflow-x-auto">
+                <CardContent className="space-y-3">
                     {loading ? (
-                        <div className="space-y-2">
-                            <Skeleton className="h-9 w-full" />
-                            <Skeleton className="h-9 w-full" />
-                            <Skeleton className="h-9 w-full" />
+                        <div className="space-y-3">
+                            <Skeleton className="h-28 w-full rounded-2xl" />
+                            <Skeleton className="h-28 w-full rounded-2xl" />
+                            <Skeleton className="h-28 w-full rounded-2xl" />
                         </div>
                     ) : error ? (
                         <div className="py-6 text-center text-sm text-red-300">{error}</div>
@@ -937,12 +1120,16 @@ export default function LibrarianBooksPage() {
                             </span>
                         </div>
                     ) : (
-                        <BooksCatalogTable
-                            books={filteredBooks}
-                            onEdit={openEditDialog}
-                            onDelete={handleDelete}
-                            cellScrollbarClasses=""
-                        />
+                        <Accordion type="multiple" className="space-y-3">
+                            {filteredBooks.map((book) => (
+                                <BookCatalogCard
+                                    key={book.id}
+                                    book={book}
+                                    onEdit={openEditDialog}
+                                    onDelete={handleDelete}
+                                />
+                            ))}
+                        </Accordion>
                     )}
                 </CardContent>
             </Card>
