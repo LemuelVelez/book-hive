@@ -4,15 +4,6 @@ import DashboardLayout from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -180,6 +171,22 @@ function formatDateForApi(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+type DetailItemProps = {
+  label: string;
+  value: React.ReactNode;
+};
+
+function DetailItem({ label, value }: DetailItemProps) {
+  return (
+    <div className="rounded-md border border-white/10 bg-slate-950/30 p-3">
+      <div className="text-[11px] uppercase tracking-wide text-white/45">
+        {label}
+      </div>
+      <div className="mt-1 text-sm text-white/90">{value}</div>
+    </div>
+  );
 }
 
 export default function LibrarianBorrowRecordsPage() {
@@ -582,15 +589,6 @@ export default function LibrarianBorrowRecordsPage() {
     return `Current filtered borrow records view • ${statusLabel}${searchLabel}`;
   }, [statusFilter, search]);
 
-  const cellScrollbarClasses =
-    "overflow-x-auto whitespace-nowrap " +
-    "[scrollbar-width:thin] [scrollbar-color:#111827_transparent] " +
-    "[&::-webkit-scrollbar]:h-1.5 " +
-    "[&::-webkit-scrollbar-track]:bg-transparent " +
-    "[&::-webkit-scrollbar-thumb]:bg-slate-700 " +
-    "[&::-webkit-scrollbar-thumb]:rounded-full " +
-    "[&::-webkit-scrollbar-thumb:hover]:bg-slate-600";
-
   const dialogScrollbarClasses =
     "[scrollbar-width:thin] [scrollbar-color:#334155_transparent] " +
     "[&::-webkit-scrollbar]:w-2 " +
@@ -601,8 +599,8 @@ export default function LibrarianBorrowRecordsPage() {
 
   return (
     <DashboardLayout title="Borrow Records">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-lg font-semibold leading-tight">
               Borrow &amp; Return Logs
@@ -615,7 +613,7 @@ export default function LibrarianBorrowRecordsPage() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Button
             type="button"
             variant="outline"
@@ -645,19 +643,19 @@ export default function LibrarianBorrowRecordsPage() {
         </div>
       </div>
 
-      <Card className="bg-slate-800/60 border-white/10">
+      <Card className="border-white/10 bg-slate-800/60">
         <CardHeader className="pb-2">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <CardTitle>Borrow records</CardTitle>
 
-            <div className="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
+            <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by ID, user, book…"
-                  className="pl-9 bg-slate-900/70 border-white/20 text-white"
+                  className="border-white/20 bg-slate-900/70 pl-9 text-white"
                 />
               </div>
 
@@ -668,10 +666,10 @@ export default function LibrarianBorrowRecordsPage() {
                     setStatusFilter(v as "all" | "borrowed" | "returned")
                   }
                 >
-                  <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
+                  <SelectTrigger className="h-9 w-full border-white/20 bg-slate-900/70 text-white">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 text-white border-white/10">
+                  <SelectContent className="border-white/10 bg-slate-900 text-white">
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="borrowed">
                       Active (Borrowed + Pending)
@@ -687,9 +685,9 @@ export default function LibrarianBorrowRecordsPage() {
         <CardContent className="space-y-3">
           {loading ? (
             <div className="space-y-2">
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
             </div>
           ) : error ? (
             <div className="py-6 text-center text-sm text-red-300">{error}</div>
@@ -720,192 +718,163 @@ export default function LibrarianBorrowRecordsPage() {
 
               <Accordion
                 type="multiple"
-                className="w-full"
+                className="w-full space-y-3"
                 defaultValue={
                   groupedByUser.length === 1 ? [groupedByUser[0].key] : []
                 }
               >
-                {groupedByUser.map((group) => (
-                  <AccordionItem
-                    key={group.key}
-                    value={group.key}
-                    className="border-white/10"
-                  >
-                    <div className="rounded-md bg-white/4 px-3">
-                      <AccordionTrigger className="py-3 text-white/90 hover:no-underline items-center">
-                        <div className="flex w-full items-center justify-between gap-4">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-white">
+                {groupedByUser.map((group) => {
+                  const primaryRecord = group.rows[0];
+
+                  return (
+                    <AccordionItem
+                      key={group.key}
+                      value={group.key}
+                      className="overflow-hidden rounded-lg border border-white/10 bg-slate-900/35"
+                    >
+                      <AccordionTrigger className="px-4 py-4 text-white/90 hover:bg-white/5 hover:no-underline">
+                        <div className="flex w-full flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between">
+                          <div className="space-y-1">
+                            <div className="text-sm font-semibold text-white">
                               {group.name}
-                            </span>
-                            <span className="text-xs text-white/60">
-                              {group.activeCount} active • {group.returnedCount}{" "}
-                              returned • {group.rows.length} total
-                            </span>
+                            </div>
+                            <div className="text-xs text-white/60">
+                              User #{group.userId}
+                              {primaryRecord?.studentId
+                                ? ` • Student ID: ${primaryRecord.studentId}`
+                                : ""}
+                              {primaryRecord?.studentEmail
+                                ? ` • ${primaryRecord.studentEmail}`
+                                : ""}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className="border-emerald-400/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/15">
+                              {group.activeCount} active
+                            </Badge>
+                            <Badge className="border-sky-400/40 bg-sky-500/15 text-sky-100 hover:bg-sky-500/15">
+                              {group.returnedCount} returned
+                            </Badge>
+                            <Badge className="border-white/10 bg-white/10 text-white/85 hover:bg-white/10">
+                              {group.rows.length} total
+                            </Badge>
                           </div>
                         </div>
                       </AccordionTrigger>
-                    </div>
 
-                    <AccordionContent className="pb-2">
-                      <div className="mb-3 rounded-md px-3 py-2">
-                        <div className="text-[11px] uppercase tracking-wide text-white/50">
-                          User
+                      <AccordionContent className="px-4 pb-4">
+                        <div className="mb-4 grid gap-3 md:grid-cols-3">
+                          <DetailItem label="User" value={group.name} />
+                          <DetailItem
+                            label="Student ID"
+                            value={primaryRecord?.studentId || "—"}
+                          />
+                          <DetailItem
+                            label="Email"
+                            value={primaryRecord?.studentEmail || "—"}
+                          />
                         </div>
-                        <div className="text-sm font-semibold text-white/90">
-                          {group.name}
-                        </div>
-                      </div>
 
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableCaption className="text-xs text-white/60">
-                            {group.rows.length}{" "}
-                            {group.rows.length === 1 ? "record" : "records"} for{" "}
-                            <span className="font-semibold text-white/80">
-                              {group.name}
-                            </span>
-                            .
-                          </TableCaption>
+                        <div className="grid gap-3">
+                          {group.rows.map((rec) => {
+                            const studentLabel = studentFullName(rec);
+                            const bookLabel =
+                              rec.bookTitle || `Book #${rec.bookId}`;
 
-                          <TableHeader>
-                            <TableRow className="border-white/10">
-                              <TableHead className="w-[90px] text-xs font-semibold text-white/70">
-                                Borrow ID
-                              </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70">
-                                Book Title (or ID)
-                              </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70">
-                                Borrow Date
-                              </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70">
-                                Due Date
-                              </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70">
-                                Return Date
-                              </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70">
-                                Status
-                              </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70 text-right">
-                                ₱Fine
-                              </TableHead>
-                              <TableHead className="text-xs font-semibold text-white/70 text-right">
-                                Actions
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
+                            const isReturned = rec.status === "returned";
+                            const isPendingPickup =
+                              rec.status === "pending_pickup";
+                            const isPendingReturn =
+                              rec.status === "pending_return";
+                            const isLegacyPending = rec.status === "pending";
+                            const isAnyPending =
+                              isPendingPickup ||
+                              isPendingReturn ||
+                              isLegacyPending;
+                            const isBorrowed = rec.status === "borrowed";
 
-                          <TableBody>
-                            {group.rows.map((rec) => {
-                              const studentLabel = studentFullName(rec);
-                              const bookLabel =
-                                rec.bookTitle || `Book #${rec.bookId}`;
+                            const { overdueDays, autoFine } = computeAutoFine(
+                              rec.dueDate
+                            );
 
-                              const isReturned = rec.status === "returned";
-                              const isPendingPickup =
-                                rec.status === "pending_pickup";
-                              const isPendingReturn =
-                                rec.status === "pending_return";
-                              const isLegacyPending = rec.status === "pending";
-                              const isAnyPending =
-                                isPendingPickup ||
+                            const isOverdue =
+                              (isBorrowed ||
                                 isPendingReturn ||
-                                isLegacyPending;
-                              const isBorrowed = rec.status === "borrowed";
+                                isLegacyPending) &&
+                              overdueDays > 0;
 
-                              const { overdueDays, autoFine } = computeAutoFine(
-                                rec.dueDate
-                              );
+                            const fineAmount = normalizeFine(rec.fine as any);
 
-                              const isOverdue =
-                                (isBorrowed ||
-                                  isPendingReturn ||
-                                  isLegacyPending) &&
-                                overdueDays > 0;
+                            const reqStatus = (
+                              rec.extensionRequestStatus ?? "none"
+                            )
+                              .toLowerCase()
+                              .trim();
+                            const extensionPending = reqStatus === "pending";
 
-                              const fineAmount = normalizeFine(rec.fine as any);
+                            const canEditDueDate = true;
 
-                              const reqStatus = (
-                                rec.extensionRequestStatus ?? "none"
-                              )
-                                .toLowerCase()
-                                .trim();
-                              const extensionPending = reqStatus === "pending";
+                            const hasReturnRequest =
+                              !isReturned && Boolean(rec.returnRequestedAt);
+                            const canRequestReturn =
+                              isBorrowed && !hasReturnRequest;
 
-                              const canEditDueDate = true;
+                            const hasReturnRequester =
+                              Boolean((rec.returnRequestedByName || "").trim()) ||
+                              (rec.returnRequestedBy !== null &&
+                                rec.returnRequestedBy !== undefined);
 
-                              const hasReturnRequest =
-                                !isReturned && Boolean(rec.returnRequestedAt);
-                              const canRequestReturn =
-                                isBorrowed && !hasReturnRequest;
+                            return (
+                              <Card
+                                key={rec.id}
+                                className="border-white/10 bg-slate-950/40 shadow-none"
+                              >
+                                <CardHeader className="gap-3 pb-4">
+                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="space-y-1">
+                                      <div className="text-xs uppercase tracking-wide text-white/45">
+                                        Borrow record #{rec.id}
+                                      </div>
+                                      <div className="text-base font-semibold text-white">
+                                        {bookLabel}
+                                      </div>
+                                      <div className="text-sm text-white/60">
+                                        Borrower: {studentLabel}
+                                      </div>
+                                    </div>
 
-                              const hasReturnRequester =
-                                Boolean((rec.returnRequestedByName || "").trim()) ||
-                                (rec.returnRequestedBy !== null &&
-                                  rec.returnRequestedBy !== undefined);
-
-                              return (
-                                <TableRow
-                                  key={rec.id}
-                                  className="border-white/5 hover:bg-white/5 transition-colors"
-                                >
-                                  <TableCell className="text-xs opacity-80">
-                                    {rec.id}
-                                  </TableCell>
-
-                                  <TableCell className="text-sm">
-                                    {bookLabel}
-                                  </TableCell>
-
-                                  <TableCell className="text-sm opacity-90">
-                                    {fmtDate(rec.borrowDate)}
-                                  </TableCell>
-                                  <TableCell className="text-sm opacity-90">
-                                    {fmtDate(rec.dueDate)}
-                                  </TableCell>
-                                  <TableCell className="text-sm opacity-90">
-                                    {fmtDate(rec.returnDate)}
-                                  </TableCell>
-
-                                  <TableCell
-                                    className={
-                                      "w-[180px] max-w-[180px] " +
-                                      cellScrollbarClasses
-                                    }
-                                  >
-                                    <div className="inline-flex flex-col items-start gap-1">
+                                    <div className="flex flex-wrap gap-2">
                                       {isReturned ? (
-                                        <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
+                                        <Badge className="border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500">
                                           <span className="inline-flex items-center gap-1">
                                             <CheckCircle2 className="h-3 w-3" />
                                             Returned
                                           </span>
                                         </Badge>
                                       ) : isPendingPickup ? (
-                                        <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                                        <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
                                           <span className="inline-flex items-center gap-1">
                                             <Clock3 className="h-3 w-3" />
                                             Pending pickup
                                           </span>
                                         </Badge>
                                       ) : isPendingReturn || isLegacyPending ? (
-                                        <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                                        <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
                                           <span className="inline-flex items-center gap-1">
                                             <Clock3 className="h-3 w-3" />
                                             Pending return
                                           </span>
                                         </Badge>
                                       ) : isOverdue ? (
-                                        <Badge className="bg-red-500/80 hover:bg-red-500 text-white border-red-400/80">
+                                        <Badge className="border-red-400/80 bg-red-500/80 text-white hover:bg-red-500">
                                           <span className="inline-flex items-center gap-1">
                                             <AlertTriangle className="h-3 w-3" />
                                             Overdue
                                           </span>
                                         </Badge>
                                       ) : (
-                                        <Badge className="bg-amber-500/90 hover:bg-amber-500 text-white border-amber-400/80">
+                                        <Badge className="border-amber-400/80 bg-amber-500/90 text-white hover:bg-amber-500">
                                           <span className="inline-flex items-center gap-1">
                                             <CornerDownLeft className="h-3 w-3" />
                                             Borrowed
@@ -913,131 +882,132 @@ export default function LibrarianBorrowRecordsPage() {
                                         </Badge>
                                       )}
 
-                                      {hasReturnRequest ? (
-                                        <div className="space-y-0.5 rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-100">
-                                          <div className="font-semibold">
-                                            Return requested
-                                          </div>
-                                          <div>
-                                            {fmtDateTime(rec.returnRequestedAt)}
-                                          </div>
-                                          {hasReturnRequester ? (
-                                            <div>
-                                              By:{" "}
-                                              {getStaffActorLabel(
-                                                rec.returnRequestedByName,
-                                                rec.returnRequestedBy ?? null
-                                              )}
+                                      {extensionPending ? (
+                                        <Badge className="border-purple-400/40 bg-purple-500/15 text-purple-100 hover:bg-purple-500/15">
+                                          Extension pending
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </CardHeader>
+
+                                <CardContent className="space-y-4">
+                                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <DetailItem
+                                      label="Borrow Date"
+                                      value={fmtDate(rec.borrowDate)}
+                                    />
+                                    <DetailItem
+                                      label="Due Date"
+                                      value={fmtDate(rec.dueDate)}
+                                    />
+                                    <DetailItem
+                                      label="Return Date"
+                                      value={fmtDate(rec.returnDate)}
+                                    />
+                                    <DetailItem
+                                      label="Fine"
+                                      value={
+                                        <div className="space-y-1">
+                                          <div>{peso(fineAmount)}</div>
+                                          {isBorrowed || isAnyPending ? (
+                                            isOverdue && autoFine > 0 ? (
+                                              <div className="text-xs text-amber-200">
+                                                Accruing overdue fine (
+                                                {peso(autoFine)})
+                                              </div>
+                                            ) : (
+                                              <div className="text-xs text-white/45">
+                                                No overdue fine yet
+                                              </div>
+                                            )
+                                          ) : fineAmount > 0 ? (
+                                            <div className="text-xs text-emerald-200">
+                                              Fine assessed for this borrow
                                             </div>
-                                          ) : null}
-                                          {rec.returnRequestNote ? (
-                                            <div className="whitespace-normal wrap-break-word text-amber-50/90">
-                                              Note: {rec.returnRequestNote}
+                                          ) : (
+                                            <div className="text-xs text-white/45">
+                                              No fine recorded
                                             </div>
-                                          ) : null}
+                                          )}
+                                        </div>
+                                      }
+                                    />
+                                  </div>
+
+                                  {hasReturnRequest ? (
+                                    <div className="rounded-md border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                                      <div className="font-semibold">
+                                        Return requested
+                                      </div>
+                                      <div className="mt-1">
+                                        Requested at:{" "}
+                                        {fmtDateTime(rec.returnRequestedAt)}
+                                      </div>
+                                      {hasReturnRequester ? (
+                                        <div className="mt-1">
+                                          By:{" "}
+                                          {getStaffActorLabel(
+                                            rec.returnRequestedByName,
+                                            rec.returnRequestedBy ?? null
+                                          )}
+                                        </div>
+                                      ) : null}
+                                      {rec.returnRequestNote ? (
+                                        <div className="mt-1 whitespace-normal wrap-break-word text-amber-50/90">
+                                          Note: {rec.returnRequestNote}
                                         </div>
                                       ) : null}
                                     </div>
-                                  </TableCell>
+                                  ) : null}
 
-                                  <TableCell
-                                    className={
-                                      "text-right text-sm w-[120px] max-w-[120px] " +
-                                      cellScrollbarClasses
-                                    }
-                                  >
-                                    <div className="inline-flex flex-col items-end gap-0.5">
-                                      <span>{peso(fineAmount)}</span>
-                                      {isBorrowed || isAnyPending ? (
-                                        isOverdue && autoFine > 0 ? (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 border border-amber-400/40">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                            Accruing overdue fine (
-                                            {peso(autoFine)})
-                                          </span>
-                                        ) : null
-                                      ) : fineAmount > 0 ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 border border-emerald-400/40">
-                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                                          Fine assessed for this borrow
-                                        </span>
-                                      ) : null}
+                                  <div className="rounded-md border border-white/10 bg-slate-900/50 p-3">
+                                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/55">
+                                      Actions
                                     </div>
-                                  </TableCell>
 
-                                  <TableCell
-                                    className={
-                                      "text-right w-44 max-w-44 " +
-                                      cellScrollbarClasses
-                                    }
-                                  >
                                     {isReturned ? (
-                                      <span className="inline-flex items-center gap-1 text-white/60 text-xs">
-                                        <XCircle className="h-3.5 w-3.5" /> No
-                                        actions
-                                      </span>
+                                      <div className="inline-flex items-center gap-1 text-xs text-white/60">
+                                        <XCircle className="h-3.5 w-3.5" />
+                                        No actions available
+                                      </div>
                                     ) : (
-                                      <div className="inline-flex flex-col items-end gap-1">
-                                        <div className="flex flex-col items-end gap-0.5">
+                                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          className="inline-flex items-center gap-1 border-white/25 text-xs text-white/80 disabled:cursor-not-allowed disabled:opacity-50"
+                                          disabled={!canEditDueDate}
+                                          title={
+                                            extensionPending
+                                              ? `Review extension request (+${FIXED_EXTENSION_DAYS} day) / Edit due date`
+                                              : "Edit due date"
+                                          }
+                                          onClick={() => openDueDialog(rec)}
+                                        >
+                                          <Edit className="h-3.5 w-3.5" />
+                                          Edit due date
+                                        </Button>
+
+                                        {isBorrowed && (
                                           <Button
                                             type="button"
                                             size="sm"
-                                            variant="outline"
-                                            className="border-white/25 text-xs text-white/80 inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            disabled={!canEditDueDate}
-                                            title={
-                                              extensionPending
-                                                ? `Review extension request (+${FIXED_EXTENSION_DAYS} day) / Edit due date`
-                                                : "Edit due date"
+                                            variant="ghost"
+                                            className="text-amber-300 hover:bg-amber-500/15 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            disabled={!canRequestReturn}
+                                            onClick={() =>
+                                              openRequestReturnDialog(rec)
                                             }
-                                            onClick={() => openDueDialog(rec)}
+                                            title={
+                                              canRequestReturn
+                                                ? "Notify borrower to return this book"
+                                                : "A return request has already been sent for this borrow."
+                                            }
                                           >
-                                            <Edit className="h-3.5 w-3.5" />
-                                            <span>Edit due date</span>
+                                            Request return
                                           </Button>
-
-                                          {extensionPending ? (
-                                            <span className="text-[10px] text-amber-200/80">
-                                              Extension pending (+
-                                              {FIXED_EXTENSION_DAYS}d)
-                                            </span>
-                                          ) : (
-                                            <span className="text-[10px] text-white/50">
-                                              No extension request required
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        {isBorrowed && (
-                                          <div className="flex flex-col items-end gap-0.5">
-                                            <Button
-                                              type="button"
-                                              size="sm"
-                                              variant="ghost"
-                                              className="text-amber-300 hover:text-amber-100 hover:bg-amber-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
-                                              disabled={!canRequestReturn}
-                                              onClick={() =>
-                                                openRequestReturnDialog(rec)
-                                              }
-                                              title={
-                                                canRequestReturn
-                                                  ? "Notify borrower to return this book"
-                                                  : "A return request has already been sent for this borrow."
-                                              }
-                                            >
-                                              Request return
-                                            </Button>
-
-                                            {hasReturnRequest ? (
-                                              <span className="text-[10px] text-amber-200/80">
-                                                Already requested
-                                              </span>
-                                            ) : (
-                                              <span className="text-[10px] text-white/50">
-                                                Notify borrower to return
-                                              </span>
-                                            )}
-                                          </div>
                                         )}
 
                                         {isPendingPickup && (
@@ -1047,7 +1017,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                 type="button"
                                                 size="sm"
                                                 variant="ghost"
-                                                className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                                className="text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-100"
                                                 disabled={
                                                   markBorrowBusyId === rec.id
                                                 }
@@ -1062,7 +1032,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                 )}
                                               </Button>
                                             </AlertDialogTrigger>
-                                            <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                                            <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
                                               <AlertDialogHeader>
                                                 <AlertDialogTitle>
                                                   Confirm pickup &amp; mark as
@@ -1089,7 +1059,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                 </AlertDialogDescription>
                                               </AlertDialogHeader>
 
-                                              <div className="mt-3 text-sm text-white/80 space-y-1">
+                                              <div className="mt-3 space-y-1 text-sm text-white/80">
                                                 <p>
                                                   <span className="text-white/60">
                                                     Borrowed on:
@@ -1102,7 +1072,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                   </span>{" "}
                                                   {fmtDate(rec.dueDate)}
                                                 </p>
-                                                <p className="text-xs text-white/70 pt-1">
+                                                <p className="pt-1 text-xs text-white/70">
                                                   The book stays unavailable
                                                   until it’s marked as{" "}
                                                   <span className="font-semibold text-emerald-200">
@@ -1122,7 +1092,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                   Cancel
                                                 </AlertDialogCancel>
                                                 <AlertDialogAction
-                                                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                  className="bg-emerald-600 text-white hover:bg-emerald-700"
                                                   disabled={
                                                     markBorrowBusyId === rec.id
                                                   }
@@ -1149,7 +1119,7 @@ export default function LibrarianBorrowRecordsPage() {
                                             type="button"
                                             size="sm"
                                             variant="ghost"
-                                            className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/15"
+                                            className="text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-100"
                                             onClick={() => openReturnDialog(rec)}
                                           >
                                             Mark as returned
@@ -1157,16 +1127,33 @@ export default function LibrarianBorrowRecordsPage() {
                                         )}
                                       </div>
                                     )}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
+
+                                    {!isReturned ? (
+                                      <div className="mt-2 flex flex-col gap-1 text-[11px] text-white/55">
+                                        <span>
+                                          {extensionPending
+                                            ? `Extension request pending (+${FIXED_EXTENSION_DAYS} day).`
+                                            : "No extension request required."}
+                                        </span>
+                                        {isBorrowed ? (
+                                          <span>
+                                            {hasReturnRequest
+                                              ? "A return request has already been sent."
+                                              : "You can send a return request reminder to the borrower."}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
               </Accordion>
             </>
           )}
@@ -1184,7 +1171,7 @@ export default function LibrarianBorrowRecordsPage() {
         }}
       >
         {requestReturnRecord && (
-          <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+          <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
             <AlertDialogHeader>
               <AlertDialogTitle>Request book return?</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
@@ -1203,7 +1190,7 @@ export default function LibrarianBorrowRecordsPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            <div className="mt-3 text-sm text-white/80 space-y-1">
+            <div className="mt-3 space-y-1 text-sm text-white/80">
               <p>
                 <span className="text-white/60">Borrowed on:</span>{" "}
                 {fmtDate(requestReturnRecord.borrowDate)}
@@ -1226,7 +1213,7 @@ export default function LibrarianBorrowRecordsPage() {
                 value={requestReturnNoteInput}
                 onChange={(e) => setRequestReturnNoteInput(e.target.value)}
                 placeholder="Optional message, reminder, or reason…"
-                className="bg-slate-900/70 border-white/20 text-white"
+                className="border-white/20 bg-slate-900/70 text-white"
                 disabled={submittingRequestReturn}
               />
               <p className="text-[11px] text-white/60">
@@ -1243,7 +1230,7 @@ export default function LibrarianBorrowRecordsPage() {
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction
-                className="bg-amber-600 hover:bg-amber-700 text-white"
+                className="bg-amber-600 text-white hover:bg-amber-700"
                 disabled={submittingRequestReturn}
                 onClick={handleConfirmRequestReturn}
               >
@@ -1272,7 +1259,7 @@ export default function LibrarianBorrowRecordsPage() {
         }}
       >
         {selectedRecord && (
-          <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+          <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
             <AlertDialogHeader>
               <AlertDialogTitle>Mark as returned?</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
@@ -1291,7 +1278,7 @@ export default function LibrarianBorrowRecordsPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            <div className="mt-3 text-sm text-white/80 space-y-1">
+            <div className="mt-3 space-y-1 text-sm text-white/80">
               <p>
                 <span className="text-white/60">Borrowed on:</span>{" "}
                 {fmtDate(selectedRecord.borrowDate)}
@@ -1307,7 +1294,7 @@ export default function LibrarianBorrowRecordsPage() {
                   (today, for fine computation)
                 </span>
               </p>
-              <p className="text-xs text-white/70 pt-1">
+              <p className="pt-1 text-xs text-white/70">
                 Overdue days:{" "}
                 <span className="font-semibold">
                   {overduePreview} day{overduePreview === 1 ? "" : "s"}
@@ -1341,7 +1328,7 @@ export default function LibrarianBorrowRecordsPage() {
                     step="0.01"
                     value={fineInput}
                     onChange={(e) => setFineInput(e.target.value)}
-                    className="pl-6 bg-slate-900/70 border-white/20 text-white"
+                    className="border-white/20 bg-slate-900/70 pl-6 text-white"
                   />
                 </div>
                 <Button
@@ -1381,7 +1368,7 @@ export default function LibrarianBorrowRecordsPage() {
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-emerald-600 text-white hover:bg-emerald-700"
                 disabled={submittingReturn}
                 onClick={handleConfirmReturn}
               >
@@ -1412,8 +1399,7 @@ export default function LibrarianBorrowRecordsPage() {
         {dueRecord && (
           <AlertDialogContent
             className={
-              "bg-slate-900 border-white/10 text-white " +
-              "max-h-[70vh] overflow-y-auto " +
+              "max-h-[70vh] overflow-y-auto border-white/10 bg-slate-900 text-white " +
               dialogScrollbarClasses
             }
           >
@@ -1432,7 +1418,7 @@ export default function LibrarianBorrowRecordsPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            <div className="mt-3 text-sm text-white/80 space-y-1">
+            <div className="mt-3 space-y-1 text-sm text-white/80">
               <p>
                 <span className="text-white/60">Borrowed on:</span>{" "}
                 {fmtDate(dueRecord.borrowDate)}
@@ -1443,7 +1429,7 @@ export default function LibrarianBorrowRecordsPage() {
               </p>
             </div>
 
-            <div className="mt-4 rounded-md border border-white/10 bg-slate-950/40 p-3 space-y-2">
+            <div className="mt-4 space-y-2 rounded-md border border-white/10 bg-slate-950/40 p-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-white/80">
                   Extension request
@@ -1456,7 +1442,7 @@ export default function LibrarianBorrowRecordsPage() {
 
                   if (s === "pending") {
                     return (
-                      <Badge className="bg-amber-500/80 hover:bg-amber-500 text-white border-amber-400/80">
+                      <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
                         <span className="inline-flex items-center gap-1">
                           <Clock3 className="h-3 w-3" />
                           Pending
@@ -1466,7 +1452,7 @@ export default function LibrarianBorrowRecordsPage() {
                   }
                   if (s === "approved") {
                     return (
-                      <Badge className="bg-emerald-500/80 hover:bg-emerald-500 text-white border-emerald-400/80">
+                      <Badge className="border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500">
                         <span className="inline-flex items-center gap-1">
                           <CheckCircle2 className="h-3 w-3" />
                           Extension Added
@@ -1476,7 +1462,7 @@ export default function LibrarianBorrowRecordsPage() {
                   }
                   if (s === "disapproved") {
                     return (
-                      <Badge className="bg-rose-500/80 hover:bg-rose-500 text-white border-rose-400/80">
+                      <Badge className="border-rose-400/80 bg-rose-500/80 text-white hover:bg-rose-500">
                         <span className="inline-flex items-center gap-1">
                           <XCircle className="h-3 w-3" />
                           Disapproved
@@ -1485,7 +1471,7 @@ export default function LibrarianBorrowRecordsPage() {
                     );
                   }
                   return (
-                    <Badge className="bg-slate-500/30 hover:bg-slate-500/30 text-white/80 border-white/10">
+                    <Badge className="border-white/10 bg-slate-500/30 text-white/80 hover:bg-slate-500/30">
                       None
                     </Badge>
                   );
@@ -1556,7 +1542,7 @@ export default function LibrarianBorrowRecordsPage() {
               {(dueRecord.extensionRequestStatus ?? "none")
                 .toLowerCase()
                 .trim() === "pending" && (
-                <div className="pt-2 space-y-2">
+                <div className="space-y-2 pt-2">
                   <p className="text-xs font-medium text-white/80">
                     Decision note (optional)
                   </p>
@@ -1564,11 +1550,11 @@ export default function LibrarianBorrowRecordsPage() {
                     value={decisionNoteInput}
                     onChange={(e) => setDecisionNoteInput(e.target.value)}
                     placeholder="Optional note for approval/disapproval…"
-                    className="bg-slate-900/70 border-white/20 text-white"
+                    className="border-white/20 bg-slate-900/70 text-white"
                     disabled={submittingDecision !== null || submittingDue}
                   />
 
-                  <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Button
                       type="button"
                       variant="outline"
@@ -1591,7 +1577,7 @@ export default function LibrarianBorrowRecordsPage() {
 
                     <Button
                       type="button"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="bg-emerald-600 text-white hover:bg-emerald-700"
                       disabled={submittingDecision !== null || submittingDue}
                       onClick={() => void handleApproveExtension()}
                     >
@@ -1669,7 +1655,7 @@ export default function LibrarianBorrowRecordsPage() {
                 .toLowerCase()
                 .trim() !== "pending" && (
                 <AlertDialogAction
-                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                  className="bg-purple-600 text-white hover:bg-purple-700"
                   disabled={submittingDue || submittingDecision !== null}
                   onClick={handleSaveDueDate}
                 >
