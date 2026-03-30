@@ -7,15 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -30,6 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { toast } from "sonner";
 import {
   Users2,
@@ -41,6 +38,9 @@ import {
   Trash2,
   Save,
   ShieldAlert,
+  CalendarDays,
+  BadgeCheck,
+  Clock3,
 } from "lucide-react";
 import { useSession } from "@/hooks/use-session";
 import {
@@ -80,6 +80,8 @@ const ROLE_OPTIONS: Role[] = [
   "admin",
 ];
 
+const DISPLAY_ROLE_GROUPS: Role[] = ROLE_OPTIONS;
+
 function roleBadgeClasses(role: Role) {
   switch (role) {
     case "admin":
@@ -104,6 +106,22 @@ function roleLabel(role: Role) {
   }
 }
 
+function roleDescription(role: Role) {
+  switch (role) {
+    case "admin":
+      return "System-wide access and administrative controls.";
+    case "librarian":
+      return "Primary library staff with operational access.";
+    case "assistant_librarian":
+      return "Assistant librarian accounts aligned to the librarian flow.";
+    case "faculty":
+      return "Faculty members with role-based borrowing and account access.";
+    case "student":
+    default:
+      return "Student accounts for regular borrowing and profile access.";
+  }
+}
+
 function approvalBadgeClasses(approved: boolean) {
   return approved
     ? "bg-emerald-600/80 hover:bg-emerald-600 text-white border-emerald-500/70"
@@ -118,31 +136,24 @@ function isLibrarianAssignableRole(role: Role) {
   return role === "student" || role === "faculty" || role === "assistant_librarian";
 }
 
+function uniqueRoleOptions(items: Role[]) {
+  return Array.from(new Set(items)) as Role[];
+}
+
 function normalizeRole(raw: unknown): Role {
-  const v = String(raw ?? "").trim().toLowerCase();
-  if (v === "student") return "student";
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "student") return "student";
+  if (value === "faculty") return "faculty";
   if (
-    v === "assistant_librarian" ||
-    v === "assistant librarian" ||
-    v === "assistant-librarian"
+    value === "assistant_librarian" ||
+    value === "assistant librarian" ||
+    value === "assistant-librarian"
   ) {
     return "assistant_librarian";
   }
-  if (v === "librarian") return "librarian";
-  if (v === "faculty" || v === "other") return "faculty";
-  if (v === "admin") return "admin";
+  if (value === "librarian") return "librarian";
+  if (value === "admin") return "admin";
   return "student";
-}
-
-function uniqueRoleOptions(roles: Role[]) {
-  return Array.from(new Set(roles)) as Role[];
-}
-
-function createRoleDraftMap(users: UserRowDTO[]) {
-  return users.reduce<Record<string, Role>>((acc, user) => {
-    acc[user.id] = user.role;
-    return acc;
-  }, {});
 }
 
 function initialsFromName(name: string) {
@@ -159,6 +170,16 @@ function resolveAvatarUrl(url?: string | null) {
   if (!s) return null;
   if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/")) return s;
   return `/${s}`;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function UserAvatar({
@@ -179,7 +200,7 @@ function UserAvatar({
 
   return (
     <div
-      className="rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center"
+      className="rounded-full overflow-hidden border border-white/10 bg-slate-900/40 flex items-center justify-center shrink-0"
       style={{ width: size, height: size }}
       title={label}
     >
@@ -191,8 +212,28 @@ function UserAvatar({
           onError={() => setBroken(true)}
         />
       ) : (
-        <span className="text-xs font-semibold text-white/80">{initialsFromName(label)}</span>
+        <span className="text-[11px] font-semibold text-white/80">{initialsFromName(label)}</span>
       )}
+    </div>
+  );
+}
+
+function StatPill({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-white/50">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="mt-1 text-sm font-semibold text-white">{value}</div>
     </div>
   );
 }
@@ -268,7 +309,7 @@ async function updateUserRoleRoleOnly(id: string, role: Role) {
 export default function LibrarianUsersPage() {
   const { user: sessionUser } = useSession();
   const selfId = sessionUser?.id ? String(sessionUser.id) : "";
-  const sessionRole = normalizeRole(sessionUser?.role ?? sessionUser?.accountType ?? "student");
+  const sessionRole = normalizeRole(sessionUser?.role);
   const isAdminSession = sessionRole === "admin";
 
   const [users, setUsers] = React.useState<UserRowDTO[]>([]);
@@ -277,8 +318,8 @@ export default function LibrarianUsersPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [busy, setBusy] = React.useState<BusyState>(null);
-  const [confirm, setConfirm] = React.useState<ConfirmState>(null);
   const [roleDraft, setRoleDraft] = React.useState<Record<string, Role>>({});
+  const [confirm, setConfirm] = React.useState<ConfirmState>(null);
 
   const loadUsers = React.useCallback(async () => {
     setError(null);
@@ -286,7 +327,11 @@ export default function LibrarianUsersPage() {
     try {
       const list = await listUsersWithRole();
       setUsers(list);
-      setRoleDraft(createRoleDraftMap(list));
+      setRoleDraft((prev) => {
+        const next: Record<string, Role> = { ...prev };
+        for (const user of list) next[user.id] = next[user.id] ?? user.role;
+        return next;
+      });
     } catch (err: any) {
       const msg = err?.message || "Failed to load users. Ensure the backend has GET /api/users.";
       setError(msg);
@@ -297,22 +342,21 @@ export default function LibrarianUsersPage() {
   }, []);
 
   React.useEffect(() => {
-    void loadUsers();
+    loadUsers();
   }, [loadUsers]);
 
-  async function handleRefresh() {
+  const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await loadUsers();
     } finally {
       setRefreshing(false);
     }
-  }
+  };
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return users;
-
     return users.filter((u) => {
       return (
         u.id.toLowerCase().includes(q) ||
@@ -320,32 +364,41 @@ export default function LibrarianUsersPage() {
         (u.fullName || "").toLowerCase().includes(q) ||
         u.role.toLowerCase().includes(q) ||
         u.accountType.toLowerCase().includes(q) ||
-        roleLabel(u.role).toLowerCase().includes(q) ||
-        roleLabel(u.accountType).toLowerCase().includes(q) ||
         (u.isApproved ? "approved" : "pending").includes(q)
       );
     });
-  }, [search, users]);
+  }, [users, search]);
 
   const pendingCount = React.useMemo(() => users.filter((u) => !u.isApproved).length, [users]);
 
   const countsByRole = React.useMemo(() => {
-    const map: Partial<Record<Role, number>> = {
+    const counts: Record<Role, number> = {
       student: 0,
       faculty: 0,
       assistant_librarian: 0,
       librarian: 0,
       admin: 0,
+      other: 0,
     };
 
-    for (const user of users) {
-      map[user.role] = (map[user.role] ?? 0) + 1;
-    }
-
-    return map;
+    for (const user of users) counts[user.role] = (counts[user.role] ?? 0) + 1;
+    return counts;
   }, [users]);
 
-  async function onApprove(id: string) {
+  const roleGroups = React.useMemo(() => {
+    return DISPLAY_ROLE_GROUPS.map((role) => {
+      const entries = filtered.filter((u) => u.role === role);
+      return {
+        role,
+        entries,
+        total: entries.length,
+        approved: entries.filter((u) => u.isApproved).length,
+        pending: entries.filter((u) => !u.isApproved).length,
+      };
+    });
+  }, [filtered]);
+
+  const onApprove = async (id: string) => {
     setBusy({ id, action: "approve" });
     try {
       await approveUserById(id);
@@ -356,9 +409,9 @@ export default function LibrarianUsersPage() {
     } finally {
       setBusy(null);
     }
-  }
+  };
 
-  async function onDisapprove(id: string) {
+  const onDisapprove = async (id: string) => {
     setBusy({ id, action: "disapprove" });
     try {
       await disapproveUserById(id);
@@ -369,9 +422,9 @@ export default function LibrarianUsersPage() {
     } finally {
       setBusy(null);
     }
-  }
+  };
 
-  async function onDelete(id: string) {
+  const onDelete = async (id: string) => {
     setBusy({ id, action: "delete" });
     try {
       await deleteUserById(id);
@@ -382,21 +435,231 @@ export default function LibrarianUsersPage() {
     } finally {
       setBusy(null);
     }
-  }
+  };
 
-  async function onUpdateRole(id: string, role: Role) {
+  const onUpdateRole = async (id: string, nextRole: Role) => {
     setBusy({ id, action: "role" });
     try {
-      await updateUserRoleRoleOnly(id, role);
-      setRoleDraft((prev) => ({ ...prev, [id]: role }));
-      toast.success("User role updated");
+      await updateUserRoleRoleOnly(id, nextRole);
+      toast.success("Role updated");
       await loadUsers();
     } catch (e: any) {
       toast.error("Role update failed", { description: e?.message || "Unknown error" });
     } finally {
       setBusy(null);
     }
-  }
+  };
+
+  const renderUserAccordion = (u: UserRowDTO) => {
+    const isBusyApprove = busy?.id === u.id && busy?.action === "approve";
+    const isBusyDisapprove = busy?.id === u.id && busy?.action === "disapprove";
+    const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
+    const isBusyRole = busy?.id === u.id && busy?.action === "role";
+    const anyBusyForRow = busy?.id === u.id;
+    const isSelf = !!selfId && u.id === selfId;
+    const draft = roleDraft[u.id] ?? u.role;
+    const roleChanged = draft !== u.role;
+
+    const exemptDelete = u.role === "admin" || u.role === "librarian";
+    const targetIsProtected = isProtectedRole(u.role);
+    const draftNeedsAdmin = draft === "librarian" || draft === "admin";
+    const selectableRoleOptions = isAdminSession
+      ? ROLE_OPTIONS
+      : uniqueRoleOptions([u.role, ...ROLE_OPTIONS.filter((role) => isLibrarianAssignableRole(role))]);
+
+    const canApprove = !u.isApproved;
+    const canDisapprove = u.isApproved && !isSelf;
+    const canDelete = !u.isApproved && !exemptDelete && !isSelf;
+    const canChangeRole = !isSelf && (isAdminSession || (!targetIsProtected && !draftNeedsAdmin));
+    const disableRoleSelect = anyBusyForRow || isSelf || (!isAdminSession && targetIsProtected);
+
+    const roleHint = isSelf
+      ? "You cannot change your own role."
+      : !isAdminSession && targetIsProtected
+        ? "Only admins can change assistant librarian, librarian, or admin accounts."
+        : !isAdminSession && draftNeedsAdmin
+          ? "Librarians cannot assign librarian or admin roles."
+          : roleChanged
+            ? `Pending role change: ${roleLabel(draft)}`
+            : "No unsaved role changes.";
+
+    return (
+      <AccordionItem
+        key={u.id}
+        value={u.id}
+        className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
+      >
+        <AccordionTrigger className="px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5">
+          <div className="min-w-0 flex-1 text-left">
+            <div className="flex items-center gap-3 min-w-0">
+              <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold text-white">{u.fullName || "Unnamed user"}</h3>
+                <p className="truncate text-xs text-white/60">{u.email}</p>
+              </div>
+            </div>
+          </div>
+        </AccordionTrigger>
+
+        <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={44} />
+
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="max-w-full truncate text-sm font-semibold text-white">
+                    {u.fullName || "Unnamed user"}
+                  </h3>
+                  {isSelf ? (
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
+                      You
+                    </span>
+                  ) : null}
+                  <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
+                    {u.isApproved ? "approved" : "pending"}
+                  </Badge>
+                  <Badge variant="default" className={roleBadgeClasses(u.role)}>
+                    {roleLabel(u.role)}
+                  </Badge>
+                </div>
+
+                <div className="text-sm text-white/80 break-all">{u.email}</div>
+
+                <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono max-w-full truncate">
+                    ID: {u.id}
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+                    Account type: {roleLabel(u.accountType)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <StatPill
+                icon={<CalendarDays className="h-3.5 w-3.5" />}
+                label="Created"
+                value={formatDateTime(u.createdAt)}
+              />
+              <StatPill
+                icon={<BadgeCheck className="h-3.5 w-3.5" />}
+                label="Approved at"
+                value={formatDateTime(u.approvedAt)}
+              />
+              <StatPill
+                icon={<Clock3 className="h-3.5 w-3.5" />}
+                label="Status"
+                value={u.isApproved ? "Active access" : "Needs review"}
+              />
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-white/55">Change role</div>
+                <Select
+                  value={draft}
+                  onValueChange={(value) => setRoleDraft((prev) => ({ ...prev, [u.id]: value as Role }))}
+                  disabled={disableRoleSelect}
+                >
+                  <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 text-white border-white/10">
+                    {selectableRoleOptions.map((role) => (
+                      <SelectItem
+                        key={role}
+                        value={role}
+                        disabled={!isAdminSession && (role === "librarian" || role === "admin")}
+                      >
+                        {roleLabel(role)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <p className="text-xs text-white/50">{roleHint}</p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                onClick={() => {
+                  if (!canChangeRole) return;
+                  setConfirm({
+                    type: "role",
+                    id: u.id,
+                    name: u.fullName || u.email,
+                    from: u.role,
+                    to: draft,
+                  });
+                }}
+                disabled={!roleChanged || !canChangeRole || anyBusyForRow}
+                title={
+                  isSelf
+                    ? "You cannot change your own role"
+                    : !isAdminSession && targetIsProtected
+                      ? "Only admins can change assistant librarian, librarian, or admin accounts"
+                      : !isAdminSession && draftNeedsAdmin
+                        ? "Librarians cannot assign librarian or admin roles"
+                        : roleChanged
+                          ? "Save role"
+                          : "No role changes"
+                }
+              >
+                {isBusyRole ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save role
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                onClick={() => onApprove(u.id)}
+                disabled={!canApprove || anyBusyForRow}
+                title={canApprove ? "Approve user" : "Already approved"}
+              >
+                {isBusyApprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                Approve
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                onClick={() => onDisapprove(u.id)}
+                disabled={!canDisapprove || anyBusyForRow}
+                title={canDisapprove ? "Disapprove user" : "Cannot disapprove this user"}
+              >
+                {isBusyDisapprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+                Disapprove
+              </Button>
+
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full justify-start hover:opacity-95"
+                onClick={() => setConfirm({ type: "delete", id: u.id, name: u.fullName || u.email })}
+                disabled={!canDelete || anyBusyForRow}
+                title={
+                  canDelete
+                    ? "Delete pending user"
+                    : "Only pending non-librarian, non-admin users can be deleted"
+                }
+              >
+                {isBusyDelete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Delete
+              </Button>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    );
+  };
 
   return (
     <DashboardLayout title="Users">
@@ -404,37 +667,52 @@ export default function LibrarianUsersPage() {
         <div className="flex items-center gap-2">
           <Users2 className="h-5 w-5" />
           <div>
-            <h2 className="text-lg font-semibold leading-tight">Users directory</h2>
+            <h2 className="text-lg font-semibold leading-tight">Librarian user management</h2>
             <p className="text-xs text-white/70">
-              Pending: <span className="font-semibold text-orange-200">{pendingCount}</span>
+              Review users, approve or disapprove access, apply allowed role changes, and remove eligible pending
+              accounts. Pending: <span className="font-semibold text-orange-200">{pendingCount}</span>
             </p>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/70">
-              {ROLE_OPTIONS.map((role) => (
-                <span key={role} className="inline-flex items-center gap-1">
-                  <Badge className={roleBadgeClasses(role)}>{roleLabel(role)}</Badge>
-                  <span className="opacity-80">{countsByRole[role]}</span>
-                </span>
-              ))}
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
+              <span className="inline-flex items-center gap-1">
+                <Badge className={roleBadgeClasses("student")}>{roleLabel("student")}</Badge>
+                <span className="opacity-80">{countsByRole.student}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Badge className={roleBadgeClasses("faculty")}>{roleLabel("faculty")}</Badge>
+                <span className="opacity-80">{countsByRole.faculty}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Badge className={roleBadgeClasses("assistant_librarian")}>
+                  {roleLabel("assistant_librarian")}
+                </Badge>
+                <span className="opacity-80">{countsByRole.assistant_librarian}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Badge className={roleBadgeClasses("librarian")}>{roleLabel("librarian")}</Badge>
+                <span className="opacity-80">{countsByRole.librarian}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Badge className={roleBadgeClasses("admin")}>{roleLabel("admin")}</Badge>
+                <span className="opacity-80">{countsByRole.admin}</span>
+              </span>
             </div>
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="border-white/20 text-white/90 hover:bg-white/10"
-          onClick={handleRefresh}
-          disabled={refreshing || loading}
-          aria-label="Refresh"
-          title="Refresh"
-        >
-          {refreshing || loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCcw className="h-4 w-4" />
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="border-white/20 text-white/90 hover:bg-white/10"
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            {refreshing || loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
 
       <Card className="bg-slate-800/60 border-white/10">
@@ -454,12 +732,12 @@ export default function LibrarianUsersPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
+            <div className="space-y-3">
+              <Skeleton className="h-28 w-full rounded-xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
             </div>
           ) : error ? (
             <div className="py-6 text-center text-sm text-red-300">{error}</div>
@@ -470,191 +748,73 @@ export default function LibrarianUsersPage() {
               <span className="text-xs opacity-80">Try a different search.</span>
             </div>
           ) : (
-            <Table>
-              <TableCaption className="text-xs text-white/60">
-                Showing {filtered.length} {filtered.length === 1 ? "user" : "users"}.
-              </TableCaption>
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-3">
+                  <div className="text-xs uppercase tracking-wide text-orange-100/80">Pending users</div>
+                  <div className="mt-1 text-2xl font-semibold text-orange-100">
+                    {filtered.filter((u) => !u.isApproved).length}
+                  </div>
+                  <p className="mt-1 text-xs text-orange-100/70">Still waiting for approval or follow-up actions.</p>
+                </div>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+                  <div className="text-xs uppercase tracking-wide text-emerald-100/80">Approved users</div>
+                  <div className="mt-1 text-2xl font-semibold text-emerald-100">
+                    {filtered.filter((u) => u.isApproved).length}
+                  </div>
+                  <p className="mt-1 text-xs text-emerald-100/70">Currently approved and ready for role-based access.</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs uppercase tracking-wide text-white/60">Showing results</div>
+                  <div className="mt-1 text-2xl font-semibold text-white">{filtered.length}</div>
+                  <p className="mt-1 text-xs text-white/55">
+                    Role groups stay collapsed by default, and each user opens from their own accordion card.
+                  </p>
+                </div>
+              </div>
 
-              <TableHeader>
-                <TableRow className="border-white/10">
-                  <TableHead className="w-24 text-xs font-semibold text-white/70">User ID</TableHead>
-                  <TableHead className="w-16 text-xs font-semibold text-white/70">Photo</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Email</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Full name</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Role</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70">Approval</TableHead>
-                  <TableHead className="text-xs font-semibold text-white/70 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {filtered.map((u) => {
-                  const isBusyApprove = busy?.id === u.id && busy?.action === "approve";
-                  const isBusyDisapprove = busy?.id === u.id && busy?.action === "disapprove";
-                  const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
-                  const isBusyRole = busy?.id === u.id && busy?.action === "role";
-                  const anyBusyForRow = busy?.id === u.id;
-                  const isSelf = !!selfId && u.id === selfId;
-                  const roleDraftValue = roleDraft[u.id] ?? u.role;
-                  const roleChanged = roleDraftValue !== u.role;
-
-                  const exemptDelete = u.role === "admin" || u.role === "librarian";
-                  const targetIsProtected = isProtectedRole(u.role);
-                  const draftNeedsAdmin = roleDraftValue === "librarian" || roleDraftValue === "admin";
-                  const selectableRoleOptions = isAdminSession
-                    ? ROLE_OPTIONS
-                    : uniqueRoleOptions([u.role, ...ROLE_OPTIONS.filter((role) => isLibrarianAssignableRole(role))]);
-                  const canApprove = !u.isApproved;
-                  const canDisapprove = u.isApproved && !isSelf;
-                  const canDelete = !u.isApproved && !exemptDelete && !isSelf;
-                  const canChangeRole =
-                    !isSelf &&
-                    (isAdminSession || (!targetIsProtected && !draftNeedsAdmin));
-                  const disableRoleSelect = anyBusyForRow || isSelf || (!isAdminSession && targetIsProtected);
-                  const roleSaveTitle = isSelf
-                    ? "You cannot change your own role"
-                    : !isAdminSession && targetIsProtected
-                      ? "Only admins can change assistant librarian, librarian, or admin accounts"
-                      : !isAdminSession && draftNeedsAdmin
-                        ? "Librarians cannot assign librarian or admin roles"
-                        : roleChanged
-                          ? "Save role"
-                          : "No role changes";
-
-                  return (
-                    <TableRow key={u.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                      <TableCell className="text-xs opacity-80 max-w-56 truncate font-mono">
-                        {u.id}
-                        {isSelf ? (
-                          <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/80">you</span>
-                        ) : null}
-                      </TableCell>
-
-                      <TableCell>
-                        <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={34} />
-                      </TableCell>
-
-                      <TableCell className="text-sm opacity-90">{u.email}</TableCell>
-
-                      <TableCell className="text-sm">{u.fullName || <span className="opacity-50">—</span>}</TableCell>
-
-                      <TableCell>
-                        <div className="flex flex-col gap-2">
-                          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                            <Badge variant="default" className={roleBadgeClasses(u.role)}>
-                              {roleLabel(u.role)}
-                            </Badge>
-
-                            <Select
-                              value={roleDraftValue}
-                              onValueChange={(value) => setRoleDraft((prev) => ({ ...prev, [u.id]: value as Role }))}
-                              disabled={disableRoleSelect}
-                            >
-                              <SelectTrigger className="h-8 w-full lg:w-44 bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="bg-slate-900 text-white border-white/10">
-                                {selectableRoleOptions.map((role) => (
-                                  <SelectItem
-                                    key={role}
-                                    value={role}
-                                    disabled={!isAdminSession && (role === "librarian" || role === "admin")}
-                                  >
-                                    {roleLabel(role)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {roleChanged ? (
-                            <div className="text-xs text-white/50">
-                              Pending role change: <span className="font-medium text-white/80">{roleLabel(roleDraftValue)}</span>
-                            </div>
-                          ) : null}
-
-                          {isSelf ? <div className="text-xs text-white/50">You cannot change your own role.</div> : null}
-                          {!isSelf && !isAdminSession && targetIsProtected ? (
-                            <div className="text-xs text-white/50">
-                              Only admins can change assistant librarian, librarian, or admin accounts.
-                            </div>
-                          ) : null}
+              <Accordion
+                type="multiple"
+                className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+              >
+                {roleGroups.map((group) => (
+                  <AccordionItem
+                    key={group.role}
+                    value={group.role}
+                    className="self-start overflow-hidden rounded-2xl border border-white/10 bg-slate-900/35 px-0"
+                  >
+                    <AccordionTrigger className="px-4 py-3 text-white hover:no-underline">
+                      <div className="flex flex-col items-start gap-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
+                        <Badge className={roleBadgeClasses(group.role)}>{roleLabel(group.role)}</Badge>
+                        <span className="text-sm font-semibold text-white">
+                          {group.total} user{group.total === 1 ? "" : "s"}
+                        </span>
+                        <span className="text-xs text-white/55">{roleDescription(group.role)}</span>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/65">
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5">
+                            Approved: {group.approved}
+                          </span>
+                          <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5">
+                            Pending: {group.pending}
+                          </span>
                         </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
-                          {u.isApproved ? "approved" : "pending"}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="inline-flex items-center gap-2 flex-wrap justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
-                            disabled={!roleChanged || !canChangeRole || anyBusyForRow}
-                            onClick={() =>
-                              setConfirm({
-                                type: "role",
-                                id: u.id,
-                                name: u.fullName || u.email,
-                                from: u.role,
-                                to: roleDraftValue,
-                              })
-                            }
-                            title={roleSaveTitle}
-                            aria-label="Save role"
-                          >
-                            {isBusyRole ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
-                            onClick={() => onApprove(u.id)}
-                            disabled={!canApprove || anyBusyForRow}
-                            title={canApprove ? "Approve user" : "Already approved"}
-                            aria-label="Approve user"
-                          >
-                            {isBusyApprove ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="border-white/20 text-white/90 hover:bg-white/10"
-                            onClick={() => onDisapprove(u.id)}
-                            disabled={!canDisapprove || anyBusyForRow}
-                            title={canDisapprove ? "Disapprove user" : "Cannot disapprove this user"}
-                            aria-label="Disapprove user"
-                          >
-                            {isBusyDisapprove ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                          </Button>
-
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            className="hover:opacity-95"
-                            onClick={() => setConfirm({ type: "delete", id: u.id, name: u.fullName || u.email })}
-                            disabled={!canDelete || anyBusyForRow}
-                            title={canDelete ? "Delete pending user" : "Only pending non-librarian, non-admin users can be deleted"}
-                          >
-                            {isBusyDelete ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                      {group.total === 0 ? (
+                        <div className="rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-white/60">
+                          No {roleLabel(group.role)} users match the current search.
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      ) : (
+                        <Accordion type="multiple" className="space-y-3">
+                          {group.entries.map(renderUserAccordion)}
+                        </Accordion>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -703,8 +863,7 @@ export default function LibrarianUsersPage() {
                 variant="destructive"
                 disabled={!!busy}
                 onClick={async () => {
-                  if (!confirm || confirm.type !== "delete") return;
-                  const { id } = confirm;
+                  const id = confirm.id;
                   setConfirm(null);
                   await onDelete(id);
                 }}
