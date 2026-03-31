@@ -236,7 +236,7 @@ function BookCatalogCard({
                             <h3 className="text-sm font-semibold leading-snug text-white wrap-break-word whitespace-normal sm:truncate">
                                 {formatDetailValue(book.title)}
                             </h3>
-                            <p className="truncate text-xs text-white/60">
+                            <p className="truncate text-xs text-white/60">git commit -m "refactor: switch librarian books catalog to accordion cards"
                                 {formatDetailValue(book.author)}
                             </p>
                         </div>
