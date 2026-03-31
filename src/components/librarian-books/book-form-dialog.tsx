@@ -128,11 +128,11 @@ export function BookFormDialog({
     const isEdit = mode === "edit";
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog modal open={open} onOpenChange={onOpenChange}>
             {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
 
             <DialogContent
-                className="w-[92vw] max-h-[85vh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-lg
+                className="w-[92vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-lg
         [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
         [&::-webkit-scrollbar]:w-1.5
         [&::-webkit-scrollbar-track]:bg-slate-900/70
