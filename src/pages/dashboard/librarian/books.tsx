@@ -34,6 +34,13 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
     createBook,
@@ -205,6 +212,57 @@ function CatalogDetail({
     );
 }
 
+function BookCatalogDetails({
+    book,
+    status,
+    onEdit,
+    onDelete,
+}: {
+    book: BookDTO;
+    status: ReturnType<typeof getStatusMeta>;
+    onEdit: () => void;
+    onDelete: () => void;
+}) {
+    return (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
+            <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
+            <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
+            <CatalogDetail label="Sub." value={formatDetailValue(book.subtitle)} />
+            <CatalogDetail label="Pub. year" value={formatDetailValue(book.publicationYear)} />
+            <CatalogDetail label="Author" value={formatDetailValue(book.author)} />
+            <CatalogDetail label="Subjects" value={getSubjectsValue(book)} />
+            <CatalogDetail label="Publisher" value={formatDetailValue(book.publisher)} />
+            <CatalogDetail label="Library area" value={getLibraryAreaValue(book)} />
+            <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
+            <CatalogDetail label="Borrow tracking" value={getBorrowTrackingValue(book)} />
+            <CatalogDetail label="Barcode" value={formatDetailValue(book.barcode)} />
+            <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
+            <CatalogDetail label="Loan days" value={getLoanDaysValue(book)} />
+            <CatalogDetail label="Status">
+                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.classes}`}>
+                    {status.label}
+                </span>
+            </CatalogDetail>
+            <CatalogDetail label="Actions">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="border-white/20 text-white/90 hover:bg-white/10"
+                        onClick={onEdit}
+                    >
+                        Edit
+                    </Button>
+                    <Button type="button" variant="destructive" onClick={onDelete}>
+                        Delete
+                    </Button>
+                </div>
+            </CatalogDetail>
+        </div>
+    );
+}
+
 function BookCatalogCard({
     book,
     onEdit,
@@ -215,95 +273,185 @@ function BookCatalogCard({
     onDelete: (book: BookDTO) => void;
 }) {
     const status = getStatusMeta(book);
+    const [detailsOpen, setDetailsOpen] = React.useState(false);
+
+    const handleEdit = React.useCallback(() => {
+        setDetailsOpen(false);
+        onEdit(book);
+    }, [book, onEdit]);
+
+    const handleDeleteRequest = React.useCallback(() => {
+        if (
+            typeof window !== "undefined" &&
+            !window.confirm(
+                `Delete "${formatDetailValue(book.title, "this book")}" from the catalog?`
+            )
+        ) {
+            return;
+        }
+
+        setDetailsOpen(false);
+        onDelete(book);
+    }, [book, onDelete]);
 
     return (
-        <AccordionItem
-            value={book.id}
-            className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
-        >
-            <AccordionTrigger className="px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5">
-                <div className="min-w-0 flex-1 text-left">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                                    {formatDetailValue(book.callNumber)}
-                                </span>
-                                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
-                                    {status.label}
-                                </span>
-                            </div>
-                            <h3 className="text-sm font-semibold leading-snug text-white wrap-break-word whitespace-normal sm:truncate">
+        <>
+            <AccordionItem
+                value={book.id}
+                className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
+            >
+                <div className="block px-4 py-4 sm:hidden">
+                    <div className="space-y-3 text-left">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                                {formatDetailValue(book.callNumber)}
+                            </span>
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
+                                {status.label}
+                            </span>
+                        </div>
+
+                        <div className="space-y-1">
+                            <h3 className="text-sm font-semibold leading-snug text-white wrap-break-word whitespace-normal">
                                 {formatDetailValue(book.title)}
                             </h3>
-                            <p className="truncate text-xs text-white/60">git commit -m "refactor: switch librarian books catalog to accordion cards"
-                                {formatDetailValue(book.author)}
-                            </p>
+                            <p className="text-xs text-white/60">{formatDetailValue(book.author)}</p>
                         </div>
 
-                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:gap-3">
-                            <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
-                            <CatalogDetail label="Pub. year" value={formatDetailValue(book.publicationYear)} />
-                            <CatalogDetail label="Library area" value={getLibraryAreaValue(book)} />
+                        <div className="grid grid-cols-1 gap-2">
                             <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
+                            <div className="grid grid-cols-2 gap-2">
+                                <CatalogDetail
+                                    label="Pub. year"
+                                    value={formatDetailValue(book.publicationYear)}
+                                />
+                                <CatalogDetail
+                                    label="Library area"
+                                    value={getLibraryAreaValue(book)}
+                                />
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </AccordionTrigger>
 
-            <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                    <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
-                    <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
-                    <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
-                    <CatalogDetail label="Sub." value={formatDetailValue(book.subtitle)} />
-                    <CatalogDetail label="Pub. year" value={formatDetailValue(book.publicationYear)} />
-                    <CatalogDetail label="Author" value={formatDetailValue(book.author)} />
-                    <CatalogDetail label="Subjects" value={getSubjectsValue(book)} />
-                    <CatalogDetail label="Publisher" value={formatDetailValue(book.publisher)} />
-                    <CatalogDetail label="Library area" value={getLibraryAreaValue(book)} />
-                    <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
-                    <CatalogDetail label="Borrow tracking" value={getBorrowTrackingValue(book)} />
-                    <CatalogDetail label="Barcode" value={formatDetailValue(book.barcode)} />
-                    <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
-                    <CatalogDetail label="Loan days" value={getLoanDaysValue(book)} />
-                    <CatalogDetail label="Status">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.classes}`}>
-                            {status.label}
-                        </span>
-                    </CatalogDetail>
-                    <CatalogDetail label="Actions">
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                        <div className="grid grid-cols-1 gap-2">
                             <Button
                                 type="button"
                                 variant="outline"
                                 className="border-white/20 text-white/90 hover:bg-white/10"
-                                onClick={() => onEdit(book)}
+                                onClick={() => setDetailsOpen(true)}
                             >
-                                Edit
+                                View full details
                             </Button>
-                            <Button
-                                type="button"
-                                variant="destructive"
-                                onClick={() => {
-                                    if (
-                                        typeof window !== "undefined" &&
-                                        !window.confirm(
-                                            `Delete \"${formatDetailValue(book.title, "this book")}\" from the catalog?`
-                                        )
-                                    ) {
-                                        return;
-                                    }
-                                    onDelete(book);
-                                }}
-                            >
-                                Delete
-                            </Button>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="border-white/20 text-white/90 hover:bg-white/10"
+                                    onClick={handleEdit}
+                                >
+                                    Edit
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={handleDeleteRequest}
+                                >
+                                    Delete
+                                </Button>
+                            </div>
                         </div>
-                    </CatalogDetail>
+                    </div>
                 </div>
-            </AccordionContent>
-        </AccordionItem>
+
+                <AccordionTrigger className="hidden px-4 py-4 text-white hover:no-underline sm:flex [&>svg]:mt-0.5">
+                    <div className="min-w-0 flex-1 text-left">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                                        {formatDetailValue(book.callNumber)}
+                                    </span>
+                                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
+                                        {status.label}
+                                    </span>
+                                </div>
+                                <h3 className="text-sm font-semibold leading-snug text-white wrap-break-word whitespace-normal sm:truncate">
+                                    {formatDetailValue(book.title)}
+                                </h3>
+                                <p className="truncate text-xs text-white/60">
+                                    {formatDetailValue(book.author)}
+                                </p>
+                            </div>
+
+                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:gap-3">
+                                <CatalogDetail
+                                    label="Accession #"
+                                    value={formatDetailValue(book.accessionNumber)}
+                                />
+                                <CatalogDetail
+                                    label="Pub. year"
+                                    value={formatDetailValue(book.publicationYear)}
+                                />
+                                <CatalogDetail
+                                    label="Library area"
+                                    value={getLibraryAreaValue(book)}
+                                />
+                                <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
+                            </div>
+                        </div>
+                    </div>
+                </AccordionTrigger>
+
+                <AccordionContent className="hidden border-t border-white/10 px-4 pb-4 pt-4 sm:block">
+                    <BookCatalogDetails
+                        book={book}
+                        status={status}
+                        onEdit={handleEdit}
+                        onDelete={handleDeleteRequest}
+                    />
+                </AccordionContent>
+            </AccordionItem>
+
+            <Dialog modal open={detailsOpen} onOpenChange={setDetailsOpen}>
+                <DialogContent
+                    className="w-[92vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-4xl
+        [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+        [&::-webkit-scrollbar]:w-1.5
+        [&::-webkit-scrollbar-track]:bg-slate-900/70
+        [&::-webkit-scrollbar-thumb]:rounded-full
+        [&::-webkit-scrollbar-thumb]:bg-slate-700
+        [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+                >
+                    <DialogHeader>
+                        <DialogTitle className="pr-6">
+                            {formatDetailValue(book.title)}
+                        </DialogTitle>
+                        <DialogDescription className="text-white/70">
+                            Review the complete catalog details, inventory status, and available
+                            actions for this book.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                                {formatDetailValue(book.callNumber)}
+                            </span>
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
+                                {status.label}
+                            </span>
+                        </div>
+
+                        <BookCatalogDetails
+                            book={book}
+                            status={status}
+                            onEdit={handleEdit}
+                            onDelete={handleDeleteRequest}
+                        />
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }
 
