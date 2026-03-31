@@ -46,6 +46,16 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion"
+import {
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -110,6 +120,314 @@ function CatalogDetail({
     )
 }
 
+function FacultyBookActionControls({
+    book,
+    borrowBusyId,
+    borrowDialogBookId,
+    borrowCopies,
+    onBorrowDialogBookChange,
+    onBorrowCopiesChange,
+    onBorrow,
+    facultyMaxActiveBorrows,
+    defaultBorrowDurationDays,
+    remainingBorrowSlots,
+    className = "flex flex-col gap-2 sm:flex-row sm:flex-wrap",
+}: {
+    book: BookWithStatus
+    borrowBusyId: string | null
+    borrowDialogBookId: string | null
+    borrowCopies: number
+    onBorrowDialogBookChange: (bookId: string | null) => void
+    onBorrowCopiesChange: (value: number) => void
+    onBorrow: (book: BookWithStatus, copiesRequested: number) => void | Promise<void>
+    facultyMaxActiveBorrows: number
+    defaultBorrowDurationDays: number
+    remainingBorrowSlots: number
+    className?: string
+}) {
+    const remaining = getRemainingCopies(book)
+    const borrowableNow = isBorrowable(book)
+    const libraryUseOnly = isLibraryUseOnlyBook(book)
+    const maxCopies = Math.min(remaining, remainingBorrowSlots)
+    const canBorrowThisBook = borrowableNow && maxCopies > 0
+    const borrowBtnLabel = book.activeRecords.length > 0 ? "Borrow more" : "Borrow"
+    const busy = borrowBusyId === book.id
+
+    return (
+        <div className={className}>
+            {canBorrowThisBook ? (
+                <FacultyBorrowConfirmDialog
+                    book={book}
+                    open={borrowDialogBookId === book.id}
+                    onOpenChange={(open) => {
+                        onBorrowDialogBookChange(open ? book.id : null)
+                        if (open) {
+                            onBorrowCopiesChange(
+                                clampInt(borrowCopies, 1, Math.max(1, maxCopies))
+                            )
+                        }
+                    }}
+                    quantity={borrowDialogBookId === book.id ? borrowCopies : 1}
+                    onQuantityChange={onBorrowCopiesChange}
+                    busy={busy}
+                    onConfirm={(quantity) => onBorrow(book, quantity)}
+                    maxCopies={maxCopies}
+                    remainingBorrowSlots={remainingBorrowSlots}
+                    facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                    defaultBorrowDurationDays={defaultBorrowDurationDays}
+                    triggerLabel={borrowBtnLabel}
+                />
+            ) : libraryUseOnly ? (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled
+                    className="border-amber-400/30 text-amber-100 hover:bg-transparent"
+                >
+                    In-library only
+                </Button>
+            ) : remainingBorrowSlots <= 0 ? (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled
+                    className="border-white/20 text-white/60 hover:bg-transparent"
+                >
+                    Limit reached
+                </Button>
+            ) : (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled
+                    className="border-white/20 text-white/60 hover:bg-transparent"
+                >
+                    Not available
+                </Button>
+            )}
+        </div>
+    )
+}
+
+function FacultyBookDetailGrid({
+    book,
+    dueCell,
+    activeBorrowingNow,
+    totalBorrowedTimes,
+    remaining,
+    borrowBusyId,
+    borrowDialogBookId,
+    borrowCopies,
+    onBorrowDialogBookChange,
+    onBorrowCopiesChange,
+    onBorrow,
+    facultyMaxActiveBorrows,
+    defaultBorrowDurationDays,
+    remainingBorrowSlots,
+    showActions = true,
+    className = "grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
+}: {
+    book: BookWithStatus
+    dueCell: React.ReactNode
+    activeBorrowingNow: number
+    totalBorrowedTimes: number
+    remaining: number
+    borrowBusyId: string | null
+    borrowDialogBookId: string | null
+    borrowCopies: number
+    onBorrowDialogBookChange: (bookId: string | null) => void
+    onBorrowCopiesChange: (value: number) => void
+    onBorrow: (book: BookWithStatus, copiesRequested: number) => void | Promise<void>
+    facultyMaxActiveBorrows: number
+    defaultBorrowDurationDays: number
+    remainingBorrowSlots: number
+    showActions?: boolean
+    className?: string
+}) {
+    return (
+        <div className={className}>
+            <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
+            <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
+            <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
+            <CatalogDetail label="Subtitle" value={formatDetailValue(book.subtitle)} />
+            <CatalogDetail label="Author" value={formatDetailValue(book.author)} />
+            <CatalogDetail label="Publication year" value={formatDetailValue(book.publicationYear)} />
+            <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
+            <CatalogDetail label="ISSN" value={formatDetailValue(book.issn)} />
+            <CatalogDetail label="Publisher" value={formatDetailValue(book.publisher)} />
+            <CatalogDetail label="Subjects" value={getSubjects(book)} />
+            <CatalogDetail label="Loan duration" value={fmtDurationDays(book.borrowDurationDays)} />
+            <CatalogDetail label="Due / earliest due" value={dueCell} />
+            <CatalogDetail label="Inventory">
+                <span>
+                    Available: {remaining} · Active borrows: {activeBorrowingNow} · All-time: {totalBorrowedTimes}
+                </span>
+            </CatalogDetail>
+            <CatalogDetail label="Last returned">
+                {book.lastReturnedRecord ? fmtDate(book.lastReturnedRecord.returnDate) : "—"}
+            </CatalogDetail>
+            <CatalogDetail label="My activity">
+                <div className="space-y-1 text-xs leading-relaxed text-white/75">
+                    <FacultyBookStatus book={book} />
+                    <div className="flex flex-col gap-1 text-white/60">
+                        <FacultyBookActionState book={book} />
+                    </div>
+                </div>
+            </CatalogDetail>
+            {showActions ? (
+                <CatalogDetail label="Actions">
+                    <FacultyBookActionControls
+                        book={book}
+                        borrowBusyId={borrowBusyId}
+                        borrowDialogBookId={borrowDialogBookId}
+                        borrowCopies={borrowCopies}
+                        onBorrowDialogBookChange={onBorrowDialogBookChange}
+                        onBorrowCopiesChange={onBorrowCopiesChange}
+                        onBorrow={onBorrow}
+                        facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                        defaultBorrowDurationDays={defaultBorrowDurationDays}
+                        remainingBorrowSlots={remainingBorrowSlots}
+                    />
+                </CatalogDetail>
+            ) : null}
+        </div>
+    )
+}
+
+function FacultyBookMobileCard({
+    book,
+    borrowBusyId,
+    borrowDialogBookId,
+    borrowCopies,
+    onBorrowDialogBookChange,
+    onBorrowCopiesChange,
+    onBorrow,
+    facultyMaxActiveBorrows,
+    defaultBorrowDurationDays,
+    remainingBorrowSlots,
+}: {
+    book: BookWithStatus
+    borrowBusyId: string | null
+    borrowDialogBookId: string | null
+    borrowCopies: number
+    onBorrowDialogBookChange: (bookId: string | null) => void
+    onBorrowCopiesChange: (value: number) => void
+    onBorrow: (book: BookWithStatus, copiesRequested: number) => void | Promise<void>
+    facultyMaxActiveBorrows: number
+    defaultBorrowDurationDays: number
+    remainingBorrowSlots: number
+}) {
+    const status = getStatusMeta(book)
+    const remaining = getRemainingCopies(book)
+    const activeBorrowingNow = getActiveBorrowCount(book)
+    const totalBorrowedTimes = getTotalBorrowCount(book)
+    const { dueCell } = getBookBorrowMeta(book)
+
+    return (
+        <div className="rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 p-4 shadow-sm sm:hidden">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                            {formatDetailValue(book.callNumber)}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
+                            {status.label}
+                        </span>
+                    </div>
+                    <h3 className="wrap-break-word whitespace-normal text-sm font-semibold leading-snug text-white">
+                        {formatDetailValue(book.title)}
+                    </h3>
+                    <p className="wrap-break-word text-xs text-white/60">
+                        {formatDetailValue(book.author)}
+                    </p>
+                </div>
+            </div>
+
+            <div className="mt-3 grid gap-2">
+                <CatalogDetail label="Available copies" value={`${remaining}`} />
+                <CatalogDetail label="My status">
+                    <div className="space-y-1 text-xs leading-relaxed text-white/85">
+                        <FacultyBookStatus book={book} />
+                        <div className="text-white/60">
+                            <FacultyBookActionState book={book} />
+                        </div>
+                    </div>
+                </CatalogDetail>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2">
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
+                        >
+                            View full details
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-2xl">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="pr-6 text-left">
+                                {formatDetailValue(book.title)}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-left text-white/65">
+                                {formatDetailValue(book.author)} · Call no. {formatDetailValue(book.callNumber)}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="max-h-screen overflow-y-auto pr-1">
+                            <FacultyBookDetailGrid
+                                book={book}
+                                dueCell={dueCell}
+                                activeBorrowingNow={activeBorrowingNow}
+                                totalBorrowedTimes={totalBorrowedTimes}
+                                remaining={remaining}
+                                borrowBusyId={borrowBusyId}
+                                borrowDialogBookId={borrowDialogBookId}
+                                borrowCopies={borrowCopies}
+                                onBorrowDialogBookChange={onBorrowDialogBookChange}
+                                onBorrowCopiesChange={onBorrowCopiesChange}
+                                onBorrow={onBorrow}
+                                facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                                defaultBorrowDurationDays={defaultBorrowDurationDays}
+                                remainingBorrowSlots={remainingBorrowSlots}
+                                showActions={false}
+                                className="grid gap-3"
+                            />
+                        </div>
+
+                        <AlertDialogFooter>
+                            <AlertDialogCancel className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                                Close
+                            </AlertDialogCancel>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                <FacultyBookActionControls
+                    book={book}
+                    borrowBusyId={borrowBusyId}
+                    borrowDialogBookId={borrowDialogBookId}
+                    borrowCopies={borrowCopies}
+                    onBorrowDialogBookChange={onBorrowDialogBookChange}
+                    onBorrowCopiesChange={onBorrowCopiesChange}
+                    onBorrow={onBorrow}
+                    facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                    defaultBorrowDurationDays={defaultBorrowDurationDays}
+                    remainingBorrowSlots={remainingBorrowSlots}
+                    className="flex flex-col gap-2"
+                />
+            </div>
+        </div>
+    )
+}
+
 function FacultyBookAccordionCard({
     book,
     borrowBusyId,
@@ -135,15 +453,9 @@ function FacultyBookAccordionCard({
 }) {
     const status = getStatusMeta(book)
     const remaining = getRemainingCopies(book)
-    const borrowableNow = isBorrowable(book)
-    const libraryUseOnly = isLibraryUseOnlyBook(book)
     const activeBorrowingNow = getActiveBorrowCount(book)
     const totalBorrowedTimes = getTotalBorrowCount(book)
-    const maxCopies = Math.min(remaining, remainingBorrowSlots)
-    const canBorrowThisBook = borrowableNow && maxCopies > 0
-    const borrowBtnLabel = book.activeRecords.length > 0 ? "Borrow more" : "Borrow"
     const { dueCell } = getBookBorrowMeta(book)
-    const busy = borrowBusyId === book.id
 
     return (
         <AccordionItem
@@ -185,93 +497,22 @@ function FacultyBookAccordionCard({
             </AccordionTrigger>
 
             <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                    <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
-                    <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
-                    <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
-                    <CatalogDetail label="Subtitle" value={formatDetailValue(book.subtitle)} />
-                    <CatalogDetail label="Author" value={formatDetailValue(book.author)} />
-                    <CatalogDetail label="Publication year" value={formatDetailValue(book.publicationYear)} />
-                    <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
-                    <CatalogDetail label="ISSN" value={formatDetailValue(book.issn)} />
-                    <CatalogDetail label="Publisher" value={formatDetailValue(book.publisher)} />
-                    <CatalogDetail label="Subjects" value={getSubjects(book)} />
-                    <CatalogDetail label="Loan duration" value={fmtDurationDays(book.borrowDurationDays)} />
-                    <CatalogDetail label="Due / earliest due" value={dueCell} />
-                    <CatalogDetail label="Inventory">
-                        <span>
-                            Available: {remaining} · Active borrows: {activeBorrowingNow} · All-time: {totalBorrowedTimes}
-                        </span>
-                    </CatalogDetail>
-                    <CatalogDetail label="Last returned">
-                        {book.lastReturnedRecord ? fmtDate(book.lastReturnedRecord.returnDate) : "—"}
-                    </CatalogDetail>
-                    <CatalogDetail label="My activity">
-                        <div className="space-y-1 text-xs leading-relaxed text-white/75">
-                            <FacultyBookStatus book={book} />
-                            <div className="flex flex-col gap-1 text-white/60">
-                                <FacultyBookActionState book={book} />
-                            </div>
-                        </div>
-                    </CatalogDetail>
-                    <CatalogDetail label="Actions">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                            {canBorrowThisBook ? (
-                                <FacultyBorrowConfirmDialog
-                                    book={book}
-                                    open={borrowDialogBookId === book.id}
-                                    onOpenChange={(open) => {
-                                        onBorrowDialogBookChange(open ? book.id : null)
-                                        if (open) {
-                                            onBorrowCopiesChange(
-                                                clampInt(borrowCopies, 1, Math.max(1, maxCopies))
-                                            )
-                                        }
-                                    }}
-                                    quantity={borrowDialogBookId === book.id ? borrowCopies : 1}
-                                    onQuantityChange={onBorrowCopiesChange}
-                                    busy={busy}
-                                    onConfirm={(quantity) => onBorrow(book, quantity)}
-                                    maxCopies={maxCopies}
-                                    remainingBorrowSlots={remainingBorrowSlots}
-                                    facultyMaxActiveBorrows={facultyMaxActiveBorrows}
-                                    defaultBorrowDurationDays={defaultBorrowDurationDays}
-                                    triggerLabel={borrowBtnLabel}
-                                />
-                            ) : libraryUseOnly ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled
-                                    className="border-amber-400/30 text-amber-100 hover:bg-transparent"
-                                >
-                                    In-library only
-                                </Button>
-                            ) : remainingBorrowSlots <= 0 ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled
-                                    className="border-white/20 text-white/60 hover:bg-transparent"
-                                >
-                                    Limit reached
-                                </Button>
-                            ) : (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled
-                                    className="border-white/20 text-white/60 hover:bg-transparent"
-                                >
-                                    Not available
-                                </Button>
-                            )}
-                        </div>
-                    </CatalogDetail>
-                </div>
+                <FacultyBookDetailGrid
+                    book={book}
+                    dueCell={dueCell}
+                    activeBorrowingNow={activeBorrowingNow}
+                    totalBorrowedTimes={totalBorrowedTimes}
+                    remaining={remaining}
+                    borrowBusyId={borrowBusyId}
+                    borrowDialogBookId={borrowDialogBookId}
+                    borrowCopies={borrowCopies}
+                    onBorrowDialogBookChange={onBorrowDialogBookChange}
+                    onBorrowCopiesChange={onBorrowCopiesChange}
+                    onBorrow={onBorrow}
+                    facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                    defaultBorrowDurationDays={defaultBorrowDurationDays}
+                    remainingBorrowSlots={remainingBorrowSlots}
+                />
             </AccordionContent>
         </AccordionItem>
     )
@@ -770,7 +1011,25 @@ export default function FacultyBooksPage() {
                                             </p>
                                         </div>
 
-                                        <Accordion type="multiple" className="space-y-3">
+                                        <div className="space-y-3 sm:hidden">
+                                            {regularRows.map((book) => (
+                                                <FacultyBookMobileCard
+                                                    key={book.id}
+                                                    book={book}
+                                                    borrowBusyId={borrowBusyId}
+                                                    borrowDialogBookId={borrowDialogBookId}
+                                                    borrowCopies={borrowCopies}
+                                                    onBorrowDialogBookChange={setBorrowDialogBookId}
+                                                    onBorrowCopiesChange={setBorrowCopies}
+                                                    onBorrow={handleBorrow}
+                                                    facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                                    defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                                    remainingBorrowSlots={remainingBorrowSlots}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        <Accordion type="multiple" className="hidden space-y-3 sm:block">
                                             {regularRows.map((book) => (
                                                 <FacultyBookAccordionCard
                                                     key={book.id}
@@ -811,7 +1070,25 @@ export default function FacultyBooksPage() {
                                             </p>
                                         </div>
 
-                                        <Accordion type="multiple" className="space-y-3">
+                                        <div className="space-y-3 sm:hidden">
+                                            {libraryUseOnlyRows.map((book) => (
+                                                <FacultyBookMobileCard
+                                                    key={book.id}
+                                                    book={book}
+                                                    borrowBusyId={borrowBusyId}
+                                                    borrowDialogBookId={borrowDialogBookId}
+                                                    borrowCopies={borrowCopies}
+                                                    onBorrowDialogBookChange={setBorrowDialogBookId}
+                                                    onBorrowCopiesChange={setBorrowCopies}
+                                                    onBorrow={handleBorrow}
+                                                    facultyMaxActiveBorrows={facultyBorrowMaxBooks}
+                                                    defaultBorrowDurationDays={facultyBorrowDurationDays}
+                                                    remainingBorrowSlots={remainingBorrowSlots}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        <Accordion type="multiple" className="hidden space-y-3 sm:block">
                                             {libraryUseOnlyRows.map((book) => (
                                                 <FacultyBookAccordionCard
                                                     key={book.id}

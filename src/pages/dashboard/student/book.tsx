@@ -19,6 +19,16 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
     AlertTriangle,
     ArrowUpDown,
     BookOpen,
@@ -229,7 +239,163 @@ function StudentBorrowStatus({ book }: { book: BookWithStatus }) {
     return <span className="text-white/60">—</span>;
 }
 
-function StudentBookAccordionCard({
+function StudentBookActionControls({
+    book,
+    libraryUseOnly,
+    borrowableNow,
+    maxCopies,
+    busy,
+    borrowBtnLabel,
+    onBorrow,
+    className = "flex flex-col gap-2 sm:flex-row sm:flex-wrap",
+}: {
+    book: BookWithStatus;
+    libraryUseOnly: boolean;
+    borrowableNow: boolean;
+    maxCopies: number;
+    busy: boolean;
+    borrowBtnLabel: string;
+    onBorrow: (book: BookWithStatus, copiesRequested: number) => Promise<boolean>;
+    className?: string;
+}) {
+    return (
+        <div className={className}>
+            {libraryUseOnly ? (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled
+                    className="border-amber-400/30 text-amber-100 hover:bg-transparent"
+                >
+                    In-library only
+                </Button>
+            ) : borrowableNow && maxCopies > 0 ? (
+                <BorrowBookDialog
+                    book={book}
+                    maxCopies={maxCopies}
+                    busy={busy}
+                    triggerLabel={borrowBtnLabel}
+                    onConfirm={onBorrow}
+                />
+            ) : (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled
+                    className="border-white/20 text-white/60 hover:bg-transparent"
+                >
+                    Not available
+                </Button>
+            )}
+        </div>
+    );
+}
+
+function StudentBookDetailGrid({
+    book,
+    activeRecords,
+    dueCell,
+    totalCopies,
+    borrowedCopies,
+    remaining,
+    historicalBorrowCount,
+    borrowBusyId,
+    onBorrow,
+    showActions = true,
+    className = "grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
+}: {
+    book: BookWithStatus;
+    activeRecords: BorrowRecordDTO[];
+    dueCell: React.ReactNode;
+    totalCopies: number;
+    borrowedCopies: number;
+    remaining: number;
+    historicalBorrowCount: number | null;
+    borrowBusyId: string | null;
+    onBorrow: (book: BookWithStatus, copiesRequested: number) => Promise<boolean>;
+    showActions?: boolean;
+    className?: string;
+}) {
+    const libraryUseOnly = isLibraryUseOnly(book);
+    const { borrowableNow, borrowBtnLabel } = getBookBorrowMeta(book);
+    const busy = borrowBusyId === book.id;
+    const maxCopies = Math.max(0, remaining);
+
+    return (
+        <div className={className}>
+            <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
+            <CatalogDetail
+                label="Accession #"
+                value={formatDetailValue(book.accessionNumber)}
+            />
+            <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
+            <CatalogDetail label="Subtitle" value={formatDetailValue(book.subtitle)} />
+            <CatalogDetail label="Author" value={formatDetailValue(book.author)} />
+            <CatalogDetail
+                label="Publication year"
+                value={formatDetailValue(book.publicationYear)}
+            />
+            <CatalogDetail label="Subjects" value={getSubjects(book)} />
+            <CatalogDetail label="Publisher" value={formatDetailValue(book.publisher)} />
+            <CatalogDetail
+                label="Library area"
+                value={fmtLibraryArea(book.libraryArea)}
+            />
+            <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
+            <CatalogDetail label="ISSN" value={formatDetailValue(book.issn)} />
+            <CatalogDetail label="Edition" value={formatDetailValue(book.edition)} />
+            <CatalogDetail
+                label="Loan duration"
+                value={fmtDurationDays(book.borrowDurationDays)}
+            />
+            <CatalogDetail label="Due / earliest due" value={dueCell} />
+            <CatalogDetail label="Inventory">
+                <span>
+                    Total: {totalCopies} · Borrowed: {borrowedCopies} · Available: {" "}
+                    {remaining}
+                </span>
+            </CatalogDetail>
+            <CatalogDetail
+                label="Recorded borrows"
+                value={
+                    historicalBorrowCount === null
+                        ? "—"
+                        : `${historicalBorrowCount} borrow${
+                              historicalBorrowCount === 1 ? "" : "s"
+                          }`
+                }
+            />
+            <CatalogDetail label="My activity">
+                <div className="space-y-1 text-xs leading-relaxed text-white/75">
+                    <StudentBorrowStatus book={book} />
+                    {activeRecords.length > 0 ? (
+                        <div className="text-white/60">
+                            You currently have {activeRecords.length} active record
+                            {activeRecords.length === 1 ? "" : "s"} for this title.
+                        </div>
+                    ) : null}
+                </div>
+            </CatalogDetail>
+            {showActions ? (
+                <CatalogDetail label="Actions">
+                    <StudentBookActionControls
+                        book={book}
+                        libraryUseOnly={libraryUseOnly}
+                        borrowableNow={borrowableNow}
+                        maxCopies={maxCopies}
+                        busy={busy}
+                        borrowBtnLabel={borrowBtnLabel}
+                        onBorrow={onBorrow}
+                    />
+                </CatalogDetail>
+            ) : null}
+        </div>
+    );
+}
+
+function StudentBookMobileCard({
     book,
     borrowBusyId,
     onBorrow,
@@ -252,6 +418,123 @@ function StudentBookAccordionCard({
     const historicalBorrowCount = getHistoricalBorrowCount(book);
     const busy = borrowBusyId === book.id;
     const maxCopies = Math.max(0, remaining);
+
+    return (
+        <div className="rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 p-4 shadow-sm sm:hidden">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                            {formatDetailValue(book.callNumber)}
+                        </span>
+                        <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}
+                        >
+                            {status.label}
+                        </span>
+                    </div>
+                    <h3 className="wrap-break-word whitespace-normal text-sm font-semibold leading-snug text-white">
+                        {formatDetailValue(book.title)}
+                    </h3>
+                    <p className="wrap-break-word text-xs text-white/60">
+                        {formatDetailValue(book.author)}
+                    </p>
+                </div>
+            </div>
+
+            <div className="mt-3 grid gap-2">
+                <CatalogDetail
+                    label="Available copies"
+                    value={`${remaining} of ${totalCopies}`}
+                />
+                <CatalogDetail label="My status">
+                    <div className="text-xs leading-relaxed">
+                        <StudentBorrowStatus book={book} />
+                    </div>
+                </CatalogDetail>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2">
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
+                        >
+                            View full details
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-2xl">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="pr-6 text-left">
+                                {formatDetailValue(book.title)}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-left text-white/65">
+                                {formatDetailValue(book.author)} · Call no. {formatDetailValue(
+                                    book.callNumber
+                                )}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="max-h-screen overflow-y-auto pr-1">
+                            <StudentBookDetailGrid
+                                book={book}
+                                activeRecords={activeRecords}
+                                dueCell={dueCell}
+                                totalCopies={totalCopies}
+                                borrowedCopies={borrowedCopies}
+                                remaining={remaining}
+                                historicalBorrowCount={historicalBorrowCount}
+                                borrowBusyId={borrowBusyId}
+                                onBorrow={onBorrow}
+                                showActions={false}
+                                className="grid gap-3"
+                            />
+                        </div>
+
+                        <AlertDialogFooter>
+                            <AlertDialogCancel className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                                Close
+                            </AlertDialogCancel>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                <StudentBookActionControls
+                    book={book}
+                    libraryUseOnly={libraryUseOnly}
+                    borrowableNow={borrowableNow}
+                    maxCopies={maxCopies}
+                    busy={busy}
+                    borrowBtnLabel={borrowBtnLabel}
+                    onBorrow={onBorrow}
+                    className="flex flex-col gap-2"
+                />
+            </div>
+        </div>
+    );
+}
+
+function StudentBookAccordionCard({
+    book,
+    borrowBusyId,
+    onBorrow,
+}: {
+    book: BookWithStatus;
+    borrowBusyId: string | null;
+    onBorrow: (book: BookWithStatus, copiesRequested: number) => Promise<boolean>;
+}) {
+    const status = getStudentStatusMeta(book);
+    const {
+        activeRecords,
+        dueCell,
+        remaining,
+    } = getBookBorrowMeta(book);
+    const totalCopies = getTotalCopies(book);
+    const borrowedCopies = getBorrowedCopies(book);
+    const historicalBorrowCount = getHistoricalBorrowCount(book);
 
     return (
         <AccordionItem
@@ -304,94 +587,17 @@ function StudentBookAccordionCard({
             </AccordionTrigger>
 
             <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                    <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
-                    <CatalogDetail
-                        label="Accession #"
-                        value={formatDetailValue(book.accessionNumber)}
-                    />
-                    <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
-                    <CatalogDetail label="Subtitle" value={formatDetailValue(book.subtitle)} />
-                    <CatalogDetail label="Author" value={formatDetailValue(book.author)} />
-                    <CatalogDetail
-                        label="Publication year"
-                        value={formatDetailValue(book.publicationYear)}
-                    />
-                    <CatalogDetail label="Subjects" value={getSubjects(book)} />
-                    <CatalogDetail label="Publisher" value={formatDetailValue(book.publisher)} />
-                    <CatalogDetail
-                        label="Library area"
-                        value={fmtLibraryArea(book.libraryArea)}
-                    />
-                    <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
-                    <CatalogDetail label="ISSN" value={formatDetailValue(book.issn)} />
-                    <CatalogDetail label="Edition" value={formatDetailValue(book.edition)} />
-                    <CatalogDetail
-                        label="Loan duration"
-                        value={fmtDurationDays(book.borrowDurationDays)}
-                    />
-                    <CatalogDetail label="Due / earliest due" value={dueCell} />
-                    <CatalogDetail label="Inventory">
-                        <span>
-                            Total: {totalCopies} · Borrowed: {borrowedCopies} · Available:{" "}
-                            {remaining}
-                        </span>
-                    </CatalogDetail>
-                    <CatalogDetail
-                        label="Recorded borrows"
-                        value={
-                            historicalBorrowCount === null
-                                ? "—"
-                                : `${historicalBorrowCount} borrow${
-                                      historicalBorrowCount === 1 ? "" : "s"
-                                  }`
-                        }
-                    />
-                    <CatalogDetail label="My activity">
-                        <div className="space-y-1 text-xs leading-relaxed text-white/75">
-                            <StudentBorrowStatus book={book} />
-                            {activeRecords.length > 0 ? (
-                                <div className="text-white/60">
-                                    You currently have {activeRecords.length} active record
-                                    {activeRecords.length === 1 ? "" : "s"} for this title.
-                                </div>
-                            ) : null}
-                        </div>
-                    </CatalogDetail>
-                    <CatalogDetail label="Actions">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                            {libraryUseOnly ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled
-                                    className="border-amber-400/30 text-amber-100 hover:bg-transparent"
-                                >
-                                    In-library only
-                                </Button>
-                            ) : borrowableNow && maxCopies > 0 ? (
-                                <BorrowBookDialog
-                                    book={book}
-                                    maxCopies={maxCopies}
-                                    busy={busy}
-                                    triggerLabel={borrowBtnLabel}
-                                    onConfirm={onBorrow}
-                                />
-                            ) : (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled
-                                    className="border-white/20 text-white/60 hover:bg-transparent"
-                                >
-                                    Not available
-                                </Button>
-                            )}
-                        </div>
-                    </CatalogDetail>
-                </div>
+                <StudentBookDetailGrid
+                    book={book}
+                    activeRecords={activeRecords}
+                    dueCell={dueCell}
+                    totalCopies={totalCopies}
+                    borrowedCopies={borrowedCopies}
+                    remaining={remaining}
+                    historicalBorrowCount={historicalBorrowCount}
+                    borrowBusyId={borrowBusyId}
+                    onBorrow={onBorrow}
+                />
             </AccordionContent>
         </AccordionItem>
     );
@@ -1044,16 +1250,29 @@ export default function StudentBooksPage() {
                                     </p>
                                 </div>
 
-                                <Accordion type="multiple" className="space-y-3">
-                                    {borrowableRows.map((book) => (
-                                        <StudentBookAccordionCard
-                                            key={book.id}
-                                            book={book}
-                                            borrowBusyId={borrowBusyId}
-                                            onBorrow={handleBorrow}
-                                        />
-                                    ))}
-                                </Accordion>
+                                <>
+                                    <div className="space-y-3 sm:hidden">
+                                        {borrowableRows.map((book) => (
+                                            <StudentBookMobileCard
+                                                key={book.id}
+                                                book={book}
+                                                borrowBusyId={borrowBusyId}
+                                                onBorrow={handleBorrow}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    <Accordion type="multiple" className="hidden space-y-3 sm:block">
+                                        {borrowableRows.map((book) => (
+                                            <StudentBookAccordionCard
+                                                key={book.id}
+                                                book={book}
+                                                borrowBusyId={borrowBusyId}
+                                                onBorrow={handleBorrow}
+                                            />
+                                        ))}
+                                    </Accordion>
+                                </>
                             </section>
                         )}
                     </CardContent>
@@ -1080,16 +1299,29 @@ export default function StudentBooksPage() {
                                     No library-use-only books matched your filters.
                                 </div>
                             ) : (
-                                <Accordion type="multiple" className="space-y-3">
-                                    {libraryUseOnlyRows.map((book) => (
-                                        <StudentBookAccordionCard
-                                            key={book.id}
-                                            book={book}
-                                            borrowBusyId={borrowBusyId}
-                                            onBorrow={handleBorrow}
-                                        />
-                                    ))}
-                                </Accordion>
+                                <>
+                                    <div className="space-y-3 sm:hidden">
+                                        {libraryUseOnlyRows.map((book) => (
+                                            <StudentBookMobileCard
+                                                key={book.id}
+                                                book={book}
+                                                borrowBusyId={borrowBusyId}
+                                                onBorrow={handleBorrow}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    <Accordion type="multiple" className="hidden space-y-3 sm:block">
+                                        {libraryUseOnlyRows.map((book) => (
+                                            <StudentBookAccordionCard
+                                                key={book.id}
+                                                book={book}
+                                                borrowBusyId={borrowBusyId}
+                                                onBorrow={handleBorrow}
+                                            />
+                                        ))}
+                                    </Accordion>
+                                </>
                             )}
                         </CardContent>
                     </Card>
