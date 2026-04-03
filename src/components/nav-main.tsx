@@ -22,15 +22,30 @@ import {
     BarChart3,
 } from "lucide-react"
 import { me as apiMe, type Role } from "@/lib/authentication"
+import {
+    BORROW_NOTIFICATION_SYNC_EVENT,
+    fetchBorrowNotificationSummary,
+} from "@/lib/borrows"
 
 type Item = {
     label: string
     icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
     to: string
     exact?: boolean
+    badgeCount?: number
 }
 
 const ROLE_STORAGE_KEY = "bookhive.currentRole"
+const BORROW_NOTIFICATION_POLL_MS = 30000
+
+function normalizeNotificationCount(value: unknown): number {
+    const numeric = Math.floor(Number(value))
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : 0
+}
+
+function formatNotificationBadge(count: number): string {
+    return count > 99 ? "99+" : String(count)
+}
 
 function readCachedRole(): Role | null | undefined {
     if (typeof window === "undefined") return undefined
@@ -54,6 +69,7 @@ export function NavMain() {
     const pathname = location.pathname
 
     const [currentRole, setCurrentRole] = React.useState<Role | null | undefined>(() => readCachedRole())
+    const [borrowNotificationCount, setBorrowNotificationCount] = React.useState(0)
 
     React.useEffect(() => {
         let cancelled = false
@@ -78,11 +94,6 @@ export function NavMain() {
         }
     }, [])
 
-    let groupLabel = "Dashboard"
-    let items: Item[] = [
-        { label: "Dashboard", icon: Home, to: "/dashboard", exact: true },
-    ]
-
     const isLibrarian = pathname.startsWith("/dashboard/librarian")
     const isAssistantSection = pathname.startsWith("/dashboard/assistant-librarian")
     const isFaculty = pathname.startsWith("/dashboard/faculty")
@@ -94,6 +105,63 @@ export function NavMain() {
         !isAssistantSection &&
         !isFaculty &&
         !isAdmin
+
+    const canSeeBorrowRecordNotifications =
+        currentRole === "assistant_librarian" ||
+        currentRole === "librarian" ||
+        isLibrarian ||
+        isAssistantSection
+
+    React.useEffect(() => {
+        if (!canSeeBorrowRecordNotifications) {
+            setBorrowNotificationCount(0)
+            return
+        }
+
+        let cancelled = false
+
+        const loadBorrowNotifications = async () => {
+            try {
+                const summary = await fetchBorrowNotificationSummary()
+                if (!cancelled) {
+                    setBorrowNotificationCount(normalizeNotificationCount(summary.actionableCount))
+                }
+            } catch {
+                if (!cancelled) {
+                    setBorrowNotificationCount(0)
+                }
+            }
+        }
+
+        void loadBorrowNotifications()
+
+        const intervalId = window.setInterval(() => {
+            void loadBorrowNotifications()
+        }, BORROW_NOTIFICATION_POLL_MS)
+
+        const handleWindowFocus = () => {
+            void loadBorrowNotifications()
+        }
+
+        const handleBorrowNotificationSync = () => {
+            void loadBorrowNotifications()
+        }
+
+        window.addEventListener("focus", handleWindowFocus)
+        window.addEventListener(BORROW_NOTIFICATION_SYNC_EVENT, handleBorrowNotificationSync)
+
+        return () => {
+            cancelled = true
+            window.clearInterval(intervalId)
+            window.removeEventListener("focus", handleWindowFocus)
+            window.removeEventListener(BORROW_NOTIFICATION_SYNC_EVENT, handleBorrowNotificationSync)
+        }
+    }, [canSeeBorrowRecordNotifications, pathname])
+
+    let groupLabel = "Dashboard"
+    let items: Item[] = [
+        { label: "Dashboard", icon: Home, to: "/dashboard", exact: true },
+    ]
 
     const isAssistantLibrarian = currentRole === "assistant_librarian"
     const assistantBasePath = isAssistantSection
@@ -111,6 +179,7 @@ export function NavMain() {
             label: "Borrow Records",
             icon: ListChecks,
             to: `${assistantBasePath}/borrow-records`,
+            badgeCount: borrowNotificationCount,
         },
         {
             label: "Settings",
@@ -176,6 +245,7 @@ export function NavMain() {
                     label: "Borrow Records",
                     icon: ListChecks,
                     to: "/dashboard/librarian/borrow-records",
+                    badgeCount: borrowNotificationCount,
                 },
                 {
                     label: "Fines",
@@ -298,9 +368,14 @@ export function NavMain() {
                                         tooltip={item.label}
                                         className="data-[active=true]:bg-white/10"
                                     >
-                                        <Link to={item.to}>
+                                        <Link to={item.to} className="flex w-full items-center gap-2">
                                             <Icon />
-                                            <span>{item.label}</span>
+                                            <span className="min-w-0 flex-1">{item.label}</span>
+                                            {item.badgeCount ? (
+                                                <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                                                    {formatNotificationBadge(item.badgeCount)}
+                                                </span>
+                                            ) : null}
                                         </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>

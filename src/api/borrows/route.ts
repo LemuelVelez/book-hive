@@ -21,6 +21,9 @@ export const BORROW_ROUTES = {
     policyByRole: (role: string) =>
         api(`/borrow-records/policies/${encodeURIComponent(String(role))}`), // GET
 
+    // ✅ borrow records notification summary for librarian/assistant dashboard badges
+    notificationSummary: api("/borrow-records/notifications/summary"), // GET
+
     // ✅ extend due date
     // - student/guest/faculty: creates an extension REQUEST (pending)
     // - librarian/admin: can directly extend immediately (approved)
