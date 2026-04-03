@@ -81,17 +81,18 @@ export default function ForgotPasswordPage() {
                 credentials: "include",
                 body: JSON.stringify({ email: email.trim() }),
             })
+            const data = await resp.json().catch(() => ({}))
             if (!resp.ok) {
-                const data = await resp.json().catch(() => ({}))
                 throw new Error(
                     (data as any)?.message ||
                     "We couldn't start the reset process. Please try again."
                 )
             }
             const msg =
-                "If that email exists in our system, a password reset link has been sent. Please check your inbox (and spam)."
+                (data as any)?.message ||
+                "We emailed you a password reset link. Please check your inbox and spam folder."
             setSuccess(msg)
-            toast.success("Reset link sent (if the email exists)", { description: "Check your inbox and spam folder." })
+            toast.success("Reset link sent", { description: msg })
         } catch (err: any) {
             const msg = err?.message || "Something went wrong. Please try again."
             setError(msg)

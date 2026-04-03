@@ -67,8 +67,14 @@ export default function VerifyEmailPage() {
             })
         } catch (err: any) {
             const msg = err?.message || "Something went wrong. Please try again."
-            setError(msg)
-            toast.error("Send failed", { description: msg })
+
+            if (/already verified/i.test(msg)) {
+                setSuccess(msg)
+                toast.success("Email already verified", { description: msg })
+            } else {
+                setError(msg)
+                toast.error("Send failed", { description: msg })
+            }
         } finally {
             setLoading(false)
         }
