@@ -50,12 +50,14 @@ import { toast } from "sonner";
 
 import {
   fetchBorrowRecords,
+  fetchBorrowNotificationSummary,
   markBorrowReturned,
   updateBorrowDueDate,
   markBorrowAsBorrowed,
   approveBorrowExtensionRequest,
   disapproveBorrowExtensionRequest,
   requestBorrowReturnByLibrarian,
+  type BorrowNotificationSummaryDTO,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -134,6 +136,73 @@ function getStaffActorLabel(
   return "Library staff";
 }
 
+function hasPendingExtensionRequest(rec: BorrowRecordDTO) {
+  return (rec.extensionRequestStatus ?? "none").toLowerCase().trim() === "pending";
+}
+
+function isBorrowRecordActionRequired(
+  rec: BorrowRecordDTO,
+  canManageExtensions: boolean
+) {
+  if (rec.status === "returned" || Boolean(rec.returnDate)) {
+    return false;
+  }
+
+  if (
+    rec.status === "pending_pickup" ||
+    rec.status === "pending_return" ||
+    rec.status === "pending"
+  ) {
+    return true;
+  }
+
+  if (canManageExtensions && hasPendingExtensionRequest(rec)) {
+    return true;
+  }
+
+  return false;
+}
+
+function buildFallbackNotificationSummary(
+  rows: BorrowRecordDTO[],
+  canManageExtensions: boolean
+): BorrowNotificationSummaryDTO {
+  const pendingPickupCount = rows.filter(
+    (rec) => rec.status === "pending_pickup" && rec.status !== "returned"
+  ).length;
+
+  const pendingReturnCount = rows.filter(
+    (rec) =>
+      (rec.status === "pending_return" || rec.status === "pending") &&
+      rec.status !== "returned"
+  ).length;
+
+  const pendingExtensionCount = canManageExtensions
+    ? rows.filter((rec) => hasPendingExtensionRequest(rec) && rec.status !== "returned")
+        .length
+    : 0;
+
+  const actionRequiredCount = rows.filter((rec) =>
+    isBorrowRecordActionRequired(rec, canManageExtensions)
+  ).length;
+
+  const totalRecords = rows.length;
+  const handledCount = Math.max(0, totalRecords - actionRequiredCount);
+
+  return {
+    role: canManageExtensions ? "librarian" : "assistant_librarian",
+    canManageExtensions,
+    totalRecords,
+    actionRequiredCount,
+    unreadCount: actionRequiredCount,
+    handledCount,
+    readCount: handledCount,
+    pendingPickupCount,
+    pendingReturnCount,
+    pendingExtensionCount,
+  };
+}
+
 function computeAutoFine(dueDate?: string | null) {
   if (!dueDate) return { overdueDays: 0, autoFine: 0 };
 
@@ -195,9 +264,11 @@ export default function LibrarianBorrowRecordsPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   const [records, setRecords] = React.useState<BorrowRecordDTO[]>([]);
+  const [notificationSummary, setNotificationSummary] =
+    React.useState<BorrowNotificationSummaryDTO | null>(null);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<
-    "all" | "borrowed" | "returned"
+    "all" | "needs_action" | "borrowed" | "returned"
   >("all");
   const [previewOpen, setPreviewOpen] = React.useState(false);
 
@@ -237,8 +308,15 @@ export default function LibrarianBorrowRecordsPage() {
     setError(null);
     setLoading(true);
     try {
-      const data = await fetchBorrowRecords();
+      const [data, summary] = await Promise.all([
+        fetchBorrowRecords(),
+        fetchBorrowNotificationSummary().catch(() => null),
+      ]);
+
       setRecords(data);
+      setNotificationSummary(
+        summary ?? buildFallbackNotificationSummary(data, true)
+      );
     } catch (err: any) {
       const msg = err?.message || "Failed to load borrow records.";
       setError(msg);
@@ -246,6 +324,34 @@ export default function LibrarianBorrowRecordsPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const refreshNotificationSummary = React.useCallback(async () => {
+    try {
+      const summary = await fetchBorrowNotificationSummary();
+      setNotificationSummary(summary);
+    } catch {
+      setNotificationSummary((prev) =>
+        prev
+          ? buildFallbackNotificationSummary(records, prev.canManageExtensions)
+          : buildFallbackNotificationSummary(records, true)
+      );
+    }
+  }, [records]);
+
+
+  const replaceRecordInState = React.useCallback((updated: BorrowRecordDTO) => {
+    setRecords((prev) => {
+      const next = prev.map((r) => (r.id === updated.id ? updated : r));
+
+      setNotificationSummary((summary) =>
+        summary
+          ? buildFallbackNotificationSummary(next, summary.canManageExtensions)
+          : buildFallbackNotificationSummary(next, true)
+      );
+
+      return next;
+    });
   }, []);
 
   React.useEffect(() => {
@@ -317,7 +423,8 @@ export default function LibrarianBorrowRecordsPage() {
     try {
       const updated = await markBorrowAsBorrowed(rec.id);
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      replaceRecordInState(updated);
+      await refreshNotificationSummary();
 
       toast.success("Marked as borrowed", {
         description: `Record #${updated.id} is now marked as Borrowed.`,
@@ -349,7 +456,8 @@ export default function LibrarianBorrowRecordsPage() {
         fine: parsed,
       });
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      replaceRecordInState(updated);
+      await refreshNotificationSummary();
 
       toast.success("Marked as returned", {
         description: `Record #${updated.id} marked as returned with fine ${peso(
@@ -377,7 +485,8 @@ export default function LibrarianBorrowRecordsPage() {
           : undefined
       );
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      replaceRecordInState(updated);
+      await refreshNotificationSummary();
 
       toast.success("Return requested", {
         description:
@@ -411,7 +520,7 @@ export default function LibrarianBorrowRecordsPage() {
     try {
       const updated = await updateBorrowDueDate(dueRecord.id, ymd);
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      replaceRecordInState(updated);
 
       toast.success("Due date updated", {
         description: `New due date: ${fmtDate(updated.dueDate)}.`,
@@ -435,7 +544,8 @@ export default function LibrarianBorrowRecordsPage() {
         decisionNoteInput.trim() ? decisionNoteInput.trim() : undefined
       );
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      replaceRecordInState(updated);
+      await refreshNotificationSummary();
 
       toast.success("Extension approved", {
         description: `Extension Added (+${FIXED_EXTENSION_DAYS} day). New due date: ${fmtDate(
@@ -461,7 +571,8 @@ export default function LibrarianBorrowRecordsPage() {
         decisionNoteInput.trim() ? decisionNoteInput.trim() : undefined
       );
 
-      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      replaceRecordInState(updated);
+      await refreshNotificationSummary();
 
       toast.success("Extension disapproved", {
         description: "The extension request has been disapproved.",
@@ -475,11 +586,25 @@ export default function LibrarianBorrowRecordsPage() {
     }
   }
 
+  const canManageExtensions =
+    notificationSummary?.canManageExtensions ?? true;
+
+  const effectiveNotificationSummary = React.useMemo(
+    () =>
+      notificationSummary ??
+      buildFallbackNotificationSummary(records, canManageExtensions),
+    [notificationSummary, records, canManageExtensions]
+  );
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = records;
 
-    if (statusFilter === "borrowed") {
+    if (statusFilter === "needs_action") {
+      rows = rows.filter((r) =>
+        isBorrowRecordActionRequired(r, canManageExtensions)
+      );
+    } else if (statusFilter === "borrowed") {
       rows = rows.filter((r) => r.status !== "returned");
     } else if (statusFilter === "returned") {
       rows = rows.filter((r) => r.status === "returned");
@@ -513,7 +638,7 @@ export default function LibrarianBorrowRecordsPage() {
     return matched.sort((a, b) =>
       (b.borrowDate ?? "").localeCompare(a.borrowDate ?? "")
     );
-  }, [records, statusFilter, search]);
+  }, [records, statusFilter, search, canManageExtensions]);
 
   const groupedByUser = React.useMemo(() => {
     const map = new Map<
@@ -535,6 +660,10 @@ export default function LibrarianBorrowRecordsPage() {
       );
       const activeCount = rows.filter((r) => r.status !== "returned").length;
       const returnedCount = rows.length - activeCount;
+      const actionRequiredCount = rows.filter((r) =>
+        isBorrowRecordActionRequired(r, canManageExtensions)
+      ).length;
+
       return {
         key: g.userId,
         userId: g.userId,
@@ -542,6 +671,7 @@ export default function LibrarianBorrowRecordsPage() {
         rows,
         activeCount,
         returnedCount,
+        actionRequiredCount,
       };
     });
 
@@ -550,7 +680,7 @@ export default function LibrarianBorrowRecordsPage() {
     );
 
     return groups;
-  }, [filtered]);
+  }, [filtered, canManageExtensions]);
 
   const printableBorrowRecords = React.useMemo<PrintableBorrowRecord[]>(
     () =>
@@ -578,9 +708,11 @@ export default function LibrarianBorrowRecordsPage() {
     const statusLabel =
       statusFilter === "all"
         ? "All records"
-        : statusFilter === "borrowed"
-          ? "Active (Borrowed + Pending)"
-          : "Returned only";
+        : statusFilter === "needs_action"
+          ? "Needs action"
+          : statusFilter === "borrowed"
+            ? "Active (Borrowed + Pending)"
+            : "Returned only";
 
     const searchLabel = search.trim()
       ? ` • Search: "${search.trim()}"`
@@ -643,6 +775,72 @@ export default function LibrarianBorrowRecordsPage() {
         </div>
       </div>
 
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="border-amber-400/20 bg-amber-500/10">
+          <CardContent className="p-4">
+            <div className="text-[11px] uppercase tracking-wide text-amber-100/70">
+              Unread / Needs action
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-amber-100">
+              {effectiveNotificationSummary.unreadCount}
+            </div>
+            <div className="mt-1 text-xs text-amber-50/70">
+              Transactions or requests still waiting for staff.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-emerald-400/20 bg-emerald-500/10">
+          <CardContent className="p-4">
+            <div className="text-[11px] uppercase tracking-wide text-emerald-100/70">
+              Read / Handled
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-emerald-100">
+              {effectiveNotificationSummary.readCount}
+            </div>
+            <div className="mt-1 text-xs text-emerald-50/70">
+              Records not currently waiting on staff action.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-sky-400/20 bg-sky-500/10">
+          <CardContent className="p-4">
+            <div className="text-[11px] uppercase tracking-wide text-sky-100/70">
+              Pending pickup
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-sky-100">
+              {effectiveNotificationSummary.pendingPickupCount}
+            </div>
+            <div className="mt-1 text-xs text-sky-50/70">
+              Borrow requests waiting to be released.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-fuchsia-400/20 bg-fuchsia-500/10">
+          <CardContent className="p-4">
+            <div className="text-[11px] uppercase tracking-wide text-fuchsia-100/70">
+              Pending return
+              {canManageExtensions
+                ? " + extension"
+                : ""}
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-fuchsia-100">
+              {effectiveNotificationSummary.pendingReturnCount +
+                (canManageExtensions
+                  ? effectiveNotificationSummary.pendingExtensionCount
+                  : 0)}
+            </div>
+            <div className="mt-1 text-xs text-fuchsia-50/70">
+              {canManageExtensions
+                ? `${effectiveNotificationSummary.pendingReturnCount} return request(s) and ${effectiveNotificationSummary.pendingExtensionCount} extension request(s).`
+                : "Return requests waiting for confirmation."}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="border-white/10 bg-slate-800/60">
         <CardHeader className="pb-2">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -663,7 +861,9 @@ export default function LibrarianBorrowRecordsPage() {
                 <Select
                   value={statusFilter}
                   onValueChange={(v) =>
-                    setStatusFilter(v as "all" | "borrowed" | "returned")
+                    setStatusFilter(
+                      v as "all" | "needs_action" | "borrowed" | "returned"
+                    )
                   }
                 >
                   <SelectTrigger className="h-9 w-full border-white/20 bg-slate-900/70 text-white">
@@ -671,6 +871,7 @@ export default function LibrarianBorrowRecordsPage() {
                   </SelectTrigger>
                   <SelectContent className="border-white/10 bg-slate-900 text-white">
                     <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="needs_action">Needs action</SelectItem>
                     <SelectItem value="borrowed">
                       Active (Borrowed + Pending)
                     </SelectItem>
@@ -710,9 +911,9 @@ export default function LibrarianBorrowRecordsPage() {
                 <span className="ml-2">
                   Tip: use{" "}
                   <span className="font-semibold text-amber-200">
-                    Active (Borrowed + Pending)
+                    Needs action
                   </span>{" "}
-                  to focus on items that still need action.
+                  to focus on unread borrow workflow notifications.
                 </span>
               </div>
 
@@ -756,6 +957,11 @@ export default function LibrarianBorrowRecordsPage() {
                             <Badge className="border-sky-400/40 bg-sky-500/15 text-sky-100 hover:bg-sky-500/15">
                               {group.returnedCount} returned
                             </Badge>
+                            {group.actionRequiredCount > 0 ? (
+                              <Badge className="border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15">
+                                {group.actionRequiredCount} needs action
+                              </Badge>
+                            ) : null}
                             <Badge className="border-white/10 bg-white/10 text-white/85 hover:bg-white/10">
                               {group.rows.length} total
                             </Badge>

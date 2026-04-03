@@ -56,6 +56,20 @@ export type BorrowRecordDTO = {
     returnRequestNote?: string | null;
 };
 
+
+export type BorrowNotificationSummaryDTO = {
+    role: string;
+    canManageExtensions: boolean;
+    totalRecords: number;
+    actionRequiredCount: number;
+    unreadCount: number;
+    handledCount: number;
+    readCount: number;
+    pendingPickupCount: number;
+    pendingReturnCount: number;
+    pendingExtensionCount: number;
+};
+
 export type BorrowPolicyDTO = {
     role: BorrowerRole;
     /**
@@ -76,17 +90,6 @@ export type BorrowPolicyDTO = {
      */
     maxPerAction?: number | null;
 };
-
-export type BorrowNotificationSummary = {
-    pendingPickupCount: number;
-    pendingReturnCount: number;
-    pendingExtensionCount: number;
-    pendingLegacyCount: number;
-    actionableCount: number;
-};
-
-export const BORROW_NOTIFICATION_SYNC_EVENT =
-    "bookhive:borrow-notifications-changed";
 
 type JsonOk<T> = { ok: true } & T;
 
@@ -186,16 +189,6 @@ function normalizeBorrowPolicies(
                     typeof item.defaultBorrowDurationDays === "number"
             )
     );
-}
-
-function normalizeNotificationMetric(value: unknown): number {
-    const num = Math.floor(Number(value));
-    return Number.isFinite(num) && num > 0 ? num : 0;
-}
-
-function emitBorrowNotificationSyncEvent(): void {
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(new CustomEvent(BORROW_NOTIFICATION_SYNC_EVENT));
 }
 
 async function requestJSON<T = unknown>(
@@ -360,24 +353,10 @@ export async function fetchBorrowRecords(): Promise<BorrowRecordDTO[]> {
     return res.records;
 }
 
-export async function fetchBorrowNotificationSummary(): Promise<BorrowNotificationSummary> {
-    type Resp = JsonOk<{
-        summary?: Partial<BorrowNotificationSummary> | null;
-    }>;
-
-    const res = await requestJSON<Resp>(BORROW_ROUTES.notificationSummary, {
-        method: "GET",
-    });
-
-    const summary = res.summary ?? {};
-
-    return {
-        pendingPickupCount: normalizeNotificationMetric(summary.pendingPickupCount),
-        pendingReturnCount: normalizeNotificationMetric(summary.pendingReturnCount),
-        pendingExtensionCount: normalizeNotificationMetric(summary.pendingExtensionCount),
-        pendingLegacyCount: normalizeNotificationMetric(summary.pendingLegacyCount),
-        actionableCount: normalizeNotificationMetric(summary.actionableCount),
-    };
+export async function fetchBorrowNotificationSummary(): Promise<BorrowNotificationSummaryDTO> {
+    type Resp = JsonOk<{ summary: BorrowNotificationSummaryDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.summary, { method: "GET" });
+    return res.summary;
 }
 
 /**
@@ -404,7 +383,6 @@ export async function createBorrowRecord(
         throw new Error("Borrow request succeeded but no created borrow record was returned.");
     }
 
-    emitBorrowNotificationSyncEvent();
     return created[0];
 }
 
@@ -437,7 +415,6 @@ export async function createSelfBorrow(
         throw new Error("Borrow request succeeded but no created borrow record was returned.");
     }
 
-    emitBorrowNotificationSyncEvent();
     return created[0];
 }
 
@@ -462,7 +439,6 @@ export async function createSelfBorrowRecords(
         throw new Error("Borrow request succeeded but no created borrow record was returned.");
     }
 
-    emitBorrowNotificationSyncEvent();
     return created;
 }
 
@@ -484,7 +460,6 @@ export async function requestBorrowReturn(
             ...(note && note.trim() ? { note: note.trim() } : {}),
         },
     });
-    emitBorrowNotificationSyncEvent();
     return res.record;
 }
 
@@ -515,7 +490,6 @@ export async function requestBorrowReturnByLibrarian(
         },
     });
 
-    emitBorrowNotificationSyncEvent();
     return { record: res.record, message: res.message };
 }
 
@@ -545,7 +519,6 @@ export async function requestBorrowExtension(
         },
     });
 
-    emitBorrowNotificationSyncEvent();
     return { record: res.record, message: res.message };
 }
 
@@ -563,7 +536,6 @@ export async function approveBorrowExtensionRequest(
         method: "POST",
         body: { note: note && note.trim() ? note.trim() : undefined },
     });
-    emitBorrowNotificationSyncEvent();
     return res.record;
 }
 
@@ -581,7 +553,6 @@ export async function disapproveBorrowExtensionRequest(
         method: "POST",
         body: { note: note && note.trim() ? note.trim() : undefined },
     });
-    emitBorrowNotificationSyncEvent();
     return res.record;
 }
 
@@ -599,7 +570,6 @@ export async function markBorrowAsBorrowed(
             status: "borrowed",
         },
     });
-    emitBorrowNotificationSyncEvent();
     return res.record;
 }
 
@@ -629,7 +599,6 @@ export async function markBorrowReturned(
         method: "PATCH",
         body,
     });
-    emitBorrowNotificationSyncEvent();
     return res.record;
 }
 
