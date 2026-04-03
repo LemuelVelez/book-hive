@@ -140,11 +140,15 @@ function hasPendingExtensionRequest(rec: BorrowRecordDTO) {
   return (rec.extensionRequestStatus ?? "none").toLowerCase().trim() === "pending";
 }
 
+function isReturnedBorrowRecord(rec: BorrowRecordDTO) {
+  return rec.status === "returned" || Boolean(rec.returnDate);
+}
+
 function isBorrowRecordActionRequired(
   rec: BorrowRecordDTO,
   canManageExtensions: boolean
 ) {
-  if (rec.status === "returned" || Boolean(rec.returnDate)) {
+  if (isReturnedBorrowRecord(rec)) {
     return false;
   }
 
@@ -168,17 +172,15 @@ function buildFallbackNotificationSummary(
   canManageExtensions: boolean
 ): BorrowNotificationSummaryDTO {
   const pendingPickupCount = rows.filter(
-    (rec) => rec.status === "pending_pickup" && rec.status !== "returned"
+    (rec) => rec.status === "pending_pickup"
   ).length;
 
   const pendingReturnCount = rows.filter(
-    (rec) =>
-      (rec.status === "pending_return" || rec.status === "pending") &&
-      rec.status !== "returned"
+    (rec) => rec.status === "pending_return" || rec.status === "pending"
   ).length;
 
   const pendingExtensionCount = canManageExtensions
-    ? rows.filter((rec) => hasPendingExtensionRequest(rec) && rec.status !== "returned")
+    ? rows.filter((rec) => !isReturnedBorrowRecord(rec) && hasPendingExtensionRequest(rec))
         .length
     : 0;
 
