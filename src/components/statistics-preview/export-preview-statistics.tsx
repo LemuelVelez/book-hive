@@ -36,10 +36,20 @@ export type PrintableBookStatisticsRecord = {
     totalBorrowCount: number;
 };
 
+export type PrintableCollegeStatisticsRecord = {
+    college: string;
+    uniqueBorrowerCount: number;
+    totalBorrowCount: number;
+    activeBorrowCount: number;
+    topBorrowerName: string;
+    topBorrowerBorrowCount: number;
+};
+
 type ExportPreviewStatisticsProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     records: PrintableBookStatisticsRecord[];
+    collegeRecords?: PrintableCollegeStatisticsRecord[];
     fileNamePrefix?: string;
     reportTitle?: string;
     reportSubtitle?: string;
@@ -47,6 +57,7 @@ type ExportPreviewStatisticsProps = {
 
 type StatisticsPdfDocumentProps = {
     records: PrintableBookStatisticsRecord[];
+    collegeRecords: PrintableCollegeStatisticsRecord[];
     generatedAtIso: string;
     reportTitle: string;
     reportSubtitle: string;
@@ -246,6 +257,15 @@ const pdfStyles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: "#cbd5e1",
     },
+    collegeSectionWrap: {
+        marginTop: 10,
+    },
+    colCollege: { width: "26%", paddingRight: 6 },
+    colBorrowers: { width: "12%", alignItems: "flex-end" },
+    colCollegeBorrowed: { width: "14%", alignItems: "flex-end" },
+    colCollegeActive: { width: "14%", alignItems: "flex-end" },
+    colTopBorrower: { width: "22%", paddingRight: 6 },
+    colTopBorrowerCount: { width: "12%", alignItems: "flex-end" },
     notesWrap: {
         marginTop: 10,
         borderWidth: 1,
@@ -280,6 +300,7 @@ const pdfStyles = StyleSheet.create({
 
 function StatisticsPdfDocument({
     records,
+    collegeRecords,
     generatedAtIso,
     reportTitle,
     reportSubtitle,
@@ -316,6 +337,34 @@ function StatisticsPdfDocument({
             totalCopies: 0,
             filipinianaBorrowCount: 0,
             filipinianaActiveBorrowCount: 0,
+        }
+    );
+
+    const rankedCollegeRecords = [...collegeRecords].sort((a, b) => {
+        if (toNumber(b.totalBorrowCount) !== toNumber(a.totalBorrowCount)) {
+            return toNumber(b.totalBorrowCount) - toNumber(a.totalBorrowCount);
+        }
+
+        if (toNumber(b.uniqueBorrowerCount) !== toNumber(a.uniqueBorrowerCount)) {
+            return toNumber(b.uniqueBorrowerCount) - toNumber(a.uniqueBorrowerCount);
+        }
+
+        return String(a.college || "").localeCompare(String(b.college || ""));
+    });
+
+    const collegeTotals = rankedCollegeRecords.reduce(
+        (acc, row) => {
+            acc.collegeCount += 1;
+            acc.uniqueBorrowerCount += toNumber(row.uniqueBorrowerCount);
+            acc.totalBorrowCount += toNumber(row.totalBorrowCount);
+            acc.activeBorrowCount += toNumber(row.activeBorrowCount);
+            return acc;
+        },
+        {
+            collegeCount: 0,
+            uniqueBorrowerCount: 0,
+            totalBorrowCount: 0,
+            activeBorrowCount: 0,
         }
     );
 
@@ -473,6 +522,95 @@ function StatisticsPdfDocument({
                     </View>
                 </View>
 
+
+                {rankedCollegeRecords.length ? (
+                    <View style={pdfStyles.collegeSectionWrap}>
+                        <Text style={pdfStyles.sectionTitle}>Borrowers by College</Text>
+
+                        <View style={pdfStyles.tableHead}>
+                            <View style={pdfStyles.colCollege}>
+                                <Text style={pdfStyles.th}>College</Text>
+                            </View>
+                            <View style={pdfStyles.colBorrowers}>
+                                <Text style={pdfStyles.th}>Borrowers</Text>
+                            </View>
+                            <View style={pdfStyles.colCollegeBorrowed}>
+                                <Text style={pdfStyles.th}>Total</Text>
+                            </View>
+                            <View style={pdfStyles.colCollegeActive}>
+                                <Text style={pdfStyles.th}>Active</Text>
+                            </View>
+                            <View style={pdfStyles.colTopBorrower}>
+                                <Text style={pdfStyles.th}>Top Borrower</Text>
+                            </View>
+                            <View style={pdfStyles.colTopBorrowerCount}>
+                                <Text style={pdfStyles.th}>Top Count</Text>
+                            </View>
+                        </View>
+
+                        {rankedCollegeRecords.map((row) => (
+                            <View key={row.college} style={pdfStyles.row}>
+                                <View style={pdfStyles.colCollege}>
+                                    <Text style={pdfStyles.td}>{row.college || "Unassigned"}</Text>
+                                </View>
+
+                                <View style={pdfStyles.colBorrowers}>
+                                    <Text style={pdfStyles.td}>
+                                        {fmtCount(toNumber(row.uniqueBorrowerCount))}
+                                    </Text>
+                                </View>
+
+                                <View style={pdfStyles.colCollegeBorrowed}>
+                                    <Text style={pdfStyles.td}>
+                                        {fmtCount(toNumber(row.totalBorrowCount))}
+                                    </Text>
+                                </View>
+
+                                <View style={pdfStyles.colCollegeActive}>
+                                    <Text style={pdfStyles.td}>
+                                        {fmtCount(toNumber(row.activeBorrowCount))}
+                                    </Text>
+                                </View>
+
+                                <View style={pdfStyles.colTopBorrower}>
+                                    <Text style={pdfStyles.td}>
+                                        {row.topBorrowerName || "—"}
+                                    </Text>
+                                </View>
+
+                                <View style={pdfStyles.colTopBorrowerCount}>
+                                    <Text style={pdfStyles.td}>
+                                        {fmtCount(toNumber(row.topBorrowerBorrowCount))}
+                                    </Text>
+                                </View>
+                            </View>
+                        ))}
+
+                        <View style={pdfStyles.totalsWrap}>
+                            <View style={pdfStyles.totalsLine}>
+                                <Text style={pdfStyles.totalsLabel}>Colleges Represented</Text>
+                                <Text style={pdfStyles.totalsValue}>
+                                    {fmtCount(collegeTotals.collegeCount)}
+                                </Text>
+                            </View>
+                            <View style={pdfStyles.totalsLine}>
+                                <Text style={pdfStyles.totalsLabel}>Unique Borrowers</Text>
+                                <Text style={pdfStyles.totalsValue}>
+                                    {fmtCount(collegeTotals.uniqueBorrowerCount)}
+                                </Text>
+                            </View>
+                            <View style={[pdfStyles.totalsLine, pdfStyles.totalsGrand]}>
+                                <Text style={[pdfStyles.totalsLabel, { fontWeight: 700 }]}>
+                                    Active College Borrows
+                                </Text>
+                                <Text style={[pdfStyles.totalsValue, { fontSize: 10 }]}>
+                                    {fmtCount(collegeTotals.activeBorrowCount)}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                ) : null}
+
                 <View style={pdfStyles.notesWrap}>
                     <Text style={pdfStyles.notesTitle}>Report Notes</Text>
                     <Text style={pdfStyles.noteText}>
@@ -482,7 +620,7 @@ function StatisticsPdfDocument({
                         2) Active = borrow records not yet returned.
                     </Text>
                     <Text style={pdfStyles.noteText}>
-                        3) Filipiniana totals are summarized for librarian monitoring.
+                        3) College summaries are based on the borrower course or college value attached to each borrow record.
                     </Text>
                     <Text style={pdfStyles.noteText}>
                         4) This report is printable for librarian dashboard record-keeping.
@@ -506,6 +644,7 @@ export default function ExportPreviewStatistics({
     open,
     onOpenChange,
     records,
+    collegeRecords = [],
     fileNamePrefix = "bookhive-statistics-report",
     reportTitle = "BookHive Library • Statistics Report",
     reportSubtitle = "Printable report for book borrowing statistics.",
@@ -538,12 +677,13 @@ export default function ExportPreviewStatistics({
         () => (
             <StatisticsPdfDocument
                 records={records}
+                collegeRecords={collegeRecords}
                 generatedAtIso={generatedAtIso}
                 reportTitle={reportTitle}
                 reportSubtitle={reportSubtitle}
             />
         ),
-        [generatedAtIso, records, reportSubtitle, reportTitle]
+        [collegeRecords, generatedAtIso, records, reportSubtitle, reportTitle]
     );
 
     const fileName = React.useMemo(() => {
@@ -570,6 +710,20 @@ export default function ExportPreviewStatistics({
             }
         );
     }, [records]);
+
+    const collegeTotals = React.useMemo(() => {
+        return collegeRecords.reduce(
+            (acc, row) => {
+                acc.collegeCount += 1;
+                acc.uniqueBorrowerCount += toNumber(row.uniqueBorrowerCount);
+                return acc;
+            },
+            {
+                collegeCount: 0,
+                uniqueBorrowerCount: 0,
+            }
+        );
+    }, [collegeRecords]);
 
     const handlePrint = React.useCallback(async () => {
         if (!records.length) return;
@@ -660,6 +814,12 @@ export default function ExportPreviewStatistics({
                                     <Badge className="bg-purple-500/20 text-purple-100 border-purple-300/40">
                                         Filipiniana:{" "}
                                         {fmtCount(totals.filipinianaBorrowCount)}
+                                    </Badge>
+                                    <Badge className="bg-cyan-500/20 text-cyan-100 border-cyan-300/40">
+                                        Colleges: {fmtCount(collegeTotals.collegeCount)}
+                                    </Badge>
+                                    <Badge className="bg-indigo-500/20 text-indigo-100 border-indigo-300/40">
+                                        Borrowers: {fmtCount(collegeTotals.uniqueBorrowerCount)}
                                     </Badge>
                                 </div>
 

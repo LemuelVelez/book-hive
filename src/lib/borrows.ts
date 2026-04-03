@@ -25,6 +25,7 @@ export type BorrowRecordDTO = {
     studentEmail: string | null;
     studentId: string | null;
     studentName: string | null;
+    course?: string | null;
     bookId: string;
     bookTitle: string | null;
     borrowDate: string; // ISO date (YYYY-MM-DD)
