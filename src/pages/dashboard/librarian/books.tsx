@@ -207,7 +207,7 @@ function CatalogDetail({
     return (
         <div className={`rounded-xl border border-white/10 bg-black/20 p-3 ${className}`.trim()}>
             <div className="text-[11px] uppercase tracking-wide text-white/55">{label}</div>
-            <div className="mt-1 text-sm text-white/90 wrap-break-word">{children ?? value ?? "—"}</div>
+            <div className="mt-1 wrap-break-word text-sm text-white/90">{children ?? value ?? "—"}</div>
         </div>
     );
 }
@@ -300,8 +300,8 @@ function BookCatalogCard({
                 value={book.id}
                 className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
             >
-                <AccordionTrigger className="px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5">
-                    <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                <AccordionTrigger className="gap-3 px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg]:self-center">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-left">
                         <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
                             {formatDetailValue(book.callNumber)}
                         </span>

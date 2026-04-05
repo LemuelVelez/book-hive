@@ -490,8 +490,8 @@ export default function LibrarianUsersPage() {
         value={u.id}
         className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
       >
-        <AccordionTrigger className="px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5">
-          <div className="min-w-0 flex flex-1 items-center gap-3 text-left">
+        <AccordionTrigger className="gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg]:self-center">
+          <div className="min-w-0 flex flex-1 items-center gap-3 pr-2 text-left">
             <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-white">
@@ -810,8 +810,8 @@ export default function LibrarianUsersPage() {
                     value={group.role}
                     className="self-start overflow-hidden rounded-2xl border border-white/10 bg-slate-900/35 px-0"
                   >
-                    <AccordionTrigger className="px-4 py-3 text-white hover:no-underline">
-                      <div className="flex flex-col items-start gap-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
+                    <AccordionTrigger className="gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:shrink-0 [&>svg]:self-center">
+                      <div className="flex min-w-0 flex-1 flex-col items-start gap-2 pr-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
                         <Badge className={roleBadgeClasses(group.role)}>{roleLabel(group.role)}</Badge>
                         <span className="text-sm font-semibold text-white">
                           {group.total} user{group.total === 1 ? "" : "s"}

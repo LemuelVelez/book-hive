@@ -943,8 +943,8 @@ export default function LibrarianBorrowRecordsPage() {
                       value={group.key}
                       className="overflow-hidden rounded-lg border border-white/10 bg-slate-900/35"
                     >
-                      <AccordionTrigger className="px-4 py-4 text-white/90 hover:bg-white/5 hover:no-underline">
-                        <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                      <AccordionTrigger className="gap-3 px-4 py-4 text-white/90 hover:bg-white/5 hover:no-underline [&>svg]:shrink-0 [&>svg]:self-center">
+                        <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-left">
                           {group.actionRequiredCount > 0 ? (
                             <Badge className="shrink-0 border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15">
                               {group.actionRequiredCount} needs action
@@ -1171,7 +1171,7 @@ export default function LibrarianBorrowRecordsPage() {
                                         </div>
                                       ) : null}
                                       {rec.returnRequestNote ? (
-                                        <div className="mt-1 whitespace-normal wrap-break-word text-amber-50/90">
+                                        <div className="mt-1 wrap-break-word whitespace-normal text-amber-50/90">
                                           Note: {rec.returnRequestNote}
                                         </div>
                                       ) : null}

@@ -1034,8 +1034,8 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                 {groupedByUser.map((group) => (
                                     <AccordionItem key={group.key} value={group.key} className="border-white/10">
                                         <div className="rounded-md bg-white/5 px-3">
-                                            <AccordionTrigger className="items-center py-3 text-white/90 hover:no-underline">
-                                                <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                                            <AccordionTrigger className="items-center gap-3 py-3 text-white/90 hover:no-underline [&>svg]:shrink-0 [&>svg]:self-center">
+                                                <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-left">
                                                     <span className="min-w-0 truncate text-sm font-semibold text-white">
                                                         {group.label} • {group.activeCount} active • {group.paidCount} paid • {group.cancelledCount} cancelled • {group.rows.length} total ({peso(group.totalAmount)})
                                                     </span>
