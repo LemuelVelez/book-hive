@@ -320,6 +320,7 @@ export default function LibrarianUsersPage() {
   const [busy, setBusy] = React.useState<BusyState>(null);
   const [roleDraft, setRoleDraft] = React.useState<Record<string, Role>>({});
   const [confirm, setConfirm] = React.useState<ConfirmState>(null);
+  const [detailsUserId, setDetailsUserId] = React.useState<string | null>(null);
 
   const loadUsers = React.useCallback(async () => {
     setError(null);
@@ -490,18 +491,42 @@ export default function LibrarianUsersPage() {
         className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
       >
         <AccordionTrigger className="px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5">
-          <div className="min-w-0 flex-1 text-left">
-            <div className="flex items-center gap-3 min-w-0">
-              <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
-              <div className="min-w-0">
-                <h3 className="truncate text-sm font-semibold text-white">{u.fullName || "Unnamed user"}</h3>
-                <p className="truncate text-xs text-white/60">{u.email}</p>
+          <div className="min-w-0 flex flex-1 items-center gap-3 text-left">
+            <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-white">
+                {u.fullName || "Unnamed user"} • {u.email} • {roleLabel(u.role)}
               </div>
             </div>
           </div>
         </AccordionTrigger>
 
         <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
+            onClick={() => setDetailsUserId(u.id)}
+          >
+            Details
+          </Button>
+        </AccordionContent>
+
+        <Dialog open={detailsUserId === u.id} onOpenChange={(open) => setDetailsUserId(open ? u.id : null)}>
+          <DialogContent className="w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-4xl
+        [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+        [&::-webkit-scrollbar]:w-1.5
+        [&::-webkit-scrollbar-track]:bg-slate-900/70
+        [&::-webkit-scrollbar-thumb]:rounded-full
+        [&::-webkit-scrollbar-thumb]:bg-slate-700
+        [&::-webkit-scrollbar-thumb:hover]:bg-slate-600">
+            <DialogHeader>
+              <DialogTitle className="pr-6">{u.fullName || "Unnamed user"}</DialogTitle>
+              <DialogDescription className="text-white/70">
+                Review account details, approval status, role changes, and available user actions.
+              </DialogDescription>
+            </DialogHeader>
+
           <div className="space-y-4">
             <div className="flex items-start gap-3 min-w-0">
               <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={44} />
@@ -656,7 +681,9 @@ export default function LibrarianUsersPage() {
               </Button>
             </div>
           </div>
-        </AccordionContent>
+
+          </DialogContent>
+        </Dialog>
       </AccordionItem>
     );
   };

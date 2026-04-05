@@ -300,115 +300,29 @@ function BookCatalogCard({
                 value={book.id}
                 className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
             >
-                <div className="block px-4 py-4 sm:hidden">
-                    <div className="space-y-3 text-left">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                                {formatDetailValue(book.callNumber)}
-                            </span>
-                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
-                                {status.label}
-                            </span>
-                        </div>
-
-                        <div className="space-y-1">
-                            <h3 className="text-sm font-semibold leading-snug text-white wrap-break-word whitespace-normal">
-                                {formatDetailValue(book.title)}
-                            </h3>
-                            <p className="text-xs text-white/60">{formatDetailValue(book.author)}</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-2">
-                            <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
-                            <div className="grid grid-cols-2 gap-2">
-                                <CatalogDetail
-                                    label="Pub. year"
-                                    value={formatDetailValue(book.publicationYear)}
-                                />
-                                <CatalogDetail
-                                    label="Library area"
-                                    value={getLibraryAreaValue(book)}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="border-white/20 text-white/90 hover:bg-white/10"
-                                onClick={() => setDetailsOpen(true)}
-                            >
-                                View full details
-                            </Button>
-
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="border-white/20 text-white/90 hover:bg-white/10"
-                                    onClick={handleEdit}
-                                >
-                                    Edit
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    onClick={handleDeleteRequest}
-                                >
-                                    Delete
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <AccordionTrigger className="hidden px-4 py-4 text-white hover:no-underline sm:flex [&>svg]:mt-0.5">
-                    <div className="min-w-0 flex-1 text-left">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="min-w-0 space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                                        {formatDetailValue(book.callNumber)}
-                                    </span>
-                                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
-                                        {status.label}
-                                    </span>
-                                </div>
-                                <h3 className="text-sm font-semibold leading-snug text-white wrap-break-word whitespace-normal sm:truncate">
-                                    {formatDetailValue(book.title)}
-                                </h3>
-                                <p className="truncate text-xs text-white/60">
-                                    {formatDetailValue(book.author)}
-                                </p>
-                            </div>
-
-                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:gap-3">
-                                <CatalogDetail
-                                    label="Accession #"
-                                    value={formatDetailValue(book.accessionNumber)}
-                                />
-                                <CatalogDetail
-                                    label="Pub. year"
-                                    value={formatDetailValue(book.publicationYear)}
-                                />
-                                <CatalogDetail
-                                    label="Library area"
-                                    value={getLibraryAreaValue(book)}
-                                />
-                                <CatalogDetail label="Inventory" value={getInventoryValue(book)} />
-                            </div>
-                        </div>
+                <AccordionTrigger className="px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                        <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                            {formatDetailValue(book.callNumber)}
+                        </span>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
+                            {status.label}
+                        </span>
+                        <span className="min-w-0 truncate text-sm font-semibold text-white">
+                            {formatDetailValue(book.title)} • {formatDetailValue(book.author)}
+                        </span>
                     </div>
                 </AccordionTrigger>
 
-                <AccordionContent className="hidden border-t border-white/10 px-4 pb-4 pt-4 sm:block">
-                    <BookCatalogDetails
-                        book={book}
-                        status={status}
-                        onEdit={handleEdit}
-                        onDelete={handleDeleteRequest}
-                    />
+                <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
+                        onClick={() => setDetailsOpen(true)}
+                    >
+                        Details
+                    </Button>
                 </AccordionContent>
             </AccordionItem>
 

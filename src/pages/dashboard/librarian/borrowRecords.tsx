@@ -31,6 +31,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   Loader2,
@@ -299,6 +306,7 @@ export default function LibrarianBorrowRecordsPage() {
 
   const [requestReturnDialogOpen, setRequestReturnDialogOpen] =
     React.useState(false);
+  const [detailGroupKey, setDetailGroupKey] = React.useState<string | null>(null);
   const [requestReturnRecord, setRequestReturnRecord] =
     React.useState<BorrowRecordDTO | null>(null);
   const [requestReturnNoteInput, setRequestReturnNoteInput] =
@@ -936,42 +944,43 @@ export default function LibrarianBorrowRecordsPage() {
                       className="overflow-hidden rounded-lg border border-white/10 bg-slate-900/35"
                     >
                       <AccordionTrigger className="px-4 py-4 text-white/90 hover:bg-white/5 hover:no-underline">
-                        <div className="flex w-full flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between">
-                          <div className="space-y-1">
-                            <div className="text-sm font-semibold text-white">
-                              {group.name}
-                            </div>
-                            <div className="text-xs text-white/60">
-                              User #{group.userId}
-                              {primaryRecord?.studentId
-                                ? ` • Student ID: ${primaryRecord.studentId}`
-                                : ""}
-                              {primaryRecord?.studentEmail
-                                ? ` • ${primaryRecord.studentEmail}`
-                                : ""}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Badge className="border-emerald-400/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/15">
-                              {group.activeCount} active
+                        <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                          {group.actionRequiredCount > 0 ? (
+                            <Badge className="shrink-0 border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15">
+                              {group.actionRequiredCount} needs action
                             </Badge>
-                            <Badge className="border-sky-400/40 bg-sky-500/15 text-sky-100 hover:bg-sky-500/15">
-                              {group.returnedCount} returned
-                            </Badge>
-                            {group.actionRequiredCount > 0 ? (
-                              <Badge className="border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15">
-                                {group.actionRequiredCount} needs action
-                              </Badge>
-                            ) : null}
-                            <Badge className="border-white/10 bg-white/10 text-white/85 hover:bg-white/10">
-                              {group.rows.length} total
-                            </Badge>
-                          </div>
+                          ) : null}
+                          <span className="min-w-0 truncate text-sm font-semibold text-white">
+                            {group.name} • {group.activeCount} active • {group.returnedCount} returned • {group.rows.length} total
+                          </span>
                         </div>
                       </AccordionTrigger>
 
-                      <AccordionContent className="px-4 pb-4">
+                      <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
+                          onClick={() => setDetailGroupKey(group.key)}
+                        >
+                          Details
+                        </Button>
+                      </AccordionContent>
+
+                      <Dialog
+                        open={detailGroupKey === group.key}
+                        onOpenChange={(open) => setDetailGroupKey(open ? group.key : null)}
+                      >
+                        <DialogContent
+                          className={`w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-6xl ${dialogScrollbarClasses}`}
+                        >
+                          <DialogHeader>
+                            <DialogTitle className="pr-6">{group.name}</DialogTitle>
+                            <DialogDescription className="text-white/70">
+                              Review borrow records, due dates, extension requests, and return actions for this user.
+                            </DialogDescription>
+                          </DialogHeader>
+
                         <div className="mb-4 grid gap-3 md:grid-cols-3">
                           <DetailItem label="User" value={group.name} />
                           <DetailItem
@@ -1358,7 +1367,9 @@ export default function LibrarianBorrowRecordsPage() {
                             );
                           })}
                         </div>
-                      </AccordionContent>
+
+                        </DialogContent>
+                      </Dialog>
                     </AccordionItem>
                   );
                 })}

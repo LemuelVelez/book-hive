@@ -33,6 +33,13 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
     ReceiptText,
@@ -493,6 +500,7 @@ export default function LibrarianFinesPage() {
     const [editAmountValue, setEditAmountValue] = React.useState<string>("0.00");
 
     const [payDialogOpen, setPayDialogOpen] = React.useState(false);
+    const [detailGroupKey, setDetailGroupKey] = React.useState<string | null>(null);
     const [payDialogFine, setPayDialogFine] = React.useState<FineRow | null>(null);
     const [payOfficialReceiptNumber, setPayOfficialReceiptNumber] = React.useState("");
 
@@ -1027,31 +1035,43 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                     <AccordionItem key={group.key} value={group.key} className="border-white/10">
                                         <div className="rounded-md bg-white/5 px-3">
                                             <AccordionTrigger className="items-center py-3 text-white/90 hover:no-underline">
-                                                <div className="flex w-full items-center justify-between gap-4">
-                                                    <div className="flex flex-col text-left">
-                                                        <span className="text-sm font-semibold text-white">{group.label}</span>
-                                                        <span className="text-xs text-white/60">
-                                                            {group.activeCount} active • {group.paidCount} paid •{" "}
-                                                            {group.cancelledCount} cancelled • {group.rows.length} total
-                                                            <span className="ml-2 text-emerald-200/90">
-                                                                ({peso(group.totalAmount)})
-                                                            </span>
-                                                        </span>
-                                                        {(group.studentId || group.email || group.userId) && (
-                                                            <span className="mt-1 text-xs text-white/50">
-                                                                {group.studentId ? `ID: ${group.studentId}` : ""}
-                                                                {group.studentId && group.email ? " · " : ""}
-                                                                {group.email ? group.email : ""}
-                                                                {(group.studentId || group.email) && group.userId ? " · " : ""}
-                                                                {group.userId ? `User #${group.userId}` : ""}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                                                    <span className="min-w-0 truncate text-sm font-semibold text-white">
+                                                        {group.label} • {group.activeCount} active • {group.paidCount} paid • {group.cancelledCount} cancelled • {group.rows.length} total ({peso(group.totalAmount)})
+                                                    </span>
                                                 </div>
                                             </AccordionTrigger>
                                         </div>
 
-                                        <AccordionContent className="pb-2 pt-2">
+                                        <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
+                                                onClick={() => setDetailGroupKey(group.key)}
+                                            >
+                                                Details
+                                            </Button>
+                                        </AccordionContent>
+
+                                        <Dialog
+                                            open={detailGroupKey === group.key}
+                                            onOpenChange={(open) => setDetailGroupKey(open ? group.key : null)}
+                                        >
+                                            <DialogContent className="w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-6xl
+        [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+        [&::-webkit-scrollbar]:w-1.5
+        [&::-webkit-scrollbar-track]:bg-slate-900/70
+        [&::-webkit-scrollbar-thumb]:rounded-full
+        [&::-webkit-scrollbar-thumb]:bg-slate-700
+        [&::-webkit-scrollbar-thumb:hover]:bg-slate-600">
+                                                <DialogHeader>
+                                                    <DialogTitle className="pr-6">{group.label}</DialogTitle>
+                                                    <DialogDescription className="text-white/70">
+                                                        Review fines, payment status, receipts, and row-level actions for this user.
+                                                    </DialogDescription>
+                                                </DialogHeader>
+
                                             <div className="mb-3 space-y-3">
                                                 <div className="grid gap-3 md:grid-cols-3">
                                                     <Card className="border-white/10 bg-slate-900/40">
@@ -1424,7 +1444,9 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                     );
                                                 })}
                                             </div>
-                                        </AccordionContent>
+
+                                            </DialogContent>
+                                        </Dialog>
                                     </AccordionItem>
                                 ))}
                             </Accordion>
