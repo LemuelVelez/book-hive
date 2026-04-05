@@ -56,6 +56,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type StatusFilter = "all" | "borrowed" | "returned";
 
@@ -992,62 +1000,45 @@ export default function StudentCirculationPage() {
                                   className="border-0"
                                 >
                                   <AccordionTrigger className="px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5">
-                                    <div className="min-w-0 flex-1 text-left">
-                                      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                                        <div className="min-w-0 space-y-2">
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                                              Borrow ID {record.id}
-                                            </span>
-                                            <RecordStatusBadge
-                                              isReturned={isReturned}
-                                              isAnyPending={isAnyPending}
-                                              hasLibrarianReturnRequest={showLibrarianReturnRequest}
-                                              isOverdue={isOverdue}
-                                            />
-                                            {linkedFine &&
-                                            linkedFineStatus === "active" ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                                Active fine
-                                              </span>
-                                            ) : null}
-                                          </div>
-
-                                          <h3 className="wrap-break-word whitespace-normal text-sm font-semibold leading-snug text-white">
-                                            {record.bookTitle ?? `Book #${record.bookId}`}
-                                          </h3>
-
-                                          <p className="text-xs text-white/60">
-                                            Borrowed: {fmtDate(record.borrowDate)} • Due:{" "}
-                                            {fmtDate(record.dueDate)} • Returned:{" "}
-                                            {fmtDate(record.returnDate)}
-                                          </p>
-                                        </div>
-
-                                        <div className="grid gap-2 sm:grid-cols-2 xl:min-w-96 xl:grid-cols-4">
-                                          <CirculationDetail
-                                            label="Borrowed"
-                                            value={fmtDate(record.borrowDate)}
-                                          />
-                                          <CirculationDetail
-                                            label="Due"
-                                            value={fmtDate(record.dueDate)}
-                                          />
-                                          <CirculationDetail
-                                            label="Returned"
-                                            value={fmtDate(record.returnDate)}
-                                          />
-                                          <CirculationDetail
-                                            label="Fine"
-                                            value={peso(finalFineAmount)}
-                                          />
-                                        </div>
-                                      </div>
+                                    <div className="flex w-full min-w-0 items-center gap-2 text-left">
+                                      <RecordStatusBadge
+                                        isReturned={isReturned}
+                                        isAnyPending={isAnyPending}
+                                        hasLibrarianReturnRequest={showLibrarianReturnRequest}
+                                        isOverdue={isOverdue}
+                                      />
+                                      {linkedFine && linkedFineStatus === "active" ? (
+                                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                                          <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                                          Active fine
+                                        </span>
+                                      ) : null}
+                                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/90">
+                                        {record.bookTitle ?? `Book #${record.bookId}`} • Borrow ID {record.id} • Due {fmtDate(record.dueDate)} • Fine {peso(finalFineAmount)}
+                                      </span>
                                     </div>
                                   </AccordionTrigger>
-
                                   <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                                    <Dialog>
+                                      <DialogTrigger asChild>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="w-full border-white/20 text-white/90 hover:bg-white/10"
+                                        >
+                                          Details
+                                        </Button>
+                                      </DialogTrigger>
+                                      <DialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-5xl">
+                                        <DialogHeader>
+                                          <DialogTitle className="pr-6 text-left">
+                                            {record.bookTitle ?? `Book #${record.bookId}`}
+                                          </DialogTitle>
+                                          <DialogDescription className="text-left text-white/65">
+                                            Borrow ID {record.id} • {record.studentName ?? "You"} • Due {fmtDate(record.dueDate)}
+                                          </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
                                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                                       <CirculationDetail
                                         label="Borrow ID"
@@ -1528,6 +1519,9 @@ export default function StudentCirculationPage() {
                                         )}
                                       </CirculationDetail>
                                     </div>
+                                  </div>
+                                      </DialogContent>
+                                    </Dialog>
                                   </AccordionContent>
                                 </AccordionItem>
                               </Accordion>

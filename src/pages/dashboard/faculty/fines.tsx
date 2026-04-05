@@ -31,8 +31,6 @@ import {
     XCircle,
     BookOpen,
     CalendarClock,
-    CircleDollarSign,
-    Hash,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,6 +47,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 
 import {
     fetchMyDamageReports,
@@ -241,6 +247,14 @@ function normalizeStatus(raw: any): FineStatus {
     if (v === "paid") return "paid";
     if (v === "cancelled") return "cancelled";
     return "active";
+}
+
+function renderStatusLabel(statusRaw: any) {
+    const status = normalizeStatus(statusRaw);
+    if (status === "active") return "Active (unpaid)";
+    if (status === "paid") return "Paid";
+    if (status === "cancelled") return "Cancelled";
+    return "Unknown";
 }
 
 function renderStatusBadge(statusRaw: any) {
@@ -534,49 +548,37 @@ export default function FacultyFinesPage() {
                                             className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/50"
                                         >
                                             <AccordionTrigger className="px-4 py-4 hover:no-underline">
-                                                <div className="flex w-full flex-col gap-3 text-left md:flex-row md:items-start md:justify-between">
-                                                    <div className="space-y-2">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <span className="text-sm font-semibold text-white">{primaryLabel}</span>
-                                                            {renderStatusBadge(status)}
-                                                        </div>
-
-                                                        {reasonText && reasonText !== primaryLabel && (
-                                                            <p className="text-xs text-white/65">
-                                                                {reasonText}
-                                                            </p>
-                                                        )}
-
-                                                        <div className="flex flex-wrap gap-2 text-xs text-white/70">
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1">
-                                                                <Hash className="h-3 w-3" />
-                                                                Fine #{fine.id}
-                                                            </span>
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1">
-                                                                <CircleDollarSign className="h-3 w-3" />
-                                                                {peso(amount)}
-                                                            </span>
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1">
-                                                                <CalendarClock className="h-3 w-3" />
-                                                                {damage ? "Damage" : overdueDaysLabel(overdueDays)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex flex-col gap-2 text-xs text-white/65 md:items-end">
-                                                        <span>
-                                                            Created: <span className="font-medium text-white/85">{fmtDate(fine.createdAt)}</span>
-                                                        </span>
-                                                        {fine.borrowDueDate && (
-                                                            <span>
-                                                                Due: <span className="font-medium text-white/85">{fmtDate(fine.borrowDueDate)}</span>
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                <div className="flex w-full min-w-0 items-center gap-2 text-left">
+                                                    <span className="truncate text-sm font-semibold text-white">
+                                                        {primaryLabel}
+                                                    </span>
+                                                    {renderStatusBadge(status)}
+                                                    <span className="min-w-0 flex-1 truncate text-xs text-white/70">
+                                                        {peso(amount)} • {damage ? "Damage" : overdueDaysLabel(overdueDays)} • Created {fmtDate(fine.createdAt)}
+                                                        {fine.borrowDueDate ? ` • Due ${fmtDate(fine.borrowDueDate)}` : ""}
+                                                    </span>
                                                 </div>
                                             </AccordionTrigger>
 
-                                            <AccordionContent className="px-4 pb-4 pt-0">
+                                            <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                                                <Dialog>
+                                                    <DialogTrigger asChild>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            className="w-full border-white/20 text-white/90 hover:bg-white/10"
+                                                        >
+                                                            Details
+                                                        </Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-4xl">
+                                                        <DialogHeader>
+                                                            <DialogTitle className="pr-6 text-left">{primaryLabel}</DialogTitle>
+                                                            <DialogDescription className="text-left text-white/65">
+                                                                Fine #{fine.id} • {renderStatusLabel(status)} • {peso(amount)}
+                                                            </DialogDescription>
+                                                        </DialogHeader>
+                                                        <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
                                                 <div className="grid gap-3 md:grid-cols-2">
                                                     <Card className="border-white/10 bg-slate-950/40">
                                                         <CardHeader className="pb-3">
@@ -802,6 +804,9 @@ export default function FacultyFinesPage() {
                                                         )}
                                                     </div>
                                                 </div>
+                                            </div>
+                                                    </DialogContent>
+                                                </Dialog>
                                             </AccordionContent>
                                         </AccordionItem>
                                     );

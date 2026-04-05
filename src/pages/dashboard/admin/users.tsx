@@ -774,169 +774,195 @@ export default function AdminUsersPage() {
         className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
       >
         <AccordionTrigger className="px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5">
-          <div className="min-w-0 text-left">
-            <h3 className="truncate text-sm font-semibold text-white">{u.fullName || "Unnamed user"}</h3>
+          <div className="flex w-full min-w-0 items-center gap-3 text-left">
+            <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={36} />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/90">
+              {(u.fullName || "Unnamed user")} • {u.email} • {roleLabel(currentRole)} • {u.isApproved ? "Approved" : "Pending"}
+            </span>
+            <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
+              {u.isApproved ? "approved" : "pending"}
+            </Badge>
           </div>
         </AccordionTrigger>
 
         <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-          <div className="space-y-4">
-            <div className="flex items-start gap-3 min-w-0">
-              <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={44} />
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-white/20 text-white/90 hover:bg-white/10"
+              >
+                Details
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle className="pr-6 text-left">{u.fullName || "Unnamed user"}</DialogTitle>
+                <DialogDescription className="text-left text-white/65">
+                  {u.email} • {roleLabel(currentRole)} • {u.isApproved ? "Approved" : "Pending"}
+                </DialogDescription>
+              </DialogHeader>
 
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-semibold text-white truncate max-w-full">
-                    {u.fullName || "Unnamed user"}
-                  </h3>
-                  {isSelf ? (
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
-                      You
+              <div className="max-h-[calc(95svh-8rem)] space-y-4 overflow-y-auto pr-1">
+                <div className="flex items-start gap-3 min-w-0">
+                  <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={44} />
+
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-white truncate max-w-full">
+                        {u.fullName || "Unnamed user"}
+                      </h3>
+                      {isSelf ? (
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
+                          You
+                        </span>
+                      ) : null}
+                      <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
+                        {u.isApproved ? "approved" : "pending"}
+                      </Badge>
+                      <Badge variant="default" className={roleBadgeClasses(currentRole)}>
+                        {roleLabel(currentRole)}
+                      </Badge>
+                    </div>
+
+                    <div className="text-sm text-white/80 break-all">{u.email}</div>
+
+                    <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono max-w-full truncate">
+                        ID: {u.id}
+                      </span>
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+                        Account type: {roleLabel(u.accountType)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  <StatPill
+                    icon={<CalendarDays className="h-3.5 w-3.5" />}
+                    label="Created"
+                    value={formatDateTime(u.createdAt)}
+                  />
+                  <StatPill
+                    icon={<BadgeCheck className="h-3.5 w-3.5" />}
+                    label="Approved at"
+                    value={formatDateTime(u.approvedAt)}
+                  />
+                  <StatPill
+                    icon={<Clock3 className="h-3.5 w-3.5" />}
+                    label="Status"
+                    value={u.isApproved ? "Active access" : "Needs review"}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs uppercase tracking-wide text-white/55">Change role</Label>
+                    <Select
+                      value={draft}
+                      onValueChange={(v) => setRoleDraft((p) => ({ ...p, [u.id]: v as VisibleRole }))}
+                      disabled={isSelf || anyBusyForRow}
+                    >
+                      <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-900 text-white border-white/10">
+                        {ROLE_OPTIONS.map((r) => (
+                          <SelectItem key={r} value={r}>
+                            {roleLabel(r)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {roleChanged ? (
+                    <span className="block text-xs text-violet-200">
+                      Pending change to <span className="font-semibold">{roleLabel(draft)}</span>
                     </span>
-                  ) : null}
-                  <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
-                    {u.isApproved ? "approved" : "pending"}
-                  </Badge>
-                  <Badge variant="default" className={roleBadgeClasses(currentRole)}>
-                    {roleLabel(currentRole)}
-                  </Badge>
+                  ) : (
+                    <span className="block text-xs text-white/45">No unsaved role changes.</span>
+                  )}
+
+                  {isSelf ? (
+                    <p className="text-xs text-white/50">You can’t change your own role here.</p>
+                  ) : (
+                    <p className="text-xs text-white/45">
+                      Permissions follow the selected role. Account type remains informational only.
+                    </p>
+                  )}
                 </div>
 
-                <div className="text-sm text-white/80 break-all">{u.email}</div>
+                <div className="grid gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                    onClick={() => openCredentialsDialog(u)}
+                    disabled={anyBusyForRow}
+                    title="Send / resend login credentials"
+                  >
+                    {isBusyCred ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
+                    Credentials
+                  </Button>
 
-                <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono max-w-full truncate">
-                    ID: {u.id}
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
-                    Account type: {roleLabel(u.accountType)}
-                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                    disabled={!roleChanged || anyBusyForRow || isSelf}
+                    onClick={() => {
+                      const from = currentRole;
+                      const to = draft;
+                      setConfirm({ type: "role", id: u.id, from, to });
+                    }}
+                    title={roleChanged ? "Update role" : "No role changes"}
+                  >
+                    {isBusyRole ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save role
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                    onClick={() => onApprove(u.id)}
+                    disabled={u.isApproved || anyBusyForRow}
+                    title={u.isApproved ? "Already approved" : "Approve user"}
+                  >
+                    {isBusyApprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                    Approve
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+                    onClick={() => onDisapprove(u.id)}
+                    disabled={!u.isApproved || anyBusyForRow}
+                    title={!u.isApproved ? "Already pending" : "Disapprove user"}
+                  >
+                    {isBusyDisapprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+                    Disapprove
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="w-full justify-start hover:opacity-95"
+                    onClick={() => setConfirm({ type: "delete", id: u.id })}
+                    disabled={anyBusyForRow || isSelf}
+                    title={isSelf ? "You can’t delete yourself" : "Delete user"}
+                  >
+                    {isBusyDelete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    Delete
+                  </Button>
                 </div>
               </div>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              <StatPill
-                icon={<CalendarDays className="h-3.5 w-3.5" />}
-                label="Created"
-                value={formatDateTime(u.createdAt)}
-              />
-              <StatPill
-                icon={<BadgeCheck className="h-3.5 w-3.5" />}
-                label="Approved at"
-                value={formatDateTime(u.approvedAt)}
-              />
-              <StatPill
-                icon={<Clock3 className="h-3.5 w-3.5" />}
-                label="Status"
-                value={u.isApproved ? "Active access" : "Needs review"}
-              />
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wide text-white/55">Change role</Label>
-                <Select
-                  value={draft}
-                  onValueChange={(v) => setRoleDraft((p) => ({ ...p, [u.id]: v as VisibleRole }))}
-                  disabled={isSelf || anyBusyForRow}
-                >
-                  <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 text-white border-white/10">
-                    {ROLE_OPTIONS.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {roleLabel(r)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {roleChanged ? (
-                <span className="block text-xs text-violet-200">
-                  Pending change to <span className="font-semibold">{roleLabel(draft)}</span>
-                </span>
-              ) : (
-                <span className="block text-xs text-white/45">No unsaved role changes.</span>
-              )}
-
-              {isSelf ? (
-                <p className="text-xs text-white/50">You can’t change your own role here.</p>
-              ) : (
-                <p className="text-xs text-white/45">
-                  Permissions follow the selected role. Account type remains informational only.
-                </p>
-              )}
-            </div>
-
-            <div className="grid gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
-                onClick={() => openCredentialsDialog(u)}
-                disabled={anyBusyForRow}
-                title="Send / resend login credentials"
-              >
-                {isBusyCred ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
-                Credentials
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
-                disabled={!roleChanged || anyBusyForRow || isSelf}
-                onClick={() => {
-                  const from = currentRole;
-                  const to = draft;
-                  setConfirm({ type: "role", id: u.id, from, to });
-                }}
-                title={roleChanged ? "Update role" : "No role changes"}
-              >
-                {isBusyRole ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Save role
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
-                onClick={() => onApprove(u.id)}
-                disabled={u.isApproved || anyBusyForRow}
-                title={u.isApproved ? "Already approved" : "Approve user"}
-              >
-                {isBusyApprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                Approve
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
-                onClick={() => onDisapprove(u.id)}
-                disabled={!u.isApproved || anyBusyForRow}
-                title={!u.isApproved ? "Already pending" : "Disapprove user"}
-              >
-                {isBusyDisapprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
-                Disapprove
-              </Button>
-
-              <Button
-                type="button"
-                variant="destructive"
-                className="w-full justify-start hover:opacity-95"
-                onClick={() => setConfirm({ type: "delete", id: u.id })}
-                disabled={anyBusyForRow || isSelf}
-                title={isSelf ? "You can’t delete yourself" : "Delete user"}
-              >
-                {isBusyDelete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                Delete
-              </Button>
-            </div>
-          </div>
+            </DialogContent>
+          </Dialog>
         </AccordionContent>
       </AccordionItem>
     );
