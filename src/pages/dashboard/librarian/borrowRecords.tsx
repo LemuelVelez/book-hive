@@ -251,6 +251,16 @@ function formatDateForApi(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function toTitleCase(value: string): string {
+  return value.replace(/\w/g, (char) => char.toUpperCase());
+}
+
+function formatBorrowStatusLabel(status?: string | null): string {
+  const normalized = (status ?? "").trim().replace(/_/g, " ");
+  if (!normalized) return "—";
+  return toTitleCase(normalized);
+}
+
 type DetailItemProps = {
   label: string;
   value: React.ReactNode;
@@ -436,7 +446,7 @@ export default function LibrarianBorrowRecordsPage() {
       replaceRecordInState(updated);
       await refreshNotificationSummary();
 
-      toast.success("Marked as borrowed", {
+      toast.success("Marked as Borrowed", {
         description: `Record #${updated.id} is now marked as Borrowed.`,
       });
     } catch (err: any) {
@@ -469,7 +479,7 @@ export default function LibrarianBorrowRecordsPage() {
       replaceRecordInState(updated);
       await refreshNotificationSummary();
 
-      toast.success("Marked as returned", {
+      toast.success("Marked as Returned", {
         description: `Record #${updated.id} marked as returned with fine ${peso(
           updated.fine ?? parsed
         )}.`,
@@ -498,7 +508,7 @@ export default function LibrarianBorrowRecordsPage() {
       replaceRecordInState(updated);
       await refreshNotificationSummary();
 
-      toast.success("Return requested", {
+      toast.success("Return Requested", {
         description:
           message ||
           `A return request was sent for “${
@@ -532,8 +542,8 @@ export default function LibrarianBorrowRecordsPage() {
 
       replaceRecordInState(updated);
 
-      toast.success("Due date updated", {
-        description: `New due date: ${fmtDate(updated.dueDate)}.`,
+      toast.success("Due Date Updated", {
+        description: `New Due Date: ${fmtDate(updated.dueDate)}.`,
       });
 
       closeDueDialog();
@@ -557,8 +567,8 @@ export default function LibrarianBorrowRecordsPage() {
       replaceRecordInState(updated);
       await refreshNotificationSummary();
 
-      toast.success("Extension approved", {
-        description: `Extension Added (+${FIXED_EXTENSION_DAYS} day). New due date: ${fmtDate(
+      toast.success("Extension Approved", {
+        description: `Extension Added (+${FIXED_EXTENSION_DAYS} day). New Due Date: ${fmtDate(
           updated.dueDate
         )}.`,
       });
@@ -584,7 +594,7 @@ export default function LibrarianBorrowRecordsPage() {
       replaceRecordInState(updated);
       await refreshNotificationSummary();
 
-      toast.success("Extension disapproved", {
+      toast.success("Extension Disapproved", {
         description: "The extension request has been disapproved.",
       });
 
@@ -717,12 +727,12 @@ export default function LibrarianBorrowRecordsPage() {
   const borrowPdfSubtitle = React.useMemo(() => {
     const statusLabel =
       statusFilter === "all"
-        ? "All records"
+        ? "All Records"
         : statusFilter === "needs_action"
-          ? "Needs action"
+          ? "Needs Action"
           : statusFilter === "borrowed"
             ? "Active (Borrowed + Pending)"
-            : "Returned only";
+            : "Returned Only";
 
     const searchLabel = search.trim()
       ? ` • Search: "${search.trim()}"`
@@ -789,7 +799,7 @@ export default function LibrarianBorrowRecordsPage() {
         <Card className="border-amber-400/20 bg-amber-500/10">
           <CardContent className="p-4">
             <div className="text-[11px] uppercase tracking-wide text-amber-100/70">
-              Unread / Needs action
+              Unread / Needs Action
             </div>
             <div className="mt-2 text-2xl font-semibold text-amber-100">
               {effectiveNotificationSummary.unreadCount}
@@ -817,7 +827,7 @@ export default function LibrarianBorrowRecordsPage() {
         <Card className="border-sky-400/20 bg-sky-500/10">
           <CardContent className="p-4">
             <div className="text-[11px] uppercase tracking-wide text-sky-100/70">
-              Pending pickup
+              Pending Pickup
             </div>
             <div className="mt-2 text-2xl font-semibold text-sky-100">
               {effectiveNotificationSummary.pendingPickupCount}
@@ -831,9 +841,9 @@ export default function LibrarianBorrowRecordsPage() {
         <Card className="border-fuchsia-400/20 bg-fuchsia-500/10">
           <CardContent className="p-4">
             <div className="text-[11px] uppercase tracking-wide text-fuchsia-100/70">
-              Pending return
+              Pending Return
               {canManageExtensions
-                ? " + extension"
+                ? " + Extension"
                 : ""}
             </div>
             <div className="mt-2 text-2xl font-semibold text-fuchsia-100">
@@ -854,7 +864,7 @@ export default function LibrarianBorrowRecordsPage() {
       <Card className="border-white/10 bg-slate-800/60">
         <CardHeader className="pb-2">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <CardTitle>Borrow records</CardTitle>
+            <CardTitle>Borrow Records</CardTitle>
 
             <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
               <div className="relative w-full md:w-64">
@@ -881,11 +891,11 @@ export default function LibrarianBorrowRecordsPage() {
                   </SelectTrigger>
                   <SelectContent className="border-white/10 bg-slate-900 text-white">
                     <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="needs_action">Needs action</SelectItem>
+                    <SelectItem value="needs_action">Needs Action</SelectItem>
                     <SelectItem value="borrowed">
                       Active (Borrowed + Pending)
                     </SelectItem>
-                    <SelectItem value="returned">Returned only</SelectItem>
+                    <SelectItem value="returned">Returned Only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -921,7 +931,7 @@ export default function LibrarianBorrowRecordsPage() {
                 <span className="ml-2">
                   Tip: use{" "}
                   <span className="font-semibold text-amber-200">
-                    Needs action
+                    Needs Action
                   </span>{" "}
                   to focus on unread borrow workflow notifications.
                 </span>
@@ -947,11 +957,11 @@ export default function LibrarianBorrowRecordsPage() {
                         <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-left">
                           {group.actionRequiredCount > 0 ? (
                             <Badge className="shrink-0 border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15">
-                              {group.actionRequiredCount} needs action
+                              {group.actionRequiredCount} Needs Action
                             </Badge>
                           ) : null}
                           <span className="min-w-0 truncate text-sm font-semibold text-white">
-                            {group.name} • {group.activeCount} active • {group.returnedCount} returned • {group.rows.length} total
+                            {group.name} • {group.activeCount} Active • {group.returnedCount} Returned • {group.rows.length} Total
                           </span>
                         </div>
                       </AccordionTrigger>
@@ -1073,14 +1083,14 @@ export default function LibrarianBorrowRecordsPage() {
                                         <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
                                           <span className="inline-flex items-center gap-1">
                                             <Clock3 className="h-3 w-3" />
-                                            Pending pickup
+                                            Pending Pickup
                                           </span>
                                         </Badge>
                                       ) : isPendingReturn || isLegacyPending ? (
                                         <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
                                           <span className="inline-flex items-center gap-1">
                                             <Clock3 className="h-3 w-3" />
-                                            Pending return
+                                            Pending Return
                                           </span>
                                         </Badge>
                                       ) : isOverdue ? (
@@ -1101,7 +1111,7 @@ export default function LibrarianBorrowRecordsPage() {
 
                                       {extensionPending ? (
                                         <Badge className="border-purple-400/40 bg-purple-500/15 text-purple-100 hover:bg-purple-500/15">
-                                          Extension pending
+                                          Extension Pending
                                         </Badge>
                                       ) : null}
                                     </div>
@@ -1130,7 +1140,7 @@ export default function LibrarianBorrowRecordsPage() {
                                           {isBorrowed || isAnyPending ? (
                                             isOverdue && autoFine > 0 ? (
                                               <div className="text-xs text-amber-200">
-                                                Accruing overdue fine (
+                                                Amount (
                                                 {peso(autoFine)})
                                               </div>
                                             ) : (
@@ -1155,10 +1165,10 @@ export default function LibrarianBorrowRecordsPage() {
                                   {hasReturnRequest ? (
                                     <div className="rounded-md border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
                                       <div className="font-semibold">
-                                        Return requested
+                                        Return Requested
                                       </div>
                                       <div className="mt-1">
-                                        Requested at:{" "}
+                                        Requested At:{" "}
                                         {fmtDateTime(rec.returnRequestedAt)}
                                       </div>
                                       {hasReturnRequester ? (
@@ -1186,7 +1196,7 @@ export default function LibrarianBorrowRecordsPage() {
                                     {isReturned ? (
                                       <div className="inline-flex items-center gap-1 text-xs text-white/60">
                                         <XCircle className="h-3.5 w-3.5" />
-                                        No actions available
+                                        No Actions Available
                                       </div>
                                     ) : (
                                       <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -1198,13 +1208,13 @@ export default function LibrarianBorrowRecordsPage() {
                                           disabled={!canEditDueDate}
                                           title={
                                             extensionPending
-                                              ? `Review extension request (+${FIXED_EXTENSION_DAYS} day) / Edit due date`
-                                              : "Edit due date"
+                                              ? `Review Extension Request (+${FIXED_EXTENSION_DAYS} Day) / Edit Due Date`
+                                              : "Edit Due Date"
                                           }
                                           onClick={() => openDueDialog(rec)}
                                         >
                                           <Edit className="h-3.5 w-3.5" />
-                                          Edit due date
+                                          Edit Due Date
                                         </Button>
 
                                         {isBorrowed && (
@@ -1219,11 +1229,11 @@ export default function LibrarianBorrowRecordsPage() {
                                             }
                                             title={
                                               canRequestReturn
-                                                ? "Notify borrower to return this book"
+                                                ? "Notify Borrower to Return This Book"
                                                 : "A return request has already been sent for this borrow."
                                             }
                                           >
-                                            Request return
+                                            Request Return
                                           </Button>
                                         )}
 
@@ -1245,15 +1255,15 @@ export default function LibrarianBorrowRecordsPage() {
                                                     <span>Marking…</span>
                                                   </span>
                                                 ) : (
-                                                  "Confirm pickup → Mark borrowed"
+                                                  "Confirm Pickup → Mark Borrowed"
                                                 )}
                                               </Button>
                                             </AlertDialogTrigger>
                                             <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
                                               <AlertDialogHeader>
                                                 <AlertDialogTitle>
-                                                  Confirm pickup &amp; mark as
-                                                  borrowed?
+                                                  Confirm Pickup &amp; Mark as
+                                                  Borrowed?
                                                 </AlertDialogTitle>
                                                 <AlertDialogDescription className="text-white/70">
                                                   Confirm that{" "}
@@ -1266,7 +1276,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                   </span>{" "}
                                                   and change the status from{" "}
                                                   <span className="font-semibold text-amber-200">
-                                                    Pending pickup
+                                                    Pending Pickup
                                                   </span>{" "}
                                                   to{" "}
                                                   <span className="font-semibold text-emerald-200">
@@ -1339,7 +1349,7 @@ export default function LibrarianBorrowRecordsPage() {
                                             className="text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-100"
                                             onClick={() => openReturnDialog(rec)}
                                           >
-                                            Mark as returned
+                                            Mark as Returned
                                           </Button>
                                         )}
                                       </div>
@@ -1349,7 +1359,7 @@ export default function LibrarianBorrowRecordsPage() {
                                       <div className="mt-2 flex flex-col gap-1 text-[11px] text-white/55">
                                         <span>
                                           {extensionPending
-                                            ? `Extension request pending (+${FIXED_EXTENSION_DAYS} day).`
+                                            ? `Extension Request Pending (+${FIXED_EXTENSION_DAYS} Day).`
                                             : "No extension request required."}
                                         </span>
                                         {isBorrowed ? (
@@ -1392,7 +1402,7 @@ export default function LibrarianBorrowRecordsPage() {
         {requestReturnRecord && (
           <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
             <AlertDialogHeader>
-              <AlertDialogTitle>Request book return?</AlertDialogTitle>
+              <AlertDialogTitle>Request Book Return?</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
                 This will notify{" "}
                 <span className="font-semibold text-white">
@@ -1420,13 +1430,13 @@ export default function LibrarianBorrowRecordsPage() {
               </p>
               <p>
                 <span className="text-white/60">Current status:</span>{" "}
-                {requestReturnRecord.status}
+                {formatBorrowStatusLabel(requestReturnRecord.status)}
               </p>
             </div>
 
             <div className="mt-4 space-y-2">
               <p className="text-xs font-medium text-white/80">
-                Note to borrower (optional)
+                Note to Borrower (Optional)
               </p>
               <Input
                 value={requestReturnNoteInput}
@@ -1459,7 +1469,7 @@ export default function LibrarianBorrowRecordsPage() {
                     Sending…
                   </span>
                 ) : (
-                  "Send return request"
+                  "Send Return Request"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -1480,7 +1490,7 @@ export default function LibrarianBorrowRecordsPage() {
         {selectedRecord && (
           <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
             <AlertDialogHeader>
-              <AlertDialogTitle>Mark as returned?</AlertDialogTitle>
+              <AlertDialogTitle>Mark as Returned?</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
                 You&apos;re about to mark{" "}
                 <span className="font-semibold text-white">
@@ -1534,7 +1544,7 @@ export default function LibrarianBorrowRecordsPage() {
 
             <div className="mt-4 space-y-2">
               <p className="text-xs font-medium text-white/80">
-                Final fine amount (editable)
+                Final Fine Amount (Editable)
               </p>
               <div className="flex items-center gap-2">
                 <div className="relative w-full">
@@ -1557,7 +1567,7 @@ export default function LibrarianBorrowRecordsPage() {
                   className="border-white/30 text-xs text-white/80"
                   onClick={() => setFineInput(autoFinePreview.toFixed(2))}
                 >
-                  Use auto
+                  Use Auto
                 </Button>
                 <Button
                   type="button"
@@ -1568,7 +1578,7 @@ export default function LibrarianBorrowRecordsPage() {
                     setFineInput((selectedRecord.fine ?? 0).toFixed(2))
                   }
                 >
-                  Use existing
+                  Use Existing
                 </Button>
               </div>
               <p className="text-[11px] text-white/60">
@@ -1597,7 +1607,7 @@ export default function LibrarianBorrowRecordsPage() {
                     Saving…
                   </span>
                 ) : (
-                  "Confirm return"
+                  "Confirm Return"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -1623,7 +1633,7 @@ export default function LibrarianBorrowRecordsPage() {
             }
           >
             <AlertDialogHeader>
-              <AlertDialogTitle>Edit due date</AlertDialogTitle>
+              <AlertDialogTitle>Edit Due Date</AlertDialogTitle>
               <AlertDialogDescription className="text-white/70">
                 You&apos;re updating the due date for{" "}
                 <span className="font-semibold text-white">
@@ -1651,7 +1661,7 @@ export default function LibrarianBorrowRecordsPage() {
             <div className="mt-4 space-y-2 rounded-md border border-white/10 bg-slate-950/40 p-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-white/80">
-                  Extension request
+                  Extension Request
                 </p>
 
                 {(() => {
@@ -1724,7 +1734,7 @@ export default function LibrarianBorrowRecordsPage() {
                       </span>
                     </p>
                     <p>
-                      <span className="text-white/60">Requested at:</span>{" "}
+                      <span className="text-white/60">Requested At:</span>{" "}
                       {fmtDateTime(dueRecord.extensionRequestedAt ?? null)}
                     </p>
                     {dueRecord.extensionRequestedReason ? (
@@ -1741,7 +1751,7 @@ export default function LibrarianBorrowRecordsPage() {
                     ) : null}
                     {dueRecord.extensionDecisionNote ? (
                       <p>
-                        <span className="text-white/60">Decision note:</span>{" "}
+                        <span className="text-white/60">Decision Note:</span>{" "}
                         {dueRecord.extensionDecisionNote}
                       </p>
                     ) : null}
@@ -1763,7 +1773,7 @@ export default function LibrarianBorrowRecordsPage() {
                 .trim() === "pending" && (
                 <div className="space-y-2 pt-2">
                   <p className="text-xs font-medium text-white/80">
-                    Decision note (optional)
+                    Decision Note (Optional)
                   </p>
                   <Input
                     value={decisionNoteInput}
@@ -1822,7 +1832,7 @@ export default function LibrarianBorrowRecordsPage() {
               .trim() !== "pending" && (
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-medium text-white/80">
-                  New due date
+                  New Due Date
                 </p>
                 <div className="flex flex-col gap-2">
                   <Calendar
@@ -1884,7 +1894,7 @@ export default function LibrarianBorrowRecordsPage() {
                       Saving…
                     </span>
                   ) : (
-                    "Save due date"
+                    "Save Due Date"
                   )}
                 </AlertDialogAction>
               )}
