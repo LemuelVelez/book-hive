@@ -1021,7 +1021,7 @@ export default function AdminUsersPage() {
               </Button>
             </DialogTrigger>
 
-            <DialogContent className="support-scroll w-[92vw] sm:w-auto max-h-[80dvh] overflow-y-auto bg-slate-900 text-white border-white/10">
+            <DialogContent className="support-scroll w-[92vw] sm:w-auto max-h-[95svh] overflow-y-auto bg-slate-900 text-white border-white/10">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-white">
                   <UserPlus className="h-5 w-5" />
@@ -1402,7 +1402,7 @@ export default function AdminUsersPage() {
 
       {/* Confirm dialog (Delete / Role change) */}
       <Dialog open={!!confirm} onOpenChange={(o) => (!o ? setConfirm(null) : null)}>
-        <DialogContent className="bg-slate-900 text-white border-white/10">
+        <DialogContent className="max-h-[95svh] overflow-auto bg-slate-900 text-white border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white">
               {confirm?.type === "delete" ? "Delete user?" : "Change user role?"}
@@ -1482,7 +1482,7 @@ export default function AdminUsersPage() {
           }
         }}
       >
-        <DialogContent className="bg-slate-900 text-white border-white/10">
+        <DialogContent className="max-h-[95svh] overflow-auto bg-slate-900 text-white border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <KeyRound className="h-5 w-5" />

@@ -1238,7 +1238,7 @@ export default function StudentCirculationPage() {
                                                 </Button>
                                               </AlertDialogTrigger>
 
-                                              <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
+                                              <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-900 text-white">
                                                 <AlertDialogHeader>
                                                   <AlertDialogTitle>
                                                     Request to return this book?
@@ -1356,7 +1356,7 @@ export default function StudentCirculationPage() {
                                                 </Button>
                                               </AlertDialogTrigger>
 
-                                              <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
+                                              <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-900 text-white">
                                                 <AlertDialogHeader>
                                                   <AlertDialogTitle>
                                                     Request due date extension

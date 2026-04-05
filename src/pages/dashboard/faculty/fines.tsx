@@ -30,7 +30,7 @@ import {
     AlertTriangle,
     XCircle,
     BookOpen,
-    CalendarClock,
+    CalendarClock
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -681,7 +681,7 @@ export default function FacultyFinesPage() {
                                                                     </Button>
                                                                 </AlertDialogTrigger>
 
-                                                                <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
+                                                                <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-900 text-white">
                                                                     <AlertDialogHeader>
                                                                         <AlertDialogTitle>
                                                                             Pay over the counter
