@@ -5,14 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -23,7 +26,6 @@ import {
 } from "@/components/ui/select";
 import {
   BarChart3,
-  BookCopy,
   FileText,
   GraduationCap,
   Layers3,
@@ -275,6 +277,16 @@ function normalizeCollegeLabelFromCourse(course?: string | null) {
   return raw.length <= 40 ? raw : shortenLabel(raw, 40);
 }
 
+function normalizeCollegeLabel(college?: string | null, course?: string | null) {
+  const rawCollege = String(college || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (rawCollege) return rawCollege;
+
+  return normalizeCollegeLabelFromCourse(course);
+}
+
 function getBorrowerKey(record: BorrowRecordDTO) {
   return String(
     record.userId ||
@@ -437,6 +449,135 @@ function ChartTooltip({
   );
 }
 
+type StatisticsDetailState =
+  | { kind: "book"; row: StatisticsRow }
+  | { kind: "college"; row: CollegeBreakdownRow }
+  | null;
+
+function DetailField({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+      <div className="text-xs text-white/60">{label}</div>
+      <div className="mt-1 wrap-break-word text-sm font-medium text-white">{value}</div>
+    </div>
+  );
+}
+
+function BookStatisticsDetails({ row }: { row: StatisticsRow }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <DetailField label="Book Title" value={row.title} />
+      <DetailField label="Author" value={row.author} />
+      <DetailField label="Library Area" value={normalizeLibraryAreaLabel(row.libraryArea)} />
+      <DetailField label="Genre" value={row.genre || "—"} />
+      <DetailField label="Total Borrowed" value={fmtCount(row.totalBorrowCount)} />
+      <DetailField label="Currently Borrowed" value={fmtCount(row.activeBorrowCount)} />
+      <DetailField label="Available Copies" value={fmtCount(row.availableCopies)} />
+      <DetailField label="Total Copies" value={fmtCount(row.totalCopies)} />
+    </div>
+  );
+}
+
+function CollegeStatisticsDetails({ row }: { row: CollegeBreakdownRow }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <DetailField label="College" value={row.label} />
+      <DetailField label="Unique Borrowers" value={fmtCount(row.uniqueBorrowerCount)} />
+      <DetailField label="Total Borrowed" value={fmtCount(row.totalBorrowCount)} />
+      <DetailField label="Currently Borrowed" value={fmtCount(row.activeBorrowCount)} />
+      <DetailField label="Top Borrower" value={row.topBorrowerName || "—"} />
+      <DetailField
+        label="Top Borrower Borrow Count"
+        value={`${fmtCount(row.topBorrowerBorrowCount)} borrow record${row.topBorrowerBorrowCount === 1 ? "" : "s"}`}
+      />
+    </div>
+  );
+}
+
+function CollegeBreakdownAccordion({
+  rows,
+  onOpenDetails,
+}: {
+  rows: CollegeBreakdownRow[];
+  onOpenDetails: (row: CollegeBreakdownRow) => void;
+}) {
+  return (
+    <Accordion type="multiple" className="space-y-3">
+      {rows.map((row) => {
+        const summary = `${row.label} • ${fmtCount(row.uniqueBorrowerCount)} borrowers • ${fmtCount(row.totalBorrowCount)} total • ${fmtCount(row.activeBorrowCount)} active • Top: ${row.topBorrowerName || "—"}`;
+
+        return (
+          <AccordionItem
+            key={row.key}
+            value={row.key}
+            className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/60 px-3 text-white"
+          >
+            <AccordionTrigger className="gap-3 py-3 text-left hover:no-underline [&>svg]:ml-2 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:text-white/80 [&>svg]:opacity-100">
+              <span className="block min-w-0 flex-1 truncate text-sm font-medium" title={summary}>
+                {summary}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-3 pt-0">
+              <Button
+                type="button"
+                onClick={() => onOpenDetails(row)}
+                className="h-9 bg-sky-500 text-slate-950 hover:bg-sky-400"
+              >
+                Details
+              </Button>
+            </AccordionContent>
+          </AccordionItem>
+        );
+      })}
+    </Accordion>
+  );
+}
+
+function BookStatisticsAccordion({
+  rows,
+  onOpenDetails,
+}: {
+  rows: StatisticsRow[];
+  onOpenDetails: (row: StatisticsRow) => void;
+}) {
+  return (
+    <Accordion type="multiple" className="space-y-3">
+      {rows.map((row) => {
+        const summary = `${row.title} • ${normalizeLibraryAreaLabel(row.libraryArea)} • ${fmtCount(row.totalBorrowCount)} total • ${fmtCount(row.activeBorrowCount)} active • ${fmtCount(row.availableCopies)}/${fmtCount(row.totalCopies)} available`;
+
+        return (
+          <AccordionItem
+            key={row.id}
+            value={row.id}
+            className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/60 px-3 text-white"
+          >
+            <AccordionTrigger className="gap-3 py-3 text-left hover:no-underline [&>svg]:ml-2 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:text-white/80 [&>svg]:opacity-100">
+              <span className="block min-w-0 flex-1 truncate text-sm font-medium" title={summary}>
+                {summary}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-3 pt-0">
+              <Button
+                type="button"
+                onClick={() => onOpenDetails(row)}
+                className="h-9 bg-sky-500 text-slate-950 hover:bg-sky-400"
+              >
+                Details
+              </Button>
+            </AccordionContent>
+          </AccordionItem>
+        );
+      })}
+    </Accordion>
+  );
+}
+
 export default function LibrarianStatisticsPage() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -447,6 +588,7 @@ export default function LibrarianStatisticsPage() {
   const [search, setSearch] = React.useState("");
   const [areaFilter, setAreaFilter] = React.useState("all");
   const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [selectedDetail, setSelectedDetail] = React.useState<StatisticsDetailState>(null);
 
   const load = React.useCallback(async () => {
     setError(null);
@@ -671,7 +813,7 @@ export default function LibrarianStatisticsPage() {
     >();
 
     for (const record of filteredBorrowRecords) {
-      const label = normalizeCollegeLabelFromCourse(record.course);
+      const label = normalizeCollegeLabel(record.college, record.course);
       const key = label.toLowerCase();
 
       const current = map.get(key) ?? {
@@ -843,7 +985,7 @@ export default function LibrarianStatisticsPage() {
         <StatsCard
           title="Colleges Represented"
           value={fmtCount(collegeBreakdown.length)}
-          subtitle="Course/college groups found in the filtered borrow data."
+          subtitle="Student colleges found in the filtered borrow data."
         />
         <StatsCard
           title="Top College"
@@ -851,7 +993,7 @@ export default function LibrarianStatisticsPage() {
           subtitle={
             topCollege
               ? `${fmtCount(topCollege.totalBorrowCount)} borrow record${topCollege.totalBorrowCount === 1 ? "" : "s"}`
-              : "No college data for this filter."
+              : "No student college data for this filter."
           }
         />
       </div>
@@ -1019,7 +1161,7 @@ export default function LibrarianStatisticsPage() {
 
       <GraphCard
         title="Borrowers by college"
-        subtitle="Shows which course or college groups account for the most borrower activity for the current book filter."
+        subtitle="Shows which student colleges account for the most borrower activity for the current book filter."
         icon={<GraduationCap className="h-4 w-4" />}
       >
         {collegeBreakdown.length === 0 ? (
@@ -1086,46 +1228,20 @@ export default function LibrarianStatisticsPage() {
                 </div>
               </div>
             </div>
-
-            <div className="mt-4 overflow-x-auto">
-              <Table>
-                <TableCaption className="text-xs text-white/60">
-                  Borrower activity grouped by course or college for the current filter.
-                </TableCaption>
-                <TableHeader>
-                  <TableRow className="border-white/10">
-                    <TableHead className="text-xs font-semibold text-white/70">College</TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70 text-right">Unique Borrowers</TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70 text-right">Total Borrowed</TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70 text-right">Currently Borrowed</TableHead>
-                    <TableHead className="text-xs font-semibold text-white/70">Top Borrower</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {collegeBreakdown.map((row) => (
-                    <TableRow key={row.key} className="border-white/5 hover:bg-white/5 transition-colors">
-                      <TableCell className="text-sm text-white">{row.label}</TableCell>
-                      <TableCell className="text-sm text-right">{fmtCount(row.uniqueBorrowerCount)}</TableCell>
-                      <TableCell className="text-sm text-right">{fmtCount(row.totalBorrowCount)}</TableCell>
-                      <TableCell className="text-sm text-right">{fmtCount(row.activeBorrowCount)}</TableCell>
-                      <TableCell className="text-sm">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-white">{row.topBorrowerName}</span>
-                          <span className="text-xs text-white/55">
-                            {fmtCount(row.topBorrowerBorrowCount)} borrow record{row.topBorrowerBorrowCount === 1 ? "" : "s"}
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="mt-4 space-y-3">
+              <p className="text-xs text-white/60">
+                Borrower activity grouped by student college for the current filter.
+              </p>
+              <CollegeBreakdownAccordion
+                rows={collegeBreakdown}
+                onOpenDetails={(row) => setSelectedDetail({ kind: "college", row })}
+              />
             </div>
           </>
         )}
       </GraphCard>
 
-      <Card className="bg-slate-800/60 border-white/10">
+      <Card className="bg-slate-800/60 border-white/10 mt-4">
         <CardHeader className="pb-2">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <CardTitle>Statistics list</CardTitle>
@@ -1160,7 +1276,7 @@ export default function LibrarianStatisticsPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {loading ? (
             <div className="space-y-2">
               <Skeleton className="h-10 w-full" />
@@ -1173,91 +1289,14 @@ export default function LibrarianStatisticsPage() {
             <div className="py-10 text-center text-sm text-white/70">No statistics found.</div>
           ) : (
             <>
-              <div className="hidden md:block">
-                <Table>
-                  <TableCaption className="text-xs text-white/60">
-                    Showing {filtered.length} {filtered.length === 1 ? "book" : "books"}.
-                  </TableCaption>
-                  <TableHeader>
-                    <TableRow className="border-white/10">
-                      <TableHead className="text-xs font-semibold text-white/70">Book</TableHead>
-                      <TableHead className="text-xs font-semibold text-white/70">Area / Genre</TableHead>
-                      <TableHead className="text-xs font-semibold text-white/70 text-right">Total Borrowed</TableHead>
-                      <TableHead className="text-xs font-semibold text-white/70 text-right">Currently Borrowed</TableHead>
-                      <TableHead className="text-xs font-semibold text-white/70 text-right">Available Copies</TableHead>
-                      <TableHead className="text-xs font-semibold text-white/70 text-right">Total Copies</TableHead>
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {filtered.map((row) => (
-                      <TableRow key={row.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                        <TableCell className="text-sm">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-medium text-white">{row.title}</span>
-                            <span className="text-xs text-white/60">{row.author}</span>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-sm">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-white/80">{normalizeLibraryAreaLabel(row.libraryArea)}</span>
-                            <span className="text-xs text-white/55">{row.genre || "—"}</span>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-sm text-right">{fmtCount(row.totalBorrowCount)}</TableCell>
-                        <TableCell className="text-sm text-right">{fmtCount(row.activeBorrowCount)}</TableCell>
-                        <TableCell className="text-sm text-right">{fmtCount(row.availableCopies)}</TableCell>
-                        <TableCell className="text-sm text-right">{fmtCount(row.totalCopies)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="space-y-3 md:hidden">
-                {filtered.map((row) => (
-                  <div key={row.id} className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-white">{row.title}</div>
-                        <div className="text-xs text-white/60">{row.author}</div>
-                      </div>
-
-                      <div className="rounded-full border border-sky-300/30 bg-sky-500/10 px-3 py-1 text-xs text-sky-100">
-                        {normalizeLibraryAreaLabel(row.libraryArea)}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg bg-white/5 p-2">
-                        <div className="text-xs text-white/60">Total Borrowed</div>
-                        <div className="mt-1 text-sm font-medium">{fmtCount(row.totalBorrowCount)}</div>
-                      </div>
-
-                      <div className="rounded-lg bg-white/5 p-2">
-                        <div className="text-xs text-white/60">Currently Borrowed</div>
-                        <div className="mt-1 text-sm font-medium">{fmtCount(row.activeBorrowCount)}</div>
-                      </div>
-
-                      <div className="rounded-lg bg-white/5 p-2">
-                        <div className="text-xs text-white/60">Available Copies</div>
-                        <div className="mt-1 text-sm font-medium">{fmtCount(row.availableCopies)}</div>
-                      </div>
-
-                      <div className="rounded-lg bg-white/5 p-2">
-                        <div className="text-xs text-white/60">Total Copies</div>
-                        <div className="mt-1 text-sm font-medium">{fmtCount(row.totalCopies)}</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-2 text-xs text-white/60">
-                      <BookCopy className="h-3.5 w-3.5" />
-                      <span>{row.genre || "—"}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                <p className="text-xs text-white/60">
+                  Showing {filtered.length} {filtered.length === 1 ? "book" : "books"}.
+                </p>
+                <BookStatisticsAccordion
+                  rows={filtered}
+                  onOpenDetails={(row) => setSelectedDetail({ kind: "book", row })}
+                />
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1280,7 +1319,7 @@ export default function LibrarianStatisticsPage() {
                       <span className="text-sm font-medium">College overview</span>
                     </div>
                     <p className="mt-2 text-xs text-white/70">
-                      Borrow activity comes from <span className="font-semibold text-white">{fmtCount(collegeBreakdown.length)}</span> college group{collegeBreakdown.length === 1 ? "" : "s"} and <span className="font-semibold text-white">{fmtCount(uniqueBorrowerCount)}</span> unique borrower{uniqueBorrowerCount === 1 ? "" : "s"} in the current filter.
+                      Borrow activity comes from <span className="font-semibold text-white">{fmtCount(collegeBreakdown.length)}</span> student college group{collegeBreakdown.length === 1 ? "" : "s"} and <span className="font-semibold text-white">{fmtCount(uniqueBorrowerCount)}</span> unique borrower{uniqueBorrowerCount === 1 ? "" : "s"} in the current filter.
                     </p>
                   </CardContent>
                 </Card>
@@ -1302,6 +1341,33 @@ export default function LibrarianStatisticsPage() {
         </CardContent>
       </Card>
 
+      <Dialog
+        open={selectedDetail !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDetail(null);
+        }}
+      >
+        <DialogContent className="max-h-[95svh] overflow-hidden border-white/10 bg-slate-950 text-white sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="wrap-break-word pr-8 text-left text-white">
+              {selectedDetail?.kind === "book"
+                ? selectedDetail.row.title
+                : selectedDetail?.kind === "college"
+                  ? selectedDetail.row.label
+                  : "Details"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
+            {selectedDetail?.kind === "book" ? (
+              <BookStatisticsDetails row={selectedDetail.row} />
+            ) : selectedDetail?.kind === "college" ? (
+              <CollegeStatisticsDetails row={selectedDetail.row} />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ExportPreviewStatistics
         open={previewOpen}
         onOpenChange={setPreviewOpen}
@@ -1309,8 +1375,10 @@ export default function LibrarianStatisticsPage() {
         collegeRecords={printableCollegeRecords}
         fileNamePrefix="bookhive-statistics-report"
         reportTitle="BookHive Library • Statistics Report"
-        reportSubtitle="Printable report for librarian book borrowing statistics and borrower college activity."
+        reportSubtitle="Printable report for librarian book borrowing statistics and borrower student college activity."
       />
     </DashboardLayout>
   );
 }
+
+
