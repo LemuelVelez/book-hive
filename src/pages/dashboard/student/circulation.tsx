@@ -36,8 +36,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { BORROW_ROUTES } from "@/api/borrows/route";
 import {
-  fetchMyBorrowRecords,
   requestBorrowReturn,
   requestBorrowExtension,
   type BorrowRecordDTO,
@@ -59,20 +59,51 @@ import {
 
 type StatusFilter = "all" | "borrowed" | "returned";
 
-const FIXED_EXTENSION_DAYS = 1;
+type BorrowRecordsResponse = {
+  ok?: boolean;
+  records?: BorrowRecordDTO[];
+  message?: string;
+};
 
-/**
- * Format date as YYYY-MM-DD in *local* timezone
- * to avoid off-by-one issues from UTC conversions.
- */
+const FIXED_EXTENSION_DAYS = 1;
+const APP_TIME_ZONE = "Asia/Manila";
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+function getErrorMessage(e: unknown): string {
+  if (!e) return "";
+  if (typeof e === "string") return e;
+  if (typeof e === "object" && "message" in e) {
+    const message = (e as { message?: unknown }).message;
+    return typeof message === "string" ? message : "";
+  }
+  return "";
+}
+
+function isDateOnly(value?: string | null): value is string {
+  return Boolean(value && DATE_ONLY_RE.test(String(value).trim()));
+}
+
 function fmtDate(d?: string | null) {
   if (!d) return "—";
+  const value = String(d).trim();
+
+  if (isDateOnly(value)) {
+    return value;
+  }
+
   try {
-    const date = new Date(d);
-    if (Number.isNaN(date.getTime())) return d;
-    return date.toLocaleDateString("en-CA");
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: APP_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
   } catch {
-    return d;
+    return value;
   }
 }
 
@@ -81,13 +112,16 @@ function fmtDateTime(d?: string | null) {
   try {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return d;
-    return date.toLocaleString("en-CA", {
+
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: APP_TIME_ZONE,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-    });
+      hour12: false,
+    }).format(date);
   } catch {
     return d;
   }
@@ -112,19 +146,92 @@ function normalizeFine(value: any): number {
   return Number.isNaN(num) ? 0 : num;
 }
 
-function computeOverdueDays(dueDate?: string | null): number {
-  if (!dueDate) return 0;
-  const due = new Date(dueDate);
-  if (Number.isNaN(due.getTime())) return 0;
+function getServerNowDate(serverNow?: string | null): Date | null {
+  if (!serverNow) return null;
+  const parsed = new Date(serverNow);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
-  const now = new Date();
+function dateOnlyToUtcMs(dateOnly: string): number {
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+}
 
-  const dueLocal = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+function toUtcDateOnlyString(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
 
-  const diffMs = todayLocal.getTime() - dueLocal.getTime();
-  const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+function computeOverdueDays(
+  dueDate?: string | null,
+  serverNow?: string | null
+): number {
+  if (!isDateOnly(dueDate)) return 0;
+
+  const referenceDate = getServerNowDate(serverNow);
+  if (!referenceDate) return 0;
+
+  const todayDateOnly = toUtcDateOnlyString(referenceDate);
+  const diffMs = dateOnlyToUtcMs(todayDateOnly) - dateOnlyToUtcMs(dueDate);
+  const rawDays = Math.floor(diffMs / DAY_MS);
+
   return rawDays > 0 ? rawDays : 0;
+}
+
+async function fetchBorrowRecordsSnapshot(): Promise<{
+  records: BorrowRecordDTO[];
+  serverNow: string | null;
+}> {
+  let response: Response;
+
+  try {
+    response = await fetch(BORROW_ROUTES.my, {
+      credentials: "include",
+      method: "GET",
+    });
+  } catch (error) {
+    const details = getErrorMessage(error);
+    const suffix = details ? ` Details: ${details}` : "";
+    throw new Error(
+      `Cannot reach the circulation API right now.${suffix}`
+    );
+  }
+
+  const serverNow = response.headers.get("date");
+  const contentType = response.headers.get("content-type")?.toLowerCase() || "";
+  const isJson = contentType.includes("application/json");
+
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+
+    if (isJson) {
+      try {
+        const data = (await response.json()) as BorrowRecordsResponse;
+        if (data && typeof data.message === "string" && data.message.trim()) {
+          message = data.message;
+        }
+      } catch {
+        // ignore malformed JSON error payloads
+      }
+    } else {
+      try {
+        const text = await response.text();
+        if (text.trim()) message = text;
+      } catch {
+        // ignore unreadable text payloads
+      }
+    }
+
+    throw new Error(message);
+  }
+
+  const payload = isJson
+    ? ((await response.json()) as BorrowRecordsResponse)
+    : null;
+
+  return {
+    records: Array.isArray(payload?.records) ? payload.records : [],
+    serverNow,
+  };
 }
 
 function CirculationDetail({
@@ -190,6 +297,33 @@ function LibrarianReturnRequestNotice({
       ) : (
         <div className="mt-1 text-rose-100/70">No note from librarian.</div>
       )}
+    </div>
+  );
+}
+
+function BorrowerReturnRequestNotice({
+  requestedAt,
+  className = "",
+}: {
+  requestedAt?: string | null;
+  className?: string;
+}) {
+  return (
+    <div
+      className={
+        "rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-[11px] text-amber-100 " +
+        className
+      }
+    >
+      <div className="inline-flex items-center gap-1 font-semibold">
+        <Clock3 className="h-3.5 w-3.5" />
+        Return request submitted
+      </div>
+
+      <div className="mt-1 text-amber-100/90">
+        Waiting for librarian confirmation.
+        {requestedAt ? ` • ${fmtDateTime(requestedAt)}` : ""}
+      </div>
     </div>
   );
 }
@@ -321,6 +455,7 @@ function RecordStatusBadge({
 export default function StudentCirculationPage() {
   const [records, setRecords] = React.useState<BorrowRecordDTO[]>([]);
   const [fines, setFines] = React.useState<FineDTO[]>([]);
+  const [serverNow, setServerNow] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -338,11 +473,13 @@ export default function StudentCirculationPage() {
     setError(null);
     setLoading(true);
     try {
-      const [recordsData, finesData] = await Promise.all([
-        fetchMyBorrowRecords(),
+      const [recordsSnapshot, finesData] = await Promise.all([
+        fetchBorrowRecordsSnapshot(),
         fetchMyFines(),
       ]);
-      setRecords(recordsData);
+
+      setRecords(recordsSnapshot.records);
+      setServerNow(recordsSnapshot.serverNow);
       setFines(finesData);
     } catch (err: any) {
       const msg =
@@ -665,8 +802,8 @@ export default function StudentCirculationPage() {
           </p>
 
           <p className="mt-1 text-[11px] text-white/60">
-            Librarian notes and extension decision notes now appear inside each
-            record card for easier reading.
+            Circulation timing now follows the server response clock instead of
+            the current device clock.
           </p>
         </CardHeader>
 
@@ -780,9 +917,13 @@ export default function StudentCirculationPage() {
                             : fineAmountFromRecord;
 
                           const isActiveBorrow = isBorrowed || isAnyPending;
-                          const overdueDays = computeOverdueDays(record.dueDate);
+                          const overdueDays = computeOverdueDays(
+                            record.dueDate,
+                            serverNow
+                          );
                           const isOverdue =
-                            isActiveBorrow && overdueDays > 0;
+                            isActiveBorrow &&
+                            (overdueDays > 0 || finalFineAmount > 0);
 
                           const extensionCount = (record.extensionCount ??
                             0) as number;
@@ -813,10 +954,26 @@ export default function StudentCirculationPage() {
                             record.returnRequestNote ?? ""
                           ).trim();
 
-                          const hasLibrarianReturnRequest = Boolean(
+                          const hasReturnRequestMetadata = Boolean(
                             record.returnRequestedAt ||
                               librarianRequestNote ||
-                              record.returnRequestedByName
+                              record.returnRequestedByName ||
+                              (record.returnRequestedBy !== null &&
+                                record.returnRequestedBy !== undefined)
+                          );
+
+                          const isBorrowerReturnRequest = Boolean(
+                            hasReturnRequestMetadata &&
+                              record.returnRequestedBy !== null &&
+                              record.returnRequestedBy !== undefined &&
+                              String(record.returnRequestedBy) ===
+                                String(record.userId)
+                          );
+
+                          const showLibrarianReturnRequest = Boolean(
+                            !isReturned &&
+                              hasReturnRequestMetadata &&
+                              !isBorrowerReturnRequest
                           );
 
                           const librarianRequesterName =
@@ -845,7 +1002,7 @@ export default function StudentCirculationPage() {
                                             <RecordStatusBadge
                                               isReturned={isReturned}
                                               isAnyPending={isAnyPending}
-                                              hasLibrarianReturnRequest={hasLibrarianReturnRequest}
+                                              hasLibrarianReturnRequest={showLibrarianReturnRequest}
                                               isOverdue={isOverdue}
                                             />
                                             {linkedFine &&
@@ -970,10 +1127,10 @@ export default function StudentCirculationPage() {
                                           <RecordStatusBadge
                                             isReturned={isReturned}
                                             isAnyPending={isAnyPending}
-                                            hasLibrarianReturnRequest={hasLibrarianReturnRequest}
+                                            hasLibrarianReturnRequest={showLibrarianReturnRequest}
                                             isOverdue={isOverdue}
                                           />
-                                          {hasLibrarianReturnRequest ? (
+                                          {showLibrarianReturnRequest ? (
                                             <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
                                               <BellRing className="h-3 w-3" />
                                               Requested by librarian
@@ -1035,14 +1192,24 @@ export default function StudentCirculationPage() {
                                       </CirculationDetail>
 
                                       <CirculationDetail
-                                        label="Librarian note"
+                                        label={
+                                          showLibrarianReturnRequest
+                                            ? "Librarian note"
+                                            : isPendingReturn || isLegacyPending
+                                              ? "Return request status"
+                                              : "Librarian note"
+                                        }
                                         className="xl:col-span-2"
                                       >
-                                        {hasLibrarianReturnRequest ? (
+                                        {showLibrarianReturnRequest ? (
                                           <LibrarianReturnRequestNotice
                                             requesterName={librarianRequesterName}
                                             requestedAt={record.returnRequestedAt}
                                             note={librarianRequestNote}
+                                          />
+                                        ) : isPendingReturn || isLegacyPending ? (
+                                          <BorrowerReturnRequestNotice
+                                            requestedAt={record.returnRequestedAt}
                                           />
                                         ) : (
                                           <span className="text-xs text-white/50">
@@ -1072,7 +1239,7 @@ export default function StudentCirculationPage() {
                                                       <Loader2 className="h-4 w-4 animate-spin" />
                                                       Sending…
                                                     </span>
-                                                  ) : hasLibrarianReturnRequest ? (
+                                                  ) : showLibrarianReturnRequest ? (
                                                     "Respond with return request"
                                                   ) : (
                                                     "Request return"
@@ -1117,7 +1284,7 @@ export default function StudentCirculationPage() {
                                                     {fmtDate(record.dueDate)}
                                                   </p>
 
-                                                  {hasLibrarianReturnRequest ? (
+                                                  {showLibrarianReturnRequest ? (
                                                     <LibrarianReturnRequestNotice
                                                       requesterName={librarianRequesterName}
                                                       requestedAt={record.returnRequestedAt}
