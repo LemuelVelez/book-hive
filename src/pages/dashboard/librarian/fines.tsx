@@ -1034,9 +1034,9 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                 {groupedByUser.map((group) => (
                                     <AccordionItem key={group.key} value={group.key} className="border-white/10">
                                         <div className="rounded-md bg-white/5 px-3">
-                                            <AccordionTrigger className="items-center gap-3 py-3 text-white/90 hover:no-underline [&>svg]:shrink-0 [&>svg]:self-center">
-                                                <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-left">
-                                                    <span className="min-w-0 truncate text-sm font-semibold text-white">
+                                            <AccordionTrigger className="items-start gap-3 py-3 text-white/90 hover:no-underline [&>svg]:ml-3 [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg]:self-start">
+                                                <div className="flex min-w-0 flex-1 items-start gap-2 pr-2 text-left">
+                                                    <span className="min-w-0 whitespace-normal wrap-break-word pr-2 text-sm font-semibold leading-5 text-white">
                                                         {group.label} • {group.activeCount} active • {group.paidCount} paid • {group.cancelledCount} cancelled • {group.rows.length} total ({peso(group.totalAmount)})
                                                     </span>
                                                 </div>
@@ -1058,7 +1058,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                             open={detailGroupKey === group.key}
                                             onOpenChange={(open) => setDetailGroupKey(open ? group.key : null)}
                                         >
-                                            <DialogContent className="w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-6xl
+                                            <DialogContent className="w-[96vw] max-h-[95svh] overflow-x-hidden overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-6xl
         [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
         [&::-webkit-scrollbar]:w-1.5
         [&::-webkit-scrollbar-track]:bg-slate-900/70
@@ -1066,7 +1066,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
         [&::-webkit-scrollbar-thumb]:bg-slate-700
         [&::-webkit-scrollbar-thumb:hover]:bg-slate-600">
                                                 <DialogHeader>
-                                                    <DialogTitle className="pr-6">{group.label}</DialogTitle>
+                                                    <DialogTitle className="pr-8 whitespace-normal wrap-break-word">{group.label}</DialogTitle>
                                                     <DialogDescription className="text-white/70">
                                                         Review fines, payment status, receipts, and row-level actions for this user.
                                                     </DialogDescription>
@@ -1079,7 +1079,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                             <UserRound className="h-4 w-4 text-sky-200" />
                                                             <div>
                                                                 <p className="text-xs text-white/50">Account summary</p>
-                                                                <p className="text-sm font-medium text-white">
+                                                                <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">
                                                                     {group.rows.length} {group.rows.length === 1 ? "record" : "records"}
                                                                 </p>
                                                             </div>
@@ -1091,7 +1091,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                             <CircleDollarSign className="h-4 w-4 text-emerald-200" />
                                                             <div>
                                                                 <p className="text-xs text-white/50">Total amount</p>
-                                                                <p className="text-sm font-medium text-white">{peso(group.totalAmount)}</p>
+                                                                <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">{peso(group.totalAmount)}</p>
                                                             </div>
                                                         </CardContent>
                                                     </Card>
@@ -1101,7 +1101,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                             <CalendarClock className="h-4 w-4 text-amber-200" />
                                                             <div>
                                                                 <p className="text-xs text-white/50">Outstanding</p>
-                                                                <p className="text-sm font-medium text-white">
+                                                                <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">
                                                                     {group.activeCount} active {group.activeCount === 1 ? "fine" : "fines"}
                                                                 </p>
                                                             </div>
@@ -1177,7 +1177,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                                         </div>
 
                                                                         <div>
-                                                                            <CardTitle className="text-base text-white">
+                                                                            <CardTitle className="text-base text-white whitespace-normal wrap-break-word">
                                                                                 {fine.bookTitle ? fine.bookTitle : fine.bookId ? `Book #${fine.bookId}` : "Untitled record"}
                                                                             </CardTitle>
                                                                             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/60">
@@ -1207,28 +1207,28 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                                                                     <div className="rounded-md border border-white/10 bg-white/5 p-3">
                                                                         <p className="text-xs text-white/50">Duration</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white">
+                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
                                                                             {damage || isDamageRow ? "Damage" : overdueLabel}
                                                                         </p>
                                                                     </div>
 
                                                                     <div className="rounded-md border border-white/10 bg-white/5 p-3">
                                                                         <p className="text-xs text-white/50">Created</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white">
+                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
                                                                             {fmtDate(fine.createdAt)}
                                                                         </p>
                                                                     </div>
 
                                                                     <div className="rounded-md border border-white/10 bg-white/5 p-3">
                                                                         <p className="text-xs text-white/50">Date paid</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white">
+                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
                                                                             {fmtDate(getFineDatePaid(fine))}
                                                                         </p>
                                                                     </div>
 
                                                                     <div className="rounded-md border border-white/10 bg-white/5 p-3">
                                                                         <p className="text-xs text-white/50">Source</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white">
+                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
                                                                             {isDamageRow ? "Damage report" : "Fine record"}
                                                                         </p>
                                                                     </div>
@@ -1238,13 +1238,13 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                                     <p className="text-xs font-medium text-white/70">Record details</p>
                                                                     <div className="grid gap-2 md:grid-cols-2">
                                                                         {fine.borrowDueDate && (
-                                                                            <p className="text-sm text-white/75">
+                                                                            <p className="text-sm text-white/75 whitespace-normal wrap-break-word">
                                                                                 <span className="font-medium text-white">Due:</span>{" "}
                                                                                 {fmtDate(fine.borrowDueDate)}
                                                                             </p>
                                                                         )}
                                                                         {fine.borrowReturnDate && (
-                                                                            <p className="text-sm text-white/75">
+                                                                            <p className="text-sm text-white/75 whitespace-normal wrap-break-word">
                                                                                 <span className="font-medium text-white">Returned:</span>{" "}
                                                                                 {fmtDate(fine.borrowReturnDate)}
                                                                             </p>

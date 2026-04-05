@@ -464,7 +464,7 @@ function DetailField({
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-3">
       <div className="text-xs text-white/60">{label}</div>
-      <div className="mt-1 wrap-break-word text-sm font-medium text-white">{value}</div>
+      <div className="mt-1 whitespace-normal wrap-break-word text-sm font-medium leading-5 text-white">{value}</div>
     </div>
   );
 }
@@ -518,8 +518,8 @@ function CollegeBreakdownAccordion({
             value={row.key}
             className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/60 px-3 text-white"
           >
-            <AccordionTrigger className="gap-3 py-3 text-left hover:no-underline [&>svg]:ml-2 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:text-white/80 [&>svg]:opacity-100">
-              <span className="block min-w-0 flex-1 truncate text-sm font-medium" title={summary}>
+            <AccordionTrigger className="items-start gap-3 py-3 text-left hover:no-underline [&>svg]:ml-3 [&>svg]:mt-0.5 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:self-start [&>svg]:text-white/80 [&>svg]:opacity-100">
+              <span className="block min-w-0 flex-1 whitespace-normal wrap-break-word pr-2 text-sm font-medium leading-5" title={summary}>
                 {summary}
               </span>
             </AccordionTrigger>
@@ -557,8 +557,8 @@ function BookStatisticsAccordion({
             value={row.id}
             className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/60 px-3 text-white"
           >
-            <AccordionTrigger className="gap-3 py-3 text-left hover:no-underline [&>svg]:ml-2 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:text-white/80 [&>svg]:opacity-100">
-              <span className="block min-w-0 flex-1 truncate text-sm font-medium" title={summary}>
+            <AccordionTrigger className="items-start gap-3 py-3 text-left hover:no-underline [&>svg]:ml-3 [&>svg]:mt-0.5 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:self-start [&>svg]:text-white/80 [&>svg]:opacity-100">
+              <span className="block min-w-0 flex-1 whitespace-normal wrap-break-word pr-2 text-sm font-medium leading-5" title={summary}>
                 {summary}
               </span>
             </AccordionTrigger>
@@ -1349,7 +1349,7 @@ export default function LibrarianStatisticsPage() {
       >
         <DialogContent className="max-h-[95svh] overflow-hidden border-white/10 bg-slate-950 text-white sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="wrap-break-word pr-8 text-left text-white">
+            <DialogTitle className="whitespace-normal wrap-break-word pr-8 text-left text-white">
               {selectedDetail?.kind === "book"
                 ? selectedDetail.row.title
                 : selectedDetail?.kind === "college"
@@ -1380,5 +1380,3 @@ export default function LibrarianStatisticsPage() {
     </DashboardLayout>
   );
 }
-
-
