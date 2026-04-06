@@ -52,6 +52,8 @@ import {
   Check,
   X,
   FileText,
+  BellRing,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -65,6 +67,7 @@ import {
   disapproveBorrowExtensionRequest,
   requestBorrowReturnByLibrarian,
   syncBorrowEmailNotifications,
+  type BorrowEmailNotificationSyncDTO,
   type BorrowNotificationSummaryDTO,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
@@ -267,6 +270,12 @@ type DetailItemProps = {
   value: React.ReactNode;
 };
 
+type EmailSyncState = {
+  status: BorrowEmailNotificationSyncDTO | null;
+  error: string | null;
+  syncedAt: string | null;
+};
+
 function DetailItem({ label, value }: DetailItemProps) {
   return (
     <div className="rounded-md border border-white/10 bg-slate-950/30 p-3">
@@ -324,6 +333,84 @@ export default function LibrarianBorrowRecordsPage() {
     React.useState<string>("");
   const [submittingRequestReturn, setSubmittingRequestReturn] =
     React.useState(false);
+  const [manualEmailSync, setManualEmailSync] = React.useState<EmailSyncState>({
+    status: null,
+    error: null,
+    syncedAt: null,
+  });
+  const [automaticEmailSync, setAutomaticEmailSync] = React.useState<EmailSyncState>({
+    status: null,
+    error: null,
+    syncedAt: null,
+  });
+  const [emailSyncInFlight, setEmailSyncInFlight] = React.useState<
+    "manual" | "automatic" | null
+  >(null);
+
+  const runEmailSync = React.useCallback(
+    async (
+      mode: "manual" | "automatic",
+      options: { showToast?: boolean } = {}
+    ) => {
+      setEmailSyncInFlight(mode);
+
+      try {
+        const sync = await syncBorrowEmailNotifications();
+        const nextState: EmailSyncState = {
+          status: sync,
+          error: null,
+          syncedAt: new Date().toISOString(),
+        };
+
+        if (mode === "manual") {
+          setManualEmailSync(nextState);
+        } else {
+          setAutomaticEmailSync(nextState);
+        }
+
+        if (options.showToast) {
+          toast.success(
+            mode === "manual"
+              ? "Email updates sent"
+              : "Automatic email update completed",
+            {
+              description:
+                sync.message ||
+                (sync.emailSent
+                  ? "Borrow workflow email notifications were sent successfully."
+                  : "No new email update was needed right now."),
+            }
+          );
+        }
+
+        return sync;
+      } catch (err: any) {
+        const msg =
+          err?.message ||
+          "Unable to sync borrow workflow email updates right now.";
+        const updater = (prev: EmailSyncState): EmailSyncState => ({
+          status: prev.status,
+          error: msg,
+          syncedAt: prev.syncedAt,
+        });
+
+        if (mode === "manual") {
+          setManualEmailSync(updater);
+        } else {
+          setAutomaticEmailSync(updater);
+        }
+
+        if (options.showToast || mode === "manual") {
+          toast.error("Email update failed", { description: msg });
+        }
+
+        return null;
+      } finally {
+        setEmailSyncInFlight((prev) => (prev === mode ? null : prev));
+      }
+    },
+    []
+  );
 
   const loadRecords = React.useCallback(async () => {
     setError(null);
@@ -339,9 +426,7 @@ export default function LibrarianBorrowRecordsPage() {
         summary ?? buildFallbackNotificationSummary(data, true)
       );
 
-      void syncBorrowEmailNotifications().catch(() => {
-        // keep dashboard loading resilient even if email sync is unavailable
-      });
+      void runEmailSync("automatic");
     } catch (err: any) {
       const msg = err?.message || "Failed to load borrow records.";
       setError(msg);
@@ -349,7 +434,7 @@ export default function LibrarianBorrowRecordsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [runEmailSync]);
 
   const refreshNotificationSummary = React.useCallback(async () => {
     try {
@@ -391,6 +476,10 @@ export default function LibrarianBorrowRecordsPage() {
     } finally {
       setRefreshing(false);
     }
+  }
+
+  async function handleManualEmailSync() {
+    await runEmailSync("manual", { showToast: true });
   }
 
   function openDueDialog(rec: BorrowRecordDTO) {
@@ -621,6 +710,28 @@ export default function LibrarianBorrowRecordsPage() {
     [notificationSummary, records, canManageExtensions]
   );
 
+  const latestManualEmailSync = manualEmailSync.status;
+  const latestAutomaticEmailSync = automaticEmailSync.status;
+  const latestAnyEmailSync = latestManualEmailSync ?? latestAutomaticEmailSync;
+  const manualEmailSyncStatusLabel = manualEmailSync.error
+    ? "Manual email sending failed"
+    : latestManualEmailSync?.suppressed
+      ? "Manual email updates are currently suppressed"
+      : latestManualEmailSync?.emailSent
+        ? "Manual email updates were sent"
+        : latestManualEmailSync
+          ? "No manual email update was needed"
+          : "Send librarian email updates manually";
+  const automaticEmailSyncStatusLabel = automaticEmailSync.error
+    ? "Automatic email updates failed"
+    : latestAutomaticEmailSync?.suppressed
+      ? "Automatic email updates are currently suppressed"
+      : latestAutomaticEmailSync?.emailSent
+        ? "Automatic email updates are active"
+        : latestAutomaticEmailSync
+          ? "Automatic check finished with no new email"
+          : "Waiting for automatic email check";
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = records;
@@ -768,8 +879,8 @@ export default function LibrarianBorrowRecordsPage() {
               requests.
             </p>
             <p className="text-[11px] text-white/55">
-              Relevant due-date and borrow workflow alerts are also synced to
-              the signed-in staff email automatically.
+              Librarians can both receive automatic reminders and send email
+              updates manually from this dashboard.
             </p>
           </div>
         </div>
@@ -802,6 +913,115 @@ export default function LibrarianBorrowRecordsPage() {
             <span className="sr-only">Refresh</span>
           </Button>
         </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <Card className="border-emerald-400/20 bg-emerald-500/10">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-100">
+                  <Send className="h-4 w-4" />
+                  Manual email updates
+                </div>
+                <p className="mt-2 text-sm text-emerald-50/85">
+                  Librarians can send borrow workflow email updates on demand while still receiving the same reminders in their inbox.
+                </p>
+                <p className="mt-2 text-xs text-emerald-100/70 wrap-break-word">
+                  {manualEmailSync.error ||
+                    latestManualEmailSync?.message ||
+                    "Use this action to send the latest borrow reminders and workflow alerts right away."}
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="border-emerald-300/30 text-emerald-50 hover:bg-emerald-500/15"
+                onClick={handleManualEmailSync}
+                disabled={emailSyncInFlight !== null}
+              >
+                {emailSyncInFlight === "manual" ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending…
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    <Send className="h-4 w-4" />
+                    Send Email Updates Now
+                  </span>
+                )}
+              </Button>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-4 wrap-break-word">
+              <DetailItem
+                label="Recipient"
+                value={latestManualEmailSync?.recipient || latestAnyEmailSync?.recipient || "Not available"}
+              />
+              <DetailItem
+                label="Notifications"
+                value={String(latestManualEmailSync?.totalNotifications ?? latestAnyEmailSync?.totalNotifications ?? 0)}
+              />
+              <DetailItem
+                label="Pending return"
+                value={String(latestManualEmailSync?.pendingReturnCount ?? latestAnyEmailSync?.pendingReturnCount ?? 0)}
+              />
+              <DetailItem
+                label="Pending extension"
+                value={String(latestManualEmailSync?.pendingExtensionCount ?? latestAnyEmailSync?.pendingExtensionCount ?? 0)}
+              />
+            </div>
+
+            <p className="mt-3 text-[11px] text-emerald-100/70">
+              Status: {manualEmailSyncStatusLabel}
+              {manualEmailSync.syncedAt
+                ? ` • Last manual send: ${fmtDateTime(manualEmailSync.syncedAt)}`
+                : ""}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-sky-400/20 bg-sky-500/10">
+          <CardContent className="p-4">
+            <div className="inline-flex items-center gap-2 text-sm font-semibold text-sky-100">
+              <BellRing className="h-4 w-4" />
+              Automatic email updates
+            </div>
+            <p className="mt-2 text-sm text-sky-50/85">
+              This dashboard also checks email updates automatically whenever the librarian borrow records page loads or refreshes.
+            </p>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <DetailItem
+                label="Due today"
+                value={String(latestAutomaticEmailSync?.dueTodayCount ?? latestAnyEmailSync?.dueTodayCount ?? 0)}
+              />
+              <DetailItem
+                label="Overdue"
+                value={String(latestAutomaticEmailSync?.overdueCount ?? latestAnyEmailSync?.overdueCount ?? 0)}
+              />
+              <DetailItem
+                label="Pending pickup"
+                value={String(latestAutomaticEmailSync?.pendingPickupCount ?? latestAnyEmailSync?.pendingPickupCount ?? 0)}
+              />
+            </div>
+
+            <p className="mt-3 text-xs text-sky-100/75 wrap-break-word">
+              {automaticEmailSync.error ||
+                latestAutomaticEmailSync?.message ||
+                "Automatic email status will appear here after the dashboard finishes loading."}
+            </p>
+
+            <p className="mt-2 text-[11px] text-sky-100/70">
+              Status: {automaticEmailSyncStatusLabel}
+              {automaticEmailSync.syncedAt
+                ? ` • Last automatic check: ${fmtDateTime(automaticEmailSync.syncedAt)}`
+                : ""}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

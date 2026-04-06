@@ -41,6 +41,7 @@ import {
   requestBorrowReturn,
   requestBorrowExtension,
   syncBorrowEmailNotifications,
+  type BorrowEmailNotificationSyncDTO,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -72,6 +73,12 @@ type BorrowRecordsResponse = {
   ok?: boolean;
   records?: BorrowRecordDTO[];
   message?: string;
+};
+
+type EmailSyncState = {
+  status: BorrowEmailNotificationSyncDTO | null;
+  error: string | null;
+  syncedAt: string | null;
 };
 
 const FIXED_EXTENSION_DAYS = 1;
@@ -477,6 +484,31 @@ export default function StudentCirculationPage() {
   const [extendReasonById, setExtendReasonById] = React.useState<
     Record<string, string>
   >({});
+  const [emailSyncState, setEmailSyncState] = React.useState<EmailSyncState>({
+    status: null,
+    error: null,
+    syncedAt: null,
+  });
+
+  const runAutomaticEmailSync = React.useCallback(async () => {
+    try {
+      const sync = await syncBorrowEmailNotifications();
+      setEmailSyncState({
+        status: sync,
+        error: null,
+        syncedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        "Automatic email reminders are currently unavailable for your account.";
+      setEmailSyncState((prev) => ({
+        status: prev.status,
+        error: msg,
+        syncedAt: prev.syncedAt,
+      }));
+    }
+  }, []);
 
   const loadAll = React.useCallback(async () => {
     setError(null);
@@ -491,9 +523,7 @@ export default function StudentCirculationPage() {
       setServerNow(recordsSnapshot.serverNow);
       setFines(finesData);
 
-      void syncBorrowEmailNotifications().catch(() => {
-        // keep page loading resilient even if email sync is unavailable
-      });
+      void runAutomaticEmailSync();
     } catch (err: any) {
       const msg =
         err?.message ||
@@ -503,7 +533,7 @@ export default function StudentCirculationPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [runAutomaticEmailSync]);
 
   React.useEffect(() => {
     void loadAll();
@@ -700,6 +730,17 @@ export default function StudentCirculationPage() {
     }
   }
 
+  const latestBorrowerEmailSync = emailSyncState.status;
+  const borrowerEmailSyncStatusLabel = emailSyncState.error
+    ? "Automatic reminders unavailable"
+    : latestBorrowerEmailSync?.suppressed
+      ? "Email reminders currently suppressed"
+      : latestBorrowerEmailSync?.emailSent
+        ? "Automatic reminders active"
+        : latestBorrowerEmailSync
+          ? "No new reminder email was needed"
+          : "Checking automatic reminders";
+
   const actionButtonBaseClasses =
     "w-full min-h-9 h-auto py-2 whitespace-normal break-words leading-tight text-center";
 
@@ -717,8 +758,8 @@ export default function StudentCirculationPage() {
               fines.
             </p>
             <p className="text-[11px] text-white/55">
-              Relevant due-date and librarian return-request alerts are also
-              synced to your email automatically.
+              You only receive email reminders here. Librarians handle sending
+              and monitoring updates from their dashboard.
             </p>
           </div>
         </div>
@@ -755,6 +796,53 @@ export default function StudentCirculationPage() {
             <span className="sr-only">Refresh</span>
           </Button>
         </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+
+        <Card className="border-white/10 bg-slate-800/60">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-white/55">
+                  Email status
+                </div>
+                <div className="mt-2 text-base font-semibold text-white">
+                  {borrowerEmailSyncStatusLabel}
+                </div>
+              </div>
+
+              <Badge className="border-white/15 bg-white/10 text-white hover:bg-white/10">
+                {latestBorrowerEmailSync?.recipient || "Recipient not available"}
+              </Badge>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <CirculationDetail
+                label="Due today"
+                value={String(latestBorrowerEmailSync?.dueTodayCount ?? 0)}
+              />
+              <CirculationDetail
+                label="Overdue"
+                value={String(latestBorrowerEmailSync?.overdueCount ?? 0)}
+              />
+              <CirculationDetail
+                label="Return requests"
+                value={String(latestBorrowerEmailSync?.pendingReturnCount ?? 0)}
+              />
+            </div>
+
+            <p className="mt-3 text-xs text-white/60 wrap-break-word">
+              {emailSyncState.error ||
+                latestBorrowerEmailSync?.message ||
+                "Your reminder email status will appear here after the automatic check finishes."}
+            </p>
+
+            <p className="mt-2 text-[11px] text-white/45">
+              Last checked: {emailSyncState.syncedAt ? fmtDateTime(emailSyncState.syncedAt) : "Waiting for automatic check"}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="border-white/10 bg-slate-800/60">
