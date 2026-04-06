@@ -776,7 +776,7 @@ export default function AdminUsersPage() {
         <AccordionTrigger className="items-start gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:mt-1 [&>svg]:shrink-0">
           <div className="flex w-full min-w-0 flex-1 items-start gap-3 pr-2 text-left">
             <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={36} />
-            <span className="min-w-0 flex-1 text-sm font-semibold leading-5 text-white/90 wrap-anywhere">
+            <span className="min-w-0 flex-1 text-sm font-semibold leading-5 text-white/90 truncate sm:overflow-visible sm:text-clip sm:whitespace-normal sm:wrap-anywhere">
               {(u.fullName || "Unnamed user")} • {u.email} • {roleLabel(currentRole)} • {u.isApproved ? "Approved" : "Pending"}
             </span>
             <Badge variant="default" className={`${approvalBadgeClasses(u.isApproved)} shrink-0 self-start`}>
@@ -1369,7 +1369,7 @@ export default function AdminUsersPage() {
                     <AccordionTrigger className="items-start gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:mt-1 [&>svg]:shrink-0">
                       <div className="flex min-w-0 flex-1 flex-col items-start gap-2 pr-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
                         <Badge className={roleBadgeClasses(group.role)}>{roleLabel(group.role)}</Badge>
-                        <span className="text-sm font-semibold text-white wrap-anywhere">{group.total} user{group.total === 1 ? "" : "s"}</span>
+                        <span className="text-sm font-semibold text-white truncate sm:overflow-visible sm:text-clip sm:whitespace-normal sm:wrap-anywhere">{group.total} user{group.total === 1 ? "" : "s"}</span>
                         <span className="text-xs text-white/55 wrap-anywhere">{roleDescription(group.role)}</span>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/65">
                           <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5">
