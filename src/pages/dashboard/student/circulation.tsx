@@ -208,7 +208,7 @@ async function fetchBorrowRecordsSnapshot(): Promise<{
     const details = getErrorMessage(error);
     const suffix = details ? ` Details: ${details}` : "";
     throw new Error(
-      `Cannot reach the circulation API right now.${suffix}`
+      `Cannot reach the borrowed books API right now.${suffix}`
     );
   }
 
@@ -527,9 +527,9 @@ export default function StudentCirculationPage() {
     } catch (err: any) {
       const msg =
         err?.message ||
-        "Failed to load your circulation records. Please try again.";
+        "Failed to load your borrowed books. Please try again.";
       setError(msg);
-      toast.error("Failed to load circulation", { description: msg });
+      toast.error("Failed to load borrowed books", { description: msg });
     } finally {
       setLoading(false);
     }
@@ -745,13 +745,13 @@ export default function StudentCirculationPage() {
     "w-full min-h-9 h-auto py-2 whitespace-normal break-words leading-tight text-center";
 
   return (
-    <DashboardLayout title="My Circulation">
+    <DashboardLayout title="My Borrowed Books">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <Layers className="h-5 w-5" />
           <div>
             <h2 className="text-lg font-semibold leading-tight">
-              Borrowed books (circulation)
+              Borrowed Books
             </h2>
             <p className="text-xs text-white/70">
               View your borrowed books, due dates, returns, extensions, and
@@ -848,7 +848,7 @@ export default function StudentCirculationPage() {
       <Card className="border-white/10 bg-slate-800/60">
         <CardHeader className="pb-2">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <CardTitle>Circulation history</CardTitle>
+            <CardTitle>Borrowed Books History</CardTitle>
 
             <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
               <div className="relative w-full md:w-64">
@@ -907,7 +907,7 @@ export default function StudentCirculationPage() {
           </p>
 
           <p className="mt-1 text-[11px] text-white/60">
-            Circulation timing now follows the server response clock instead of
+            Borrowed book timing now follows the server response clock instead of
             the current device clock.
           </p>
         </CardHeader>
@@ -923,7 +923,7 @@ export default function StudentCirculationPage() {
             <div className="py-6 text-center text-sm text-red-300">{error}</div>
           ) : filtered.length === 0 ? (
             <div className="py-10 text-center text-sm text-white/70">
-              No circulation records matched your filters.
+              No borrowed book records matched your filters.
               <br />
               <span className="text-xs opacity-80">
                 Try clearing the search or changing the status filter.
