@@ -773,13 +773,13 @@ export default function AdminUsersPage() {
         value={u.id}
         className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
       >
-        <AccordionTrigger className="px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5">
-          <div className="flex w-full min-w-0 items-center gap-3 text-left">
+        <AccordionTrigger className="items-start gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:mt-1 [&>svg]:shrink-0">
+          <div className="flex w-full min-w-0 flex-1 items-start gap-3 pr-2 text-left">
             <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={36} />
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/90">
+            <span className="min-w-0 flex-1 text-sm font-semibold leading-5 text-white/90 wrap-anywhere">
               {(u.fullName || "Unnamed user")} • {u.email} • {roleLabel(currentRole)} • {u.isApproved ? "Approved" : "Pending"}
             </span>
-            <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
+            <Badge variant="default" className={`${approvalBadgeClasses(u.isApproved)} shrink-0 self-start`}>
               {u.isApproved ? "approved" : "pending"}
             </Badge>
           </div>
@@ -798,8 +798,8 @@ export default function AdminUsersPage() {
             </DialogTrigger>
             <DialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-3xl">
               <DialogHeader>
-                <DialogTitle className="pr-6 text-left">{u.fullName || "Unnamed user"}</DialogTitle>
-                <DialogDescription className="text-left text-white/65">
+                <DialogTitle className="pr-6 text-left wrap-anywhere">{u.fullName || "Unnamed user"}</DialogTitle>
+                <DialogDescription className="text-left text-white/65 wrap-anywhere">
                   {u.email} • {roleLabel(currentRole)} • {u.isApproved ? "Approved" : "Pending"}
                 </DialogDescription>
               </DialogHeader>
@@ -810,7 +810,7 @@ export default function AdminUsersPage() {
 
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold text-white truncate max-w-full">
+                      <h3 className="max-w-full text-sm font-semibold text-white wrap-anywhere">
                         {u.fullName || "Unnamed user"}
                       </h3>
                       {isSelf ? (
@@ -818,7 +818,7 @@ export default function AdminUsersPage() {
                           You
                         </span>
                       ) : null}
-                      <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
+                      <Badge variant="default" className={`${approvalBadgeClasses(u.isApproved)} shrink-0 self-start`}>
                         {u.isApproved ? "approved" : "pending"}
                       </Badge>
                       <Badge variant="default" className={roleBadgeClasses(currentRole)}>
@@ -826,13 +826,13 @@ export default function AdminUsersPage() {
                       </Badge>
                     </div>
 
-                    <div className="text-sm text-white/80 break-all">{u.email}</div>
+                    <div className="text-sm text-white/80 wrap-anywhere">{u.email}</div>
 
                     <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono max-w-full truncate">
+                      <span className="max-w-full rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono wrap-anywhere">
                         ID: {u.id}
                       </span>
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+                      <span className="max-w-full rounded-full border border-white/10 bg-white/5 px-2 py-1 wrap-anywhere">
                         Account type: {roleLabel(u.accountType)}
                       </span>
                     </div>
@@ -1366,11 +1366,11 @@ export default function AdminUsersPage() {
                     value={group.role}
                     className="self-start overflow-hidden rounded-2xl border border-white/10 bg-slate-900/35 px-0"
                   >
-                    <AccordionTrigger className="px-4 py-3 text-white hover:no-underline">
-                      <div className="flex flex-col items-start gap-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
+                    <AccordionTrigger className="items-start gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:mt-1 [&>svg]:shrink-0">
+                      <div className="flex min-w-0 flex-1 flex-col items-start gap-2 pr-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
                         <Badge className={roleBadgeClasses(group.role)}>{roleLabel(group.role)}</Badge>
-                        <span className="text-sm font-semibold text-white">{group.total} user{group.total === 1 ? "" : "s"}</span>
-                        <span className="text-xs text-white/55">{roleDescription(group.role)}</span>
+                        <span className="text-sm font-semibold text-white wrap-anywhere">{group.total} user{group.total === 1 ? "" : "s"}</span>
+                        <span className="text-xs text-white/55 wrap-anywhere">{roleDescription(group.role)}</span>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/65">
                           <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5">
                             Approved: {group.approved}
