@@ -256,7 +256,7 @@ function formatDateForApi(date: Date): string {
 }
 
 function toTitleCase(value: string): string {
-  return value.replace(/\w/g, (char) => char.toUpperCase());
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatBorrowStatusLabel(status?: string | null): string {
@@ -448,7 +448,6 @@ export default function LibrarianBorrowRecordsPage() {
       );
     }
   }, [records]);
-
 
   const replaceRecordInState = React.useCallback((updated: BorrowRecordDTO) => {
     setRecords((prev) => {
@@ -799,6 +798,7 @@ export default function LibrarianBorrowRecordsPage() {
       const actionRequiredCount = rows.filter((r) =>
         isBorrowRecordActionRequired(r, canManageExtensions)
       ).length;
+      const latestBorrowDate = rows[0]?.borrowDate ?? "";
 
       return {
         key: g.userId,
@@ -808,11 +808,16 @@ export default function LibrarianBorrowRecordsPage() {
         activeCount,
         returnedCount,
         actionRequiredCount,
+        latestBorrowDate,
       };
     });
 
     groups.sort(
-      (a, b) => a.name.localeCompare(b.name) || a.userId.localeCompare(b.userId)
+      (a, b) =>
+        (b.latestBorrowDate ?? "").localeCompare(a.latestBorrowDate ?? "") ||
+        b.actionRequiredCount - a.actionRequiredCount ||
+        a.name.localeCompare(b.name) ||
+        a.userId.localeCompare(b.userId)
     );
 
     return groups;
@@ -1071,9 +1076,7 @@ export default function LibrarianBorrowRecordsPage() {
           <CardContent className="p-4">
             <div className="text-[11px] uppercase tracking-wide text-fuchsia-100/70">
               Pending Return
-              {canManageExtensions
-                ? " + Extension"
-                : ""}
+              {canManageExtensions ? " + Extension" : ""}
             </div>
             <div className="mt-2 text-2xl font-semibold text-fuchsia-100">
               {effectiveNotificationSummary.pendingReturnCount +
@@ -1220,393 +1223,391 @@ export default function LibrarianBorrowRecordsPage() {
                             </DialogDescription>
                           </DialogHeader>
 
-                        <div className="mb-4 grid gap-3 md:grid-cols-3">
-                          <DetailItem label="User" value={group.name} />
-                          <DetailItem
-                            label="Student ID"
-                            value={primaryRecord?.studentId || "—"}
-                          />
-                          <DetailItem
-                            label="Email"
-                            value={primaryRecord?.studentEmail || "—"}
-                          />
-                        </div>
+                          <div className="mb-4 grid gap-3 md:grid-cols-3">
+                            <DetailItem label="User" value={group.name} />
+                            <DetailItem
+                              label="Student ID"
+                              value={primaryRecord?.studentId || "—"}
+                            />
+                            <DetailItem
+                              label="Email"
+                              value={primaryRecord?.studentEmail || "—"}
+                            />
+                          </div>
 
-                        <div className="grid gap-3">
-                          {group.rows.map((rec) => {
-                            const studentLabel = studentFullName(rec);
-                            const bookLabel =
-                              rec.bookTitle || `Book #${rec.bookId}`;
+                          <div className="grid gap-3">
+                            {group.rows.map((rec) => {
+                              const studentLabel = studentFullName(rec);
+                              const bookLabel =
+                                rec.bookTitle || `Book #${rec.bookId}`;
 
-                            const isReturned = rec.status === "returned";
-                            const isPendingPickup =
-                              rec.status === "pending_pickup";
-                            const isPendingReturn =
-                              rec.status === "pending_return";
-                            const isLegacyPending = rec.status === "pending";
-                            const isAnyPending =
-                              isPendingPickup ||
-                              isPendingReturn ||
-                              isLegacyPending;
-                            const isBorrowed = rec.status === "borrowed";
-
-                            const { overdueDays, autoFine } = computeAutoFine(
-                              rec.dueDate
-                            );
-
-                            const isOverdue =
-                              (isBorrowed ||
+                              const isReturned = rec.status === "returned";
+                              const isPendingPickup =
+                                rec.status === "pending_pickup";
+                              const isPendingReturn =
+                                rec.status === "pending_return";
+                              const isLegacyPending = rec.status === "pending";
+                              const isAnyPending =
+                                isPendingPickup ||
                                 isPendingReturn ||
-                                isLegacyPending) &&
-                              overdueDays > 0;
+                                isLegacyPending;
+                              const isBorrowed = rec.status === "borrowed";
 
-                            const fineAmount = normalizeFine(rec.fine as any);
+                              const { overdueDays, autoFine } = computeAutoFine(
+                                rec.dueDate
+                              );
 
-                            const reqStatus = (
-                              rec.extensionRequestStatus ?? "none"
-                            )
-                              .toLowerCase()
-                              .trim();
-                            const extensionPending = reqStatus === "pending";
+                              const isOverdue =
+                                (isBorrowed ||
+                                  isPendingReturn ||
+                                  isLegacyPending) &&
+                                overdueDays > 0;
 
-                            const canEditDueDate = true;
+                              const fineAmount = normalizeFine(rec.fine as any);
 
-                            const hasReturnRequest =
-                              !isReturned && Boolean(rec.returnRequestedAt);
-                            const canRequestReturn =
-                              isBorrowed && !hasReturnRequest;
+                              const reqStatus = (
+                                rec.extensionRequestStatus ?? "none"
+                              )
+                                .toLowerCase()
+                                .trim();
+                              const extensionPending = reqStatus === "pending";
 
-                            const hasReturnRequester =
-                              Boolean((rec.returnRequestedByName || "").trim()) ||
-                              (rec.returnRequestedBy !== null &&
-                                rec.returnRequestedBy !== undefined);
+                              const canEditDueDate = true;
 
-                            return (
-                              <Card
-                                key={rec.id}
-                                className="border-white/10 bg-slate-950/40 shadow-none"
-                              >
-                                <CardHeader className="gap-3 pb-4">
-                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                    <div className="space-y-1">
-                                      <div className="text-xs uppercase tracking-wide text-white/45">
-                                        Borrow record #{rec.id}
+                              const hasReturnRequest =
+                                !isReturned && Boolean(rec.returnRequestedAt);
+                              const canRequestReturn =
+                                isBorrowed && !hasReturnRequest;
+
+                              const hasReturnRequester =
+                                Boolean((rec.returnRequestedByName || "").trim()) ||
+                                (rec.returnRequestedBy !== null &&
+                                  rec.returnRequestedBy !== undefined);
+
+                              return (
+                                <Card
+                                  key={rec.id}
+                                  className="border-white/10 bg-slate-950/40 shadow-none"
+                                >
+                                  <CardHeader className="gap-3 pb-4">
+                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                      <div className="space-y-1">
+                                        <div className="text-xs uppercase tracking-wide text-white/45">
+                                          Borrow record #{rec.id}
+                                        </div>
+                                        <div className="text-base font-semibold text-white">
+                                          {bookLabel}
+                                        </div>
+                                        <div className="text-sm text-white/60">
+                                          Borrower: {studentLabel}
+                                        </div>
                                       </div>
-                                      <div className="text-base font-semibold text-white">
-                                        {bookLabel}
-                                      </div>
-                                      <div className="text-sm text-white/60">
-                                        Borrower: {studentLabel}
+
+                                      <div className="flex flex-wrap gap-2">
+                                        {isReturned ? (
+                                          <Badge className="border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500">
+                                            <span className="inline-flex items-center gap-1">
+                                              <CheckCircle2 className="h-3 w-3" />
+                                              Returned
+                                            </span>
+                                          </Badge>
+                                        ) : isPendingPickup ? (
+                                          <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
+                                            <span className="inline-flex items-center gap-1">
+                                              <Clock3 className="h-3 w-3" />
+                                              Pending Pickup
+                                            </span>
+                                          </Badge>
+                                        ) : isPendingReturn || isLegacyPending ? (
+                                          <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
+                                            <span className="inline-flex items-center gap-1">
+                                              <Clock3 className="h-3 w-3" />
+                                              Pending Return
+                                            </span>
+                                          </Badge>
+                                        ) : isOverdue ? (
+                                          <Badge className="border-red-400/80 bg-red-500/80 text-white hover:bg-red-500">
+                                            <span className="inline-flex items-center gap-1">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              Overdue
+                                            </span>
+                                          </Badge>
+                                        ) : (
+                                          <Badge className="border-amber-400/80 bg-amber-500/90 text-white hover:bg-amber-500">
+                                            <span className="inline-flex items-center gap-1">
+                                              <CornerDownLeft className="h-3 w-3" />
+                                              Borrowed
+                                            </span>
+                                          </Badge>
+                                        )}
+
+                                        {extensionPending ? (
+                                          <Badge className="border-purple-400/40 bg-purple-500/15 text-purple-100 hover:bg-purple-500/15">
+                                            Extension Pending
+                                          </Badge>
+                                        ) : null}
                                       </div>
                                     </div>
+                                  </CardHeader>
 
-                                    <div className="flex flex-wrap gap-2">
-                                      {isReturned ? (
-                                        <Badge className="border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500">
-                                          <span className="inline-flex items-center gap-1">
-                                            <CheckCircle2 className="h-3 w-3" />
-                                            Returned
-                                          </span>
-                                        </Badge>
-                                      ) : isPendingPickup ? (
-                                        <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
-                                          <span className="inline-flex items-center gap-1">
-                                            <Clock3 className="h-3 w-3" />
-                                            Pending Pickup
-                                          </span>
-                                        </Badge>
-                                      ) : isPendingReturn || isLegacyPending ? (
-                                        <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
-                                          <span className="inline-flex items-center gap-1">
-                                            <Clock3 className="h-3 w-3" />
-                                            Pending Return
-                                          </span>
-                                        </Badge>
-                                      ) : isOverdue ? (
-                                        <Badge className="border-red-400/80 bg-red-500/80 text-white hover:bg-red-500">
-                                          <span className="inline-flex items-center gap-1">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            Overdue
-                                          </span>
-                                        </Badge>
-                                      ) : (
-                                        <Badge className="border-amber-400/80 bg-amber-500/90 text-white hover:bg-amber-500">
-                                          <span className="inline-flex items-center gap-1">
-                                            <CornerDownLeft className="h-3 w-3" />
-                                            Borrowed
-                                          </span>
-                                        </Badge>
-                                      )}
-
-                                      {extensionPending ? (
-                                        <Badge className="border-purple-400/40 bg-purple-500/15 text-purple-100 hover:bg-purple-500/15">
-                                          Extension Pending
-                                        </Badge>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </CardHeader>
-
-                                <CardContent className="space-y-4">
-                                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                    <DetailItem
-                                      label="Borrow Date"
-                                      value={fmtDate(rec.borrowDate)}
-                                    />
-                                    <DetailItem
-                                      label="Due Date"
-                                      value={fmtDate(rec.dueDate)}
-                                    />
-                                    <DetailItem
-                                      label="Return Date"
-                                      value={fmtDate(rec.returnDate)}
-                                    />
-                                    <DetailItem
-                                      label="Fine"
-                                      value={
-                                        <div className="space-y-1">
-                                          <div>{peso(fineAmount)}</div>
-                                          {isBorrowed || isAnyPending ? (
-                                            isOverdue && autoFine > 0 ? (
-                                              <div className="text-xs text-amber-200">
-                                                Amount (
-                                                {peso(autoFine)})
+                                  <CardContent className="space-y-4">
+                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                      <DetailItem
+                                        label="Borrow Date"
+                                        value={fmtDate(rec.borrowDate)}
+                                      />
+                                      <DetailItem
+                                        label="Due Date"
+                                        value={fmtDate(rec.dueDate)}
+                                      />
+                                      <DetailItem
+                                        label="Return Date"
+                                        value={fmtDate(rec.returnDate)}
+                                      />
+                                      <DetailItem
+                                        label="Fine"
+                                        value={
+                                          <div className="space-y-1">
+                                            <div>{peso(fineAmount)}</div>
+                                            {isBorrowed || isAnyPending ? (
+                                              isOverdue && autoFine > 0 ? (
+                                                <div className="text-xs text-amber-200">
+                                                  Amount ({peso(autoFine)})
+                                                </div>
+                                              ) : (
+                                                <div className="text-xs text-white/45">
+                                                  No overdue fine yet
+                                                </div>
+                                              )
+                                            ) : fineAmount > 0 ? (
+                                              <div className="text-xs text-emerald-200">
+                                                Fine assessed for this borrow
                                               </div>
                                             ) : (
                                               <div className="text-xs text-white/45">
-                                                No overdue fine yet
+                                                No fine recorded
                                               </div>
-                                            )
-                                          ) : fineAmount > 0 ? (
-                                            <div className="text-xs text-emerald-200">
-                                              Fine assessed for this borrow
-                                            </div>
-                                          ) : (
-                                            <div className="text-xs text-white/45">
-                                              No fine recorded
-                                            </div>
-                                          )}
-                                        </div>
-                                      }
-                                    />
-                                  </div>
+                                            )}
+                                          </div>
+                                        }
+                                      />
+                                    </div>
 
-                                  {hasReturnRequest ? (
-                                    <div className="rounded-md border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                                      <div className="font-semibold">
-                                        Return Requested
-                                      </div>
-                                      <div className="mt-1">
-                                        Requested At:{" "}
-                                        {fmtDateTime(rec.returnRequestedAt)}
-                                      </div>
-                                      {hasReturnRequester ? (
+                                    {hasReturnRequest ? (
+                                      <div className="rounded-md border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                                        <div className="font-semibold">
+                                          Return Requested
+                                        </div>
                                         <div className="mt-1">
-                                          By:{" "}
-                                          {getStaffActorLabel(
-                                            rec.returnRequestedByName,
-                                            rec.returnRequestedBy ?? null
-                                          )}
+                                          Requested At:{" "}
+                                          {fmtDateTime(rec.returnRequestedAt)}
                                         </div>
-                                      ) : null}
-                                      {rec.returnRequestNote ? (
-                                        <div className="mt-1 wrap-break-word whitespace-normal text-amber-50/90">
-                                          Note: {rec.returnRequestNote}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-
-                                  <div className="rounded-md border border-white/10 bg-slate-900/50 p-3">
-                                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/55">
-                                      Actions
-                                    </div>
-
-                                    {isReturned ? (
-                                      <div className="inline-flex items-center gap-1 text-xs text-white/60">
-                                        <XCircle className="h-3.5 w-3.5" />
-                                        No Actions Available
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          className="inline-flex items-center gap-1 border-white/25 text-xs text-white/80 disabled:cursor-not-allowed disabled:opacity-50"
-                                          disabled={!canEditDueDate}
-                                          title={
-                                            extensionPending
-                                              ? `Review Extension Request (+${FIXED_EXTENSION_DAYS} Day) / Edit Due Date`
-                                              : "Edit Due Date"
-                                          }
-                                          onClick={() => openDueDialog(rec)}
-                                        >
-                                          <Edit className="h-3.5 w-3.5" />
-                                          Edit Due Date
-                                        </Button>
-
-                                        {isBorrowed && (
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="text-amber-300 hover:bg-amber-500/15 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                            disabled={!canRequestReturn}
-                                            onClick={() =>
-                                              openRequestReturnDialog(rec)
-                                            }
-                                            title={
-                                              canRequestReturn
-                                                ? "Notify Borrower to Return This Book"
-                                                : "A return request has already been sent for this borrow."
-                                            }
-                                          >
-                                            Request Return
-                                          </Button>
-                                        )}
-
-                                        {isPendingPickup && (
-                                          <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-100"
-                                                disabled={
-                                                  markBorrowBusyId === rec.id
-                                                }
-                                              >
-                                                {markBorrowBusyId === rec.id ? (
-                                                  <span className="inline-flex items-center gap-1">
-                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                    <span>Marking…</span>
-                                                  </span>
-                                                ) : (
-                                                  "Confirm Pickup → Mark Borrowed"
-                                                )}
-                                              </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
-                                              <AlertDialogHeader>
-                                                <AlertDialogTitle>
-                                                  Confirm Pickup &amp; Mark as
-                                                  Borrowed?
-                                                </AlertDialogTitle>
-                                                <AlertDialogDescription className="text-white/70">
-                                                  Confirm that{" "}
-                                                  <span className="font-semibold text-white">
-                                                    {studentLabel}
-                                                  </span>{" "}
-                                                  received{" "}
-                                                  <span className="font-semibold text-white">
-                                                    “{bookLabel}”
-                                                  </span>{" "}
-                                                  and change the status from{" "}
-                                                  <span className="font-semibold text-amber-200">
-                                                    Pending Pickup
-                                                  </span>{" "}
-                                                  to{" "}
-                                                  <span className="font-semibold text-emerald-200">
-                                                    Borrowed
-                                                  </span>
-                                                  .
-                                                </AlertDialogDescription>
-                                              </AlertDialogHeader>
-
-                                              <div className="mt-3 space-y-1 text-sm text-white/80">
-                                                <p>
-                                                  <span className="text-white/60">
-                                                    Borrowed on:
-                                                  </span>{" "}
-                                                  {fmtDate(rec.borrowDate)}
-                                                </p>
-                                                <p>
-                                                  <span className="text-white/60">
-                                                    Due date:
-                                                  </span>{" "}
-                                                  {fmtDate(rec.dueDate)}
-                                                </p>
-                                                <p className="pt-1 text-xs text-white/70">
-                                                  The book stays unavailable
-                                                  until it’s marked as{" "}
-                                                  <span className="font-semibold text-emerald-200">
-                                                    Returned
-                                                  </span>
-                                                  .
-                                                </p>
-                                              </div>
-
-                                              <AlertDialogFooter>
-                                                <AlertDialogCancel
-                                                  className="border-white/20 text-white hover:bg-black/20"
-                                                  disabled={
-                                                    markBorrowBusyId === rec.id
-                                                  }
-                                                >
-                                                  Cancel
-                                                </AlertDialogCancel>
-                                                <AlertDialogAction
-                                                  className="bg-emerald-600 text-white hover:bg-emerald-700"
-                                                  disabled={
-                                                    markBorrowBusyId === rec.id
-                                                  }
-                                                  onClick={() =>
-                                                    void handleMarkBorrowed(rec)
-                                                  }
-                                                >
-                                                  {markBorrowBusyId === rec.id ? (
-                                                    <span className="inline-flex items-center gap-2">
-                                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                                      Marking…
-                                                    </span>
-                                                  ) : (
-                                                    "Confirm & mark borrowed"
-                                                  )}
-                                                </AlertDialogAction>
-                                              </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                          </AlertDialog>
-                                        )}
-
-                                        {(isPendingReturn || isLegacyPending) && (
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-100"
-                                            onClick={() => openReturnDialog(rec)}
-                                          >
-                                            Mark as Returned
-                                          </Button>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {!isReturned ? (
-                                      <div className="mt-2 flex flex-col gap-1 text-[11px] text-white/55">
-                                        <span>
-                                          {extensionPending
-                                            ? `Extension Request Pending (+${FIXED_EXTENSION_DAYS} Day).`
-                                            : "No extension request required."}
-                                        </span>
-                                        {isBorrowed ? (
-                                          <span>
-                                            {hasReturnRequest
-                                              ? "A return request has already been sent."
-                                              : "You can send a return request reminder to the borrower."}
-                                          </span>
+                                        {hasReturnRequester ? (
+                                          <div className="mt-1">
+                                            By:{" "}
+                                            {getStaffActorLabel(
+                                              rec.returnRequestedByName,
+                                              rec.returnRequestedBy ?? null
+                                            )}
+                                          </div>
+                                        ) : null}
+                                        {rec.returnRequestNote ? (
+                                          <div className="mt-1 wrap-break-word whitespace-normal text-amber-50/90">
+                                            Note: {rec.returnRequestNote}
+                                          </div>
                                         ) : null}
                                       </div>
                                     ) : null}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                        </div>
 
+                                    <div className="rounded-md border border-white/10 bg-slate-900/50 p-3">
+                                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/55">
+                                        Actions
+                                      </div>
+
+                                      {isReturned ? (
+                                        <div className="inline-flex items-center gap-1 text-xs text-white/60">
+                                          <XCircle className="h-3.5 w-3.5" />
+                                          No Actions Available
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="inline-flex items-center gap-1 border-white/25 text-xs text-white/80 disabled:cursor-not-allowed disabled:opacity-50"
+                                            disabled={!canEditDueDate}
+                                            title={
+                                              extensionPending
+                                                ? `Review Extension Request (+${FIXED_EXTENSION_DAYS} Day) / Edit Due Date`
+                                                : "Edit Due Date"
+                                            }
+                                            onClick={() => openDueDialog(rec)}
+                                          >
+                                            <Edit className="h-3.5 w-3.5" />
+                                            Edit Due Date
+                                          </Button>
+
+                                          {isBorrowed && (
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="ghost"
+                                              className="text-amber-300 hover:bg-amber-500/15 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                              disabled={!canRequestReturn}
+                                              onClick={() =>
+                                                openRequestReturnDialog(rec)
+                                              }
+                                              title={
+                                                canRequestReturn
+                                                  ? "Notify Borrower to Return This Book"
+                                                  : "A return request has already been sent for this borrow."
+                                              }
+                                            >
+                                              Request Return
+                                            </Button>
+                                          )}
+
+                                          {isPendingPickup && (
+                                            <AlertDialog>
+                                              <AlertDialogTrigger asChild>
+                                                <Button
+                                                  type="button"
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-100"
+                                                  disabled={
+                                                    markBorrowBusyId === rec.id
+                                                  }
+                                                >
+                                                  {markBorrowBusyId === rec.id ? (
+                                                    <span className="inline-flex items-center gap-1">
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                      <span>Marking…</span>
+                                                    </span>
+                                                  ) : (
+                                                    "Confirm Pickup → Mark Borrowed"
+                                                  )}
+                                                </Button>
+                                              </AlertDialogTrigger>
+                                              <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
+                                                <AlertDialogHeader>
+                                                  <AlertDialogTitle>
+                                                    Confirm Pickup &amp; Mark as
+                                                    Borrowed?
+                                                  </AlertDialogTitle>
+                                                  <AlertDialogDescription className="text-white/70">
+                                                    Confirm that{" "}
+                                                    <span className="font-semibold text-white">
+                                                      {studentLabel}
+                                                    </span>{" "}
+                                                    received{" "}
+                                                    <span className="font-semibold text-white">
+                                                      “{bookLabel}”
+                                                    </span>{" "}
+                                                    and change the status from{" "}
+                                                    <span className="font-semibold text-amber-200">
+                                                      Pending Pickup
+                                                    </span>{" "}
+                                                    to{" "}
+                                                    <span className="font-semibold text-emerald-200">
+                                                      Borrowed
+                                                    </span>
+                                                    .
+                                                  </AlertDialogDescription>
+                                                </AlertDialogHeader>
+
+                                                <div className="mt-3 space-y-1 text-sm text-white/80">
+                                                  <p>
+                                                    <span className="text-white/60">
+                                                      Borrowed on:
+                                                    </span>{" "}
+                                                    {fmtDate(rec.borrowDate)}
+                                                  </p>
+                                                  <p>
+                                                    <span className="text-white/60">
+                                                      Due date:
+                                                    </span>{" "}
+                                                    {fmtDate(rec.dueDate)}
+                                                  </p>
+                                                  <p className="pt-1 text-xs text-white/70">
+                                                    The book stays unavailable
+                                                    until it’s marked as{" "}
+                                                    <span className="font-semibold text-emerald-200">
+                                                      Returned
+                                                    </span>
+                                                    .
+                                                  </p>
+                                                </div>
+
+                                                <AlertDialogFooter>
+                                                  <AlertDialogCancel
+                                                    className="border-white/20 text-white hover:bg-black/20"
+                                                    disabled={
+                                                      markBorrowBusyId === rec.id
+                                                    }
+                                                  >
+                                                    Cancel
+                                                  </AlertDialogCancel>
+                                                  <AlertDialogAction
+                                                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                                    disabled={
+                                                      markBorrowBusyId === rec.id
+                                                    }
+                                                    onClick={() =>
+                                                      void handleMarkBorrowed(rec)
+                                                    }
+                                                  >
+                                                    {markBorrowBusyId === rec.id ? (
+                                                      <span className="inline-flex items-center gap-2">
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                        Marking…
+                                                      </span>
+                                                    ) : (
+                                                      "Confirm & mark borrowed"
+                                                    )}
+                                                  </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                              </AlertDialogContent>
+                                            </AlertDialog>
+                                          )}
+
+                                          {(isPendingReturn || isLegacyPending) && (
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="ghost"
+                                              className="text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-100"
+                                              onClick={() => openReturnDialog(rec)}
+                                            >
+                                              Mark as Returned
+                                            </Button>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {!isReturned ? (
+                                        <div className="mt-2 flex flex-col gap-1 text-[11px] text-white/55">
+                                          <span>
+                                            {extensionPending
+                                              ? `Extension Request Pending (+${FIXED_EXTENSION_DAYS} Day).`
+                                              : "No extension request required."}
+                                          </span>
+                                          {isBorrowed ? (
+                                            <span>
+                                              {hasReturnRequest
+                                                ? "A return request has already been sent."
+                                                : "You can send a return request reminder to the borrower."}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
                         </DialogContent>
                       </Dialog>
                     </AccordionItem>
