@@ -64,6 +64,7 @@ import {
   approveBorrowExtensionRequest,
   disapproveBorrowExtensionRequest,
   requestBorrowReturnByLibrarian,
+  syncBorrowEmailNotifications,
   type BorrowNotificationSummaryDTO,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
@@ -337,6 +338,10 @@ export default function LibrarianBorrowRecordsPage() {
       setNotificationSummary(
         summary ?? buildFallbackNotificationSummary(data, true)
       );
+
+      void syncBorrowEmailNotifications().catch(() => {
+        // keep dashboard loading resilient even if email sync is unavailable
+      });
     } catch (err: any) {
       const msg = err?.message || "Failed to load borrow records.";
       setError(msg);
@@ -761,6 +766,10 @@ export default function LibrarianBorrowRecordsPage() {
             <p className="text-xs text-white/70">
               Manage active loans, returns, due dates, fines, and return
               requests.
+            </p>
+            <p className="text-[11px] text-white/55">
+              Relevant due-date and borrow workflow alerts are also synced to
+              the signed-in staff email automatically.
             </p>
           </div>
         </div>

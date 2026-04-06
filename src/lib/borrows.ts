@@ -72,6 +72,21 @@ export type BorrowNotificationSummaryDTO = {
     pendingExtensionCount: number;
 };
 
+
+export type BorrowEmailNotificationSyncDTO = {
+    role: "borrower" | "staff";
+    recipient: string | null;
+    emailSent: boolean;
+    suppressed: boolean;
+    totalNotifications: number;
+    dueTodayCount: number;
+    overdueCount: number;
+    pendingPickupCount: number;
+    pendingReturnCount: number;
+    pendingExtensionCount: number;
+    message: string;
+};
+
 export type BorrowPolicyDTO = {
     role: BorrowerRole;
     /**
@@ -621,4 +636,19 @@ export async function updateBorrowDueDate(
         body,
     });
     return res.record;
+}
+
+/**
+ * Sync dashboard-style borrow notifications to the signed-in user's email.
+ *
+ * Borrowers receive reminders for due-today / overdue books and librarian
+ * return requests. Staff receive a digest for borrow workflow alerts plus
+ * due-date reminders that need attention.
+ */
+export async function syncBorrowEmailNotifications(): Promise<BorrowEmailNotificationSyncDTO> {
+    type Resp = JsonOk<{ sync: BorrowEmailNotificationSyncDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.emailNotificationSync, {
+        method: "POST",
+    });
+    return res.sync;
 }

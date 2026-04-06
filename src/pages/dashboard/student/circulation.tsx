@@ -40,6 +40,7 @@ import { BORROW_ROUTES } from "@/api/borrows/route";
 import {
   requestBorrowReturn,
   requestBorrowExtension,
+  syncBorrowEmailNotifications,
   type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -489,6 +490,10 @@ export default function StudentCirculationPage() {
       setRecords(recordsSnapshot.records);
       setServerNow(recordsSnapshot.serverNow);
       setFines(finesData);
+
+      void syncBorrowEmailNotifications().catch(() => {
+        // keep page loading resilient even if email sync is unavailable
+      });
     } catch (err: any) {
       const msg =
         err?.message ||
@@ -710,6 +715,10 @@ export default function StudentCirculationPage() {
             <p className="text-xs text-white/70">
               View your borrowed books, due dates, returns, extensions, and
               fines.
+            </p>
+            <p className="text-[11px] text-white/55">
+              Relevant due-date and librarian return-request alerts are also
+              synced to your email automatically.
             </p>
           </div>
         </div>

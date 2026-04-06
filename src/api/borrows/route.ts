@@ -37,4 +37,7 @@ export const BORROW_ROUTES = {
     // ✅ librarian/admin can request the borrower to return the book
     requestReturn: (id: string | number) =>
         api(`/borrow-records/${encodeURIComponent(String(id))}/request-return`), // POST
+
+    // ✅ sync dashboard-style borrow notifications to email
+    emailNotificationSync: api("/borrow-records/notifications/email-sync"), // POST
 } as const;
