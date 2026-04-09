@@ -145,17 +145,15 @@ export function BookFormDialog({
                     <DialogDescription className="text-white/70">
                         {isEdit ? (
                             <>
-                                Update the catalog details, circulation behavior, and copy counts for
-                                this title.
+                                Update the catalog and physical-copy details for this saved book
+                                record.
                             </>
                         ) : (
                             <>
-                                Enter catalog details, starting inventory, and whether this title is
-                                borrowable or marked as{" "}
-                                <span className="font-semibold text-amber-300">
-                                    Library Use Only
-                                </span>
-                                .
+                                Save the first physical copy for this title. Use the separate{" "}
+                                <span className="font-semibold text-white">Add copy</span> action
+                                later for additional copies with a different accession number,
+                                barcode, and copy number.
                             </>
                         )}
                     </DialogDescription>
@@ -185,7 +183,7 @@ export function BookFormDialog({
                         </Field>
 
                         <Field>
-                            <FieldLabel className="text-white">Accession Number *</FieldLabel>
+                            <FieldLabel className="text-white">Accession number *</FieldLabel>
                             <FieldContent>
                                 <Input
                                     value={values.accessionNumber}
@@ -435,7 +433,7 @@ export function BookFormDialog({
 
                     <div className="space-y-4 border-t border-white/10 pt-2">
                         <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
-                            Copies & circulation
+                            Copy & circulation
                         </div>
 
                         {isEdit ? (
@@ -485,115 +483,28 @@ export function BookFormDialog({
                             </div>
                         ) : null}
 
-                        {isEdit ? (
-                            <Field>
-                                <FieldLabel className="text-white">Copies</FieldLabel>
-                                <FieldContent>
-                                    <RadioGroup
-                                        value={values.copiesMode}
-                                        onValueChange={(v) => {
-                                            if (v === "set" || v === "add") {
-                                                onChange({ copiesMode: v });
-                                            }
-                                        }}
-                                        className="space-y-2"
-                                    >
-                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
-                                                <RadioGroupItem value="set" id="copies-mode-set" />
-                                                <Label
-                                                    htmlFor="copies-mode-set"
-                                                    className="cursor-pointer text-sm text-white/80"
-                                                >
-                                                    Set total copies
-                                                </Label>
-                                            </div>
-                                            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
-                                                <RadioGroupItem value="add" id="copies-mode-add" />
-                                                <Label
-                                                    htmlFor="copies-mode-add"
-                                                    className="cursor-pointer text-sm text-white/80"
-                                                >
-                                                    Add copies
-                                                </Label>
-                                            </div>
-                                        </div>
-
-                                        {values.copiesMode === "set" ? (
-                                            <div className="pt-2">
-                                                <Input
-                                                    value={values.numberOfCopies}
-                                                    onChange={(e) =>
-                                                        onChange({
-                                                            numberOfCopies: e.target.value,
-                                                        })
-                                                    }
-                                                    placeholder="e.g., 5"
-                                                    className="border-white/20 bg-slate-900/70 text-white"
-                                                    inputMode="numeric"
-                                                    autoComplete="off"
-                                                />
-                                                <p className="mt-1 text-[11px] text-white/60">
-                                                    Sets the total inventory copies for this title.
-                                                </p>
-                                            </div>
-                                        ) : (
-                                            <div className="pt-2">
-                                                <Input
-                                                    value={values.copiesToAdd}
-                                                    onChange={(e) =>
-                                                        onChange({ copiesToAdd: e.target.value })
-                                                    }
-                                                    placeholder="e.g., 2"
-                                                    className="border-white/20 bg-slate-900/70 text-white"
-                                                    inputMode="numeric"
-                                                    autoComplete="off"
-                                                />
-                                                <p className="mt-1 text-[11px] text-white/60">
-                                                    Adds to current total{" "}
-                                                    {typeof inventory?.total === "number"
-                                                        ? `(${inventory.total})`
-                                                        : ""}
-                                                    .
-                                                </p>
-                                            </div>
-                                        )}
-                                    </RadioGroup>
-                                </FieldContent>
-                            </Field>
-                        ) : (
-                            <Field>
-                                <FieldLabel className="text-white">Total copies *</FieldLabel>
-                                <FieldContent>
-                                    <Input
-                                        value={values.numberOfCopies}
-                                        onChange={(e) =>
-                                            onChange({ numberOfCopies: e.target.value })
-                                        }
-                                        placeholder="e.g., 3"
-                                        className="border-white/20 bg-slate-900/70 text-white"
-                                        inputMode="numeric"
-                                        autoComplete="off"
-                                    />
-                                </FieldContent>
-                                <p className="mt-1 text-[11px] text-white/60">
-                                    Initial inventory copies. You can add more copies later.
-                                </p>
-                            </Field>
-                        )}
+                        <div className="rounded-md border border-cyan-400/20 bg-cyan-500/10 px-3 py-3 text-[11px] leading-5 text-cyan-100/85">
+                            Each saved record represents one physical copy. Use the separate{" "}
+                            <span className="font-semibold text-cyan-100">Add copy</span> action
+                            from an existing record when you need another copy with a different
+                            accession number, barcode, and copy number.
+                        </div>
 
                         <Field>
-                            <FieldLabel className="text-white">Copy number</FieldLabel>
+                            <FieldLabel className="text-white">Copy number *</FieldLabel>
                             <FieldContent>
                                 <Input
                                     value={values.copyNumber}
                                     onChange={(e) => onChange({ copyNumber: e.target.value })}
-                                    placeholder="Optional (positive number)"
+                                    placeholder="Required (positive number)"
                                     className="border-white/20 bg-slate-900/70 text-white"
                                     inputMode="numeric"
                                     autoComplete="off"
                                 />
                             </FieldContent>
+                            <p className="mt-1 text-[11px] text-white/60">
+                                Required for every physical copy of the book.
+                            </p>
                         </Field>
 
                         <Field>
@@ -685,9 +596,7 @@ export function BookFormDialog({
                             <FieldContent>
                                 <Input
                                     value={values.borrowDuration}
-                                    onChange={(e) =>
-                                        onChange({ borrowDuration: e.target.value })
-                                    }
+                                    onChange={(e) => onChange({ borrowDuration: e.target.value })}
                                     placeholder="e.g., 7"
                                     className="border-white/20 bg-slate-900/70 text-white"
                                     inputMode="numeric"
@@ -696,7 +605,7 @@ export function BookFormDialog({
                             </FieldContent>
                             <p className="mt-1 text-[11px] text-white/60">
                                 This controls how many days a student can initially borrow this
-                                book.
+                                copy.
                             </p>
                         </Field>
 
@@ -717,7 +626,7 @@ export function BookFormDialog({
                                         Library Use Only
                                     </Label>
                                     <p className="text-[11px] leading-5 text-amber-100/80">
-                                        Keep this title visible in catalog lists and choices, but do
+                                        Keep this copy visible in catalog lists and choices, but do
                                         not allow it to be borrowed.
                                     </p>
                                 </div>
@@ -740,9 +649,9 @@ export function BookFormDialog({
 
                         {values.isLibraryUseOnly ? (
                             <p className="text-[11px] text-amber-200/90">
-                                Borrowing is disabled for this title. It will still appear in
-                                selections with the{" "}
-                                <span className="font-semibold">Library Use Only</span> label.
+                                Borrowing is disabled for this copy. It will still appear in
+                                selections with the <span className="font-semibold">Library Use Only</span>{" "}
+                                label.
                             </p>
                         ) : null}
 

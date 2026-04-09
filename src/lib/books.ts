@@ -58,9 +58,9 @@ export type BookDTO = {
   libraryArea?: LibraryArea | null;
 
   /**
-   * numberOfCopies = REMAINING/AVAILABLE copies (deducts as users borrow).
+   * numberOfCopies = REMAINING/AVAILABLE copies for this record.
    * Backend also sends:
-   * - totalCopies = total inventory copies
+   * - totalCopies = total inventory copies represented by this record
    * - borrowedCopies = active borrows (status <> returned)
    */
   numberOfCopies?: number;
@@ -202,7 +202,7 @@ export type CreateBookPayload = {
   copyrightYear?: number | null;
 
   // Physical description / notes
-  pages?: number | null;
+  pages?: number | string | null;
   otherDetails?: string;
   dimensions?: string;
   notes?: string;
@@ -217,8 +217,8 @@ export type CreateBookPayload = {
   libraryArea?: LibraryArea | null;
 
   /**
-   * TOTAL inventory copies (admin input).
-   * Remaining copies shown to users are computed by backend.
+   * TOTAL inventory copies represented by this record.
+   * For the librarian catalog UI, new records are saved as one physical copy.
    */
   numberOfCopies?: number;
 
@@ -244,6 +244,18 @@ export type UpdateBookPayload = Partial<CreateBookPayload> & {
   copiesToAdd?: number;
 };
 
+export type AddBookCopyPayload = {
+  accessionNumber: string;
+  copyNumber: number;
+  barcode: string;
+  callNumber?: string;
+  volumeNumber?: string;
+  libraryArea?: LibraryArea | null;
+  borrowDurationDays?: number;
+  available?: boolean;
+  isLibraryUseOnly?: boolean;
+};
+
 export async function fetchBooks(): Promise<BookDTO[]> {
   type Resp = JsonOk<{ books: BookDTO[] }>;
   const res = await requestJSON<Resp>(BOOK_ROUTES.list, { method: "GET" });
@@ -266,6 +278,18 @@ export async function updateBook(
   type Resp = JsonOk<{ book: BookDTO }>;
   const res = await requestJSON<Resp>(BOOK_ROUTES.update(id), {
     method: "PATCH",
+    body: payload,
+  });
+  return res.book;
+}
+
+export async function addBookCopy(
+  id: string | number,
+  payload: AddBookCopyPayload
+): Promise<BookDTO> {
+  type Resp = JsonOk<{ book: BookDTO }>;
+  const res = await requestJSON<Resp>(BOOK_ROUTES.addCopies(id), {
+    method: "POST",
     body: payload,
   });
   return res.book;
