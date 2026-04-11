@@ -362,6 +362,42 @@ const pdfStyles = StyleSheet.create({
         color: "#64748b",
         textAlign: "center",
     },
+    cutGuideOverlay: {
+        position: "absolute",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+    },
+    cutGuideBorder: {
+        position: "absolute",
+        top: 6,
+        right: 6,
+        bottom: 6,
+        left: 6,
+        borderWidth: 1,
+        borderStyle: "dashed",
+        borderColor: "#94a3b8",
+        borderRadius: 4,
+    },
+    cutGuideLabel: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        textAlign: "center",
+        fontSize: 6,
+        color: "#64748b",
+        fontWeight: 700,
+        backgroundColor: "#ffffff",
+        paddingHorizontal: 6,
+        alignSelf: "center",
+    },
+    cutGuideTopLabel: {
+        top: 1,
+    },
+    cutGuideBottomLabel: {
+        bottom: 1,
+    },
 });
 
 type FinesLayoutProfile = {
@@ -521,6 +557,16 @@ function FinesPdfDocument({
                     },
                 ]}
             >
+                <View style={pdfStyles.cutGuideOverlay} fixed>
+                    <View style={pdfStyles.cutGuideBorder} />
+                    <Text style={[pdfStyles.cutGuideLabel, pdfStyles.cutGuideTopLabel]}>
+                        ✂ CUT ALONG DASHED LINE
+                    </Text>
+                    <Text style={[pdfStyles.cutGuideLabel, pdfStyles.cutGuideBottomLabel]}>
+                        ✂ CUT ALONG DASHED LINE
+                    </Text>
+                </View>
+
                 <View
                     style={[
                         pdfStyles.header,
@@ -788,7 +834,7 @@ export function ExportPreviewFines({
                 paperPreset={paperPreset}
             />
         ),
-        [records, selectedFineId, generatedAtIso]
+        [records, selectedFineId, generatedAtIso, paperPreset]
     );
 
     React.useEffect(() => {
@@ -907,7 +953,7 @@ export function ExportPreviewFines({
                             Fines PDF Preview & Export
                         </DialogTitle>
                         <DialogDescription className="text-white/70">
-                            Choose a bond paper preset below. The exported fines record slip uses the selected quarter-paper size and scales its content to stay on one page.
+                            Choose a bond paper preset below. The exported fines record slip uses the selected quarter-paper size, scales its content to stay on one page, and adds dashed cut guides for easier trimming.
                         </DialogDescription>
                     </DialogHeader>
                 </div>

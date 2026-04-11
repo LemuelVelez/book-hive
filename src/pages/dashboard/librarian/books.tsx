@@ -238,6 +238,16 @@ function getSuggestedNextCopyNumber(source: BookDTO, books: BookDTO[]) {
     return maxCopyNumber > 0 ? String(maxCopyNumber + 1) : "";
 }
 
+function buildAddCopyFormValues(source: BookDTO): AddCopyFormValues {
+    return {
+        accessionNumber: "",
+        copyNumber: "",
+        barcode: "",
+        callNumber: source.callNumber || "",
+        volumeNumber: source.volumeNumber || "",
+    };
+}
+
 function CatalogDetail({
     label,
     value,
@@ -727,21 +737,12 @@ export default function LibrarianBooksPage() {
         setEditOpen(true);
     }, []);
 
-    const openAddCopyDialog = React.useCallback(
-        (book: BookDTO) => {
-            setCopySourceBook(book);
-            setCopyForm({
-                accessionNumber: "",
-                copyNumber: getSuggestedNextCopyNumber(book, books),
-                barcode: "",
-                callNumber: book.callNumber || "",
-                volumeNumber: book.volumeNumber || "",
-            });
-            setCopyError("");
-            setCopyOpen(true);
-        },
-        [books]
-    );
+    const openAddCopyDialog = React.useCallback((book: BookDTO) => {
+        setCopySourceBook(book);
+        setCopyForm(buildAddCopyFormValues(book));
+        setCopyError("");
+        setCopyOpen(true);
+    }, []);
 
     const handleUpdateBook = async () => {
         if (!editBookId) return;
@@ -950,13 +951,13 @@ export default function LibrarianBooksPage() {
                 volumeNumber: copyForm.volumeNumber.trim() || undefined,
             });
 
-            setBooks((prev) => [created, ...prev]);
-            toast.success("Copy added", {
-                description: `A new copy record for "${copySourceBook.title}" has been created.`,
-            });
+            const nextBooks = [created, ...books];
+            setBooks(nextBooks);
+            setCopyForm(buildAddCopyFormValues(copySourceBook));
 
-            setCopyOpen(false);
-            resetCopyForm();
+            toast.success("Copy added", {
+                description: `A new copy record for "${copySourceBook.title}" has been created. Enter the next accession number and copy number to continue.`,
+            });
         } catch (err: unknown) {
             const message = getErrorMessage(err) || "Failed to add the copy. Please try again later.";
             setCopyError(message);
@@ -1307,7 +1308,9 @@ export default function LibrarianBooksPage() {
                         </DialogTitle>
                         <DialogDescription className="text-white/70">
                             Duplicate the catalog details from the selected book and enter the new
-                            copy&apos;s accession number, barcode, and copy number.
+                            copy&apos;s accession number, barcode, and copy number. After each save,
+                            the copy-specific fields are cleared so you can continue adding the next
+                            copy.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1330,6 +1333,14 @@ export default function LibrarianBooksPage() {
                                     {copySourceBook ? getLibraryAreaValue(copySourceBook) : "—"}
                                 </span>
                             </div>
+                            {copySourceBook ? (
+                                <p className="mt-3 text-[11px] text-white/60">
+                                    Suggested next copy number:{" "}
+                                    <span className="font-medium text-white/85">
+                                        {getSuggestedNextCopyNumber(copySourceBook, books) || "Add manually"}
+                                    </span>
+                                </p>
+                            ) : null}
                         </div>
 
                         <Field>
@@ -1372,6 +1383,9 @@ export default function LibrarianBooksPage() {
                                     autoComplete="off"
                                 />
                             </FieldContent>
+                            <p className="mt-1 text-[11px] text-white/60">
+                                This field is cleared again after every successful save.
+                            </p>
                         </Field>
 
                         <Field>
