@@ -61,6 +61,7 @@ type UserRowDTO = {
   isApproved: boolean;
   approvedAt?: string | null;
   createdAt?: string | null;
+  contactNumber?: string | null;
 };
 
 type BusyState =
@@ -277,6 +278,7 @@ function normalizeUserRow(u: any): UserRowDTO | null {
   const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
   const createdAt = (u.createdAt ?? u.created_at ?? null) as string | null;
   const avatarUrl = (u.avatarUrl ?? u.avatar_url ?? null) as string | null;
+  const contactNumber = (u.contactNumber ?? u.contact_number ?? null) as string | null;
 
   return {
     id,
@@ -285,6 +287,7 @@ function normalizeUserRow(u: any): UserRowDTO | null {
     role,
     accountType,
     avatarUrl,
+    contactNumber,
     isApproved,
     approvedAt,
     createdAt,
@@ -362,6 +365,7 @@ export default function LibrarianUsersPage() {
       return (
         u.id.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
+        String(u.contactNumber || "").toLowerCase().includes(q) ||
         (u.fullName || "").toLowerCase().includes(q) ||
         u.role.toLowerCase().includes(q) ||
         u.accountType.toLowerCase().includes(q) ||
@@ -550,6 +554,7 @@ export default function LibrarianUsersPage() {
                 </div>
 
                 <div className="text-sm text-white/80 break-all">{u.email}</div>
+                <div className="text-xs text-white/60">Contact: {u.contactNumber || "—"}</div>
 
                 <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
                   <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono max-w-full truncate">
@@ -752,7 +757,7 @@ export default function LibrarianUsersPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by ID, email, name, role, account type, approved…"
+                placeholder="Search by ID, email, contact number, name, role, account type, approved…"
                 className="pl-9 bg-slate-900/70 border-white/20 text-white"
               />
             </div>

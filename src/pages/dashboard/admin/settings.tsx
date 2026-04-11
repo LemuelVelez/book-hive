@@ -66,6 +66,12 @@ function isValidEmail(email: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
 }
 
+function isValidContactNumber(value: string) {
+    const s = String(value || "").trim()
+    if (!s) return true
+    return /^[0-9()+\-.\s]{7,20}$/.test(s)
+}
+
 function extractVerifyToken(input: string) {
     const s = String(input || "").trim()
     if (!s) return null
@@ -332,6 +338,7 @@ export default function AdminSettingsPage() {
 
     const [fullNameInput, setFullNameInput] = React.useState("")
     const [emailInput, setEmailInput] = React.useState("")
+    const [contactNumberInput, setContactNumberInput] = React.useState("")
 
     // avatar upload
     const fileRef = React.useRef<HTMLInputElement | null>(null)
@@ -397,6 +404,8 @@ export default function AdminSettingsPage() {
 
     const email = user?.email || "—"
 
+    const contactNumber = user?.contactNumber || user?.contact_number || null
+
     const isEmailVerified = Boolean(
         user?.isEmailVerified ??
         user?.is_email_verified ??
@@ -421,6 +430,7 @@ export default function AdminSettingsPage() {
         const uFullName = user?.fullName || user?.name || user?.full_name || user?.admin_name || ""
         setFullNameInput(String(uFullName || ""))
         setEmailInput(String(user?.email || ""))
+        setContactNumberInput(String(user?.contactNumber ?? user?.contact_number ?? ""))
     }, [user, editing])
 
     // cleanup avatar preview
@@ -433,6 +443,7 @@ export default function AdminSettingsPage() {
 
     const oldEmailTrim = String(email === "—" ? "" : email || "").trim()
     const newEmailTrim = String(emailInput || "").trim()
+    const oldContactNumberTrim = String(contactNumber || "").trim()
     const emailChanged =
         !!oldEmailTrim &&
         !!newEmailTrim &&
@@ -440,11 +451,13 @@ export default function AdminSettingsPage() {
 
     const profileDirty =
         String(fullNameInput || "").trim() !== String(fullName === "—" ? "" : fullName || "").trim() ||
-        String(emailInput || "").trim() !== oldEmailTrim
+        String(emailInput || "").trim() !== oldEmailTrim ||
+        String(contactNumberInput || "").trim() !== oldContactNumberTrim
 
     function resetProfileForm() {
         setFullNameInput(String(fullName === "—" ? "" : fullName || ""))
         setEmailInput(String(oldEmailTrim || ""))
+        setContactNumberInput(String(oldContactNumberTrim || ""))
         setEditing(false)
 
         if (avatarPreview) URL.revokeObjectURL(avatarPreview)
@@ -503,6 +516,7 @@ export default function AdminSettingsPage() {
     async function onSaveProfile() {
         const name = String(fullNameInput || "").trim()
         const nextEmail = String(emailInput || "").trim()
+        const nextContactNumber = String(contactNumberInput || "").trim()
 
         if (!name) {
             toast.warning("Full name required", { description: "Please enter your full name." })
@@ -517,9 +531,14 @@ export default function AdminSettingsPage() {
             return
         }
 
+        if (nextContactNumber && !isValidContactNumber(nextContactNumber)) {
+            toast.warning("Invalid contact number", { description: "Please enter a valid contact number." })
+            return
+        }
+
         setProfileBusy(true)
         try {
-            const payload: any = { fullName: name, email: nextEmail }
+            const payload: any = { fullName: name, email: nextEmail, contactNumber: nextContactNumber || null }
 
             const r = await tryUpdateProfile(payload)
             const updatedUser = r?.user ?? r
@@ -928,6 +947,25 @@ export default function AdminSettingsPage() {
                                                     <span className="font-semibold text-amber-300">unverified</span>. After saving, you can
                                                     resend/verify it here without logging out.
                                                 </p>
+                                            </div>
+                                        )}
+
+                                        {!editing ? (
+                                            <div className="mt-3">
+                                                <div className="text-xs text-white/60">Contact number</div>
+                                                <div className="mt-0.5 font-medium">{fmtValue(contactNumber)}</div>
+                                            </div>
+                                        ) : (
+                                            <div className="mt-3 space-y-1">
+                                                <Label className="text-xs text-white/80">Contact number</Label>
+                                                <Input
+                                                    value={contactNumberInput}
+                                                    onChange={(e) => setContactNumberInput(e.target.value)}
+                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    type="tel"
+                                                    autoComplete="tel"
+                                                    placeholder="e.g., 09123456789"
+                                                />
                                             </div>
                                         )}
 

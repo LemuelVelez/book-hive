@@ -9,6 +9,7 @@ import {
     Mail,
     User,
     IdCard,
+    Phone,
 } from "lucide-react";
 
 // UI primitives
@@ -134,6 +135,12 @@ function resolveDashboardForRole(role: Role): string {
     return dashboardForRole(role);
 }
 
+function isValidContactNumber(value: string) {
+    const s = String(value || "").trim();
+    if (!s) return true;
+    return /^[0-9()+\-.\s]{7,20}$/.test(s);
+}
+
 // -------------------------
 // Component
 // -------------------------
@@ -163,6 +170,7 @@ export default function AuthPage() {
     const [program, setProgram] = useState<string>("");
     const [yearLevel, setYearLevel] = useState<YearLevelOption | "">("");
     const [regEmail, setRegEmail] = useState("");
+    const [regContactNumber, setRegContactNumber] = useState("");
     const [regPassword, setRegPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [regError, setRegError] = useState<string>("");
@@ -399,6 +407,12 @@ export default function AuthPage() {
             toast.error("Validation error", { description: msg });
             return;
         }
+        if (regContactNumber.trim() && !isValidContactNumber(regContactNumber)) {
+            const msg = "Please enter a valid contact number.";
+            setRegError(msg);
+            toast.error("Validation error", { description: msg });
+            return;
+        }
 
         if (accountType === "student") {
             const finalCollege =
@@ -456,6 +470,7 @@ export default function AuthPage() {
                 password: regPassword,
                 accountType,
                 role,
+                contactNumber: regContactNumber.trim() || undefined,
             };
 
             if (accountType === "student") {
@@ -1161,6 +1176,33 @@ export default function AuthPage() {
                                                         autoCapitalize="none"
                                                         autoCorrect="off"
                                                         spellCheck={false}
+                                                    />
+                                                </div>
+                                            </FieldContent>
+                                        </Field>
+
+                                        <Field>
+                                            <FieldLabel className="text-white">
+                                                Contact Number
+                                            </FieldLabel>
+                                            <FieldContent>
+                                                <div className="relative">
+                                                    <Phone className="absolute left-3 top-3 h-4 w-4 text-white/50" />
+                                                    <Input
+                                                        id="reg-contact-number"
+                                                        type="tel"
+                                                        placeholder="e.g., 09123456789"
+                                                        className="pl-10 bg-slate-900/70 border-white/10 text-white"
+                                                        value={regContactNumber}
+                                                        onChange={(e) =>
+                                                            setRegContactNumber(
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        onKeyDown={
+                                                            onRegisterKeyDown
+                                                        }
+                                                        autoComplete="tel"
                                                     />
                                                 </div>
                                             </FieldContent>

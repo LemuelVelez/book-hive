@@ -92,6 +92,7 @@ type UserRowDTO = {
 
   // optional timestamps
   createdAt?: string | null;
+  contactNumber?: string | null;
 
   // ✅ display picture
   avatarUrl?: string | null;
@@ -325,6 +326,7 @@ function normalizeUserRow(u: any): UserRowDTO | null {
   const isApproved = Boolean(u.isApproved ?? u.is_approved ?? false);
   const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
   const createdAt = (u.createdAt ?? u.created_at ?? null) as string | null;
+  const contactNumber = (u.contactNumber ?? u.contact_number ?? null) as string | null;
 
   // ✅ avatar url
   const avatarUrl = (u.avatarUrl ?? u.avatar_url ?? null) as string | null;
@@ -336,6 +338,7 @@ function normalizeUserRow(u: any): UserRowDTO | null {
     role,
     accountType,
     avatarUrl,
+    contactNumber,
     isApproved,
     approvedAt,
     createdAt,
@@ -406,6 +409,7 @@ export default function AdminUsersPage() {
 
   const [cFullName, setCFullName] = React.useState("");
   const [cEmail, setCEmail] = React.useState("");
+  const [cContactNumber, setCContactNumber] = React.useState("");
   const [cPassword, setCPassword] = React.useState("");
   const [showCreatePassword, setShowCreatePassword] = React.useState(false);
   const [cAutoPassword, setCAutoPassword] = React.useState(true);
@@ -460,6 +464,7 @@ export default function AdminUsersPage() {
   const resetCreateForm = () => {
     setCFullName("");
     setCEmail("");
+    setCContactNumber("");
     setCPassword("");
     setShowCreatePassword(false);
     setCAutoPassword(true);
@@ -518,6 +523,7 @@ export default function AdminUsersPage() {
       return (
         u.id.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
+        String(u.contactNumber || "").toLowerCase().includes(q) ||
         (u.fullName || "").toLowerCase().includes(q) ||
         u.role.toLowerCase().includes(q) ||
         u.accountType.toLowerCase().includes(q) ||
@@ -660,6 +666,7 @@ export default function AdminUsersPage() {
         autoGeneratePassword: cAutoPassword,
         role: cRole, // ✅ effective role
         accountType: cAccountType, // ✅ informational only
+        contactNumber: cContactNumber.trim() || undefined,
         isApproved: cApproveNow,
         studentId: cAccountType === "student" ? cStudentId.trim() : undefined,
         course: cAccountType === "student" ? cCourse.trim() : undefined,
@@ -827,6 +834,7 @@ export default function AdminUsersPage() {
                     </div>
 
                     <div className="text-sm text-white/80 wrap-anywhere">{u.email}</div>
+                    <div className="text-xs text-white/60">Contact: {u.contactNumber || "—"}</div>
 
                     <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
                       <span className="max-w-full rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono wrap-anywhere">
@@ -1052,6 +1060,18 @@ export default function AdminUsersPage() {
                     value={cEmail}
                     onChange={(e) => setCEmail(e.target.value)}
                     placeholder="you@example.com"
+                    className="bg-slate-900/70 border-white/10 text-white"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="c-contact-number">Contact number</Label>
+                  <Input
+                    id="c-contact-number"
+                    type="tel"
+                    value={cContactNumber}
+                    onChange={(e) => setCContactNumber(e.target.value)}
+                    placeholder="e.g., 09123456789"
                     className="bg-slate-900/70 border-white/10 text-white"
                   />
                 </div>
@@ -1312,7 +1332,7 @@ export default function AdminUsersPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by ID, email, name, role, account type, approved…"
+                placeholder="Search by ID, email, contact number, name, role, account type, approved…"
                 className="pl-9 bg-slate-900/70 border-white/20 text-white"
               />
             </div>

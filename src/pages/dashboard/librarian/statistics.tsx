@@ -402,7 +402,7 @@ function StatsCard({
     <Card className="bg-slate-800/60 border-white/10">
       <CardContent className="pt-5">
         <div className="text-xs uppercase tracking-wide text-white/60">{title}</div>
-        <div className="mt-2 text-2xl font-bold text-white">{value}</div>
+        <div className="mt-2 text-2xl font-bold wrap-anywhere text-white">{value}</div>
         <div className="mt-1 text-xs text-white/70">{subtitle}</div>
       </CardContent>
     </Card>
@@ -421,7 +421,7 @@ function GraphCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="bg-slate-800/60 border-white/10">
+    <Card className="bg-slate-800/60 mt-4 border-white/10">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <span className="text-sky-200">{icon}</span>

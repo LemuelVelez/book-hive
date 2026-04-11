@@ -36,6 +36,7 @@ export type UserDTO = {
   studentId?: string | null;
   course?: string | null;
   yearLevel?: string | null;
+  contactNumber?: string | null;
 
   // ✅ avatar
   avatarUrl?: string | null;
@@ -47,6 +48,7 @@ export type UserListItemDTO = {
   fullName: string;
   accountType: Role;
   avatarUrl?: string | null;
+  contactNumber?: string | null;
 
   // approval
   isApproved: boolean;
@@ -119,6 +121,7 @@ function normalizeUserDTO(u: any): UserDTO {
   const studentId = (u?.studentId ?? u?.student_id ?? null) as string | null;
   const course = (u?.course ?? null) as string | null;
   const yearLevel = (u?.yearLevel ?? u?.year_level ?? null) as string | null;
+  const contactNumber = (u?.contactNumber ?? u?.contact_number ?? null) as string | null;
 
   const avatarUrl = (u?.avatarUrl ?? u?.avatar_url ?? null) as string | null;
 
@@ -134,6 +137,7 @@ function normalizeUserDTO(u: any): UserDTO {
     studentId,
     course,
     yearLevel,
+    contactNumber,
     avatarUrl,
   };
 }
@@ -154,6 +158,7 @@ function normalizeUserListItem(u: any): UserListItemDTO | null {
   const approvedAt = (u.approvedAt ?? u.approved_at ?? null) as string | null;
   const createdAt = (u.createdAt ?? u.created_at ?? null) as string | null;
   const avatarUrl = (u.avatarUrl ?? u.avatar_url ?? null) as string | null;
+  const contactNumber = (u.contactNumber ?? u.contact_number ?? null) as string | null;
 
   return {
     id,
@@ -161,6 +166,7 @@ function normalizeUserListItem(u: any): UserListItemDTO | null {
     fullName,
     accountType,
     avatarUrl,
+    contactNumber,
     isApproved,
     approvedAt,
     createdAt,
@@ -270,6 +276,7 @@ export async function register(payload: {
   studentId?: string;
   course?: string;
   yearLevel?: string;
+  contactNumber?: string;
   avatarUrl?: string | null;
 }) {
   type Resp = JsonOk<{ user: any }>;
@@ -325,6 +332,7 @@ export type UpdateMyProfilePayload = {
   fullName?: string;
   email?: string;
   course?: string;
+  contactNumber?: string | null;
 
   // preferred casing
   yearLevel?: string | null;
@@ -333,6 +341,7 @@ export type UpdateMyProfilePayload = {
   // backend compatibility (some APIs expect snake_case)
   year_level?: string | null;
   student_id?: string | null;
+  contact_number?: string | null;
 };
 
 function sameNullable(a: unknown, b: unknown) {
@@ -356,12 +365,15 @@ export async function updateMyProfile(payload: UpdateMyProfilePayload) {
   const desiredStudentId = payload.studentId !== undefined ? payload.studentId : payload.student_id;
 
   const desiredYearLevel = payload.yearLevel !== undefined ? payload.yearLevel : payload.year_level;
+  const desiredContactNumber =
+    payload.contactNumber !== undefined ? payload.contactNumber : payload.contact_number;
 
   // Build camelCase body first (most common for JSON APIs)
   const bodyCamel: any = {};
   if (payload.fullName !== undefined) bodyCamel.fullName = payload.fullName;
   if (payload.email !== undefined) bodyCamel.email = payload.email;
   if (payload.course !== undefined) bodyCamel.course = payload.course;
+  if (desiredContactNumber !== undefined) bodyCamel.contactNumber = desiredContactNumber;
   if (hasYearLevel) bodyCamel.yearLevel = desiredYearLevel;
   if (hasStudentId) bodyCamel.studentId = desiredStudentId;
 
@@ -400,6 +412,7 @@ export async function updateMyProfile(payload: UpdateMyProfilePayload) {
       if (payload.fullName !== undefined) bodySnakeAll.fullName = payload.fullName;
       if (payload.email !== undefined) bodySnakeAll.email = payload.email;
       if (payload.course !== undefined) bodySnakeAll.course = payload.course;
+      if (desiredContactNumber !== undefined) bodySnakeAll.contact_number = desiredContactNumber;
 
       if (hasStudentId) bodySnakeAll.student_id = desiredStudentId;
       if (hasYearLevel) bodySnakeAll.year_level = desiredYearLevel;
@@ -501,6 +514,7 @@ export type CreateUserPayload = {
   studentId?: string;
   course?: string;
   yearLevel?: string;
+  contactNumber?: string;
   isApproved?: boolean;
 
   /**
