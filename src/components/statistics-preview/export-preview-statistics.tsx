@@ -45,11 +45,20 @@ export type PrintableCollegeStatisticsRecord = {
     topBorrowerBorrowCount: number;
 };
 
+export type PrintableTopBorrowerOfYearRecord = {
+    rank: number;
+    borrowerName: string;
+    college: string;
+    totalBorrowCount: number;
+};
+
 type ExportPreviewStatisticsProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     records: PrintableBookStatisticsRecord[];
     collegeRecords?: PrintableCollegeStatisticsRecord[];
+    topBorrowerRecords?: PrintableTopBorrowerOfYearRecord[];
+    reportingYear?: number;
     fileNamePrefix?: string;
     reportTitle?: string;
     reportSubtitle?: string;
@@ -58,6 +67,8 @@ type ExportPreviewStatisticsProps = {
 type StatisticsPdfDocumentProps = {
     records: PrintableBookStatisticsRecord[];
     collegeRecords: PrintableCollegeStatisticsRecord[];
+    topBorrowerRecords: PrintableTopBorrowerOfYearRecord[];
+    reportingYear: number;
     generatedAtIso: string;
     reportTitle: string;
     reportSubtitle: string;
@@ -266,6 +277,13 @@ const pdfStyles = StyleSheet.create({
     colCollegeActive: { width: "14%", alignItems: "flex-end" },
     colTopBorrower: { width: "22%", paddingRight: 6 },
     colTopBorrowerCount: { width: "12%", alignItems: "flex-end" },
+    borrowerSectionWrap: {
+        marginTop: 10,
+    },
+    colRank: { width: "10%", alignItems: "center" },
+    colBorrowerName: { width: "34%", paddingRight: 6 },
+    colBorrowerCollege: { width: "36%", paddingRight: 6 },
+    colBorrowerYearCount: { width: "20%", alignItems: "flex-end" },
     notesWrap: {
         marginTop: 10,
         borderWidth: 1,
@@ -301,6 +319,8 @@ const pdfStyles = StyleSheet.create({
 function StatisticsPdfDocument({
     records,
     collegeRecords,
+    topBorrowerRecords,
+    reportingYear,
     generatedAtIso,
     reportTitle,
     reportSubtitle,
@@ -367,6 +387,22 @@ function StatisticsPdfDocument({
             activeBorrowCount: 0,
         }
     );
+
+    const rankedTopBorrowers = [...topBorrowerRecords]
+        .sort((a, b) => {
+            if (toNumber(a.rank) !== toNumber(b.rank)) {
+                return toNumber(a.rank) - toNumber(b.rank);
+            }
+
+            if (toNumber(b.totalBorrowCount) !== toNumber(a.totalBorrowCount)) {
+                return toNumber(b.totalBorrowCount) - toNumber(a.totalBorrowCount);
+            }
+
+            return String(a.borrowerName || "").localeCompare(
+                String(b.borrowerName || "")
+            );
+        })
+        .slice(0, 5);
 
     return (
         <Document title="BookHive Statistics Report">
@@ -611,6 +647,60 @@ function StatisticsPdfDocument({
                     </View>
                 ) : null}
 
+                {rankedTopBorrowers.length ? (
+                    <View style={pdfStyles.borrowerSectionWrap}>
+                        <Text style={pdfStyles.sectionTitle}>
+                            Top Borrowers of {String(reportingYear)}
+                        </Text>
+
+                        <View style={pdfStyles.tableHead}>
+                            <View style={pdfStyles.colRank}>
+                                <Text style={pdfStyles.th}>#</Text>
+                            </View>
+                            <View style={pdfStyles.colBorrowerName}>
+                                <Text style={pdfStyles.th}>Borrower</Text>
+                            </View>
+                            <View style={pdfStyles.colBorrowerCollege}>
+                                <Text style={pdfStyles.th}>College</Text>
+                            </View>
+                            <View style={pdfStyles.colBorrowerYearCount}>
+                                <Text style={pdfStyles.th}>Total</Text>
+                            </View>
+                        </View>
+
+                        {rankedTopBorrowers.map((row, index) => (
+                            <View
+                                key={`${row.borrowerName}-${index}`}
+                                style={pdfStyles.row}
+                            >
+                                <View style={pdfStyles.colRank}>
+                                    <Text style={pdfStyles.td}>
+                                        {fmtCount(toNumber(row.rank || index + 1))}
+                                    </Text>
+                                </View>
+
+                                <View style={pdfStyles.colBorrowerName}>
+                                    <Text style={pdfStyles.td}>
+                                        {row.borrowerName || "—"}
+                                    </Text>
+                                </View>
+
+                                <View style={pdfStyles.colBorrowerCollege}>
+                                    <Text style={pdfStyles.td}>
+                                        {row.college || "Unassigned"}
+                                    </Text>
+                                </View>
+
+                                <View style={pdfStyles.colBorrowerYearCount}>
+                                    <Text style={pdfStyles.td}>
+                                        {fmtCount(toNumber(row.totalBorrowCount))}
+                                    </Text>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                ) : null}
+
                 <View style={pdfStyles.notesWrap}>
                     <Text style={pdfStyles.notesTitle}>Report Notes</Text>
                     <Text style={pdfStyles.noteText}>
@@ -623,7 +713,10 @@ function StatisticsPdfDocument({
                         3) College summaries are based on the borrower course or college value attached to each borrow record.
                     </Text>
                     <Text style={pdfStyles.noteText}>
-                        4) This report is printable for librarian dashboard record-keeping.
+                        4) Top borrowers of the year are ranked using borrow records within the selected reporting year.
+                    </Text>
+                    <Text style={pdfStyles.noteText}>
+                        5) This report is printable for librarian dashboard record-keeping.
                     </Text>
                 </View>
 
@@ -645,6 +738,8 @@ export default function ExportPreviewStatistics({
     onOpenChange,
     records,
     collegeRecords = [],
+    topBorrowerRecords = [],
+    reportingYear,
     fileNamePrefix = "bookhive-statistics-report",
     reportTitle = "BookHive Library • Statistics Report",
     reportSubtitle = "Printable report for book borrowing statistics.",
@@ -653,6 +748,13 @@ export default function ExportPreviewStatistics({
     const [generatedAtIso, setGeneratedAtIso] = React.useState(() =>
         new Date().toISOString()
     );
+    const effectiveReportingYear = React.useMemo(() => {
+        if (typeof reportingYear === "number" && Number.isFinite(reportingYear)) {
+            return reportingYear;
+        }
+
+        return new Date(generatedAtIso).getFullYear();
+    }, [generatedAtIso, reportingYear]);
 
     React.useEffect(() => {
         if (!open) return;
@@ -678,12 +780,22 @@ export default function ExportPreviewStatistics({
             <StatisticsPdfDocument
                 records={records}
                 collegeRecords={collegeRecords}
+                topBorrowerRecords={topBorrowerRecords}
+                reportingYear={effectiveReportingYear}
                 generatedAtIso={generatedAtIso}
                 reportTitle={reportTitle}
                 reportSubtitle={reportSubtitle}
             />
         ),
-        [collegeRecords, generatedAtIso, records, reportSubtitle, reportTitle]
+        [
+            collegeRecords,
+            effectiveReportingYear,
+            generatedAtIso,
+            records,
+            reportSubtitle,
+            reportTitle,
+            topBorrowerRecords,
+        ]
     );
 
     const fileName = React.useMemo(() => {
@@ -724,6 +836,20 @@ export default function ExportPreviewStatistics({
             }
         );
     }, [collegeRecords]);
+
+    const borrowerTotals = React.useMemo(() => {
+        return topBorrowerRecords.reduce(
+            (acc, row) => {
+                acc.borrowerCount += 1;
+                acc.totalBorrowCount += toNumber(row.totalBorrowCount);
+                return acc;
+            },
+            {
+                borrowerCount: 0,
+                totalBorrowCount: 0,
+            }
+        );
+    }, [topBorrowerRecords]);
 
     const handlePrint = React.useCallback(async () => {
         if (!records.length) return;
@@ -820,6 +946,12 @@ export default function ExportPreviewStatistics({
                                     </Badge>
                                     <Badge className="bg-indigo-500/20 text-indigo-100 border-indigo-300/40">
                                         Borrowers: {fmtCount(collegeTotals.uniqueBorrowerCount)}
+                                    </Badge>
+                                    <Badge className="bg-rose-500/20 text-rose-100 border-rose-300/40">
+                                        Top {fmtCount(borrowerTotals.borrowerCount)} in {effectiveReportingYear}
+                                    </Badge>
+                                    <Badge className="bg-orange-500/20 text-orange-100 border-orange-300/40">
+                                        Borrowed This Year: {fmtCount(borrowerTotals.totalBorrowCount)}
                                     </Badge>
                                 </div>
 
