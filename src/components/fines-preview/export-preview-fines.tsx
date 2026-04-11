@@ -18,6 +18,13 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Download, Loader2, Printer, ScanLine } from "lucide-react";
 import { toast } from "sonner";
@@ -52,10 +59,13 @@ type ExportPreviewFinesProps = {
     fileNamePrefix?: string;
 };
 
+type BondPaperPreset = "quarter-short" | "quarter-long" | "quarter-legal" | "quarter-a4" | "quarter-folio";
+
 type FinesPdfDocProps = {
     records: PrintableFineRecord[];
     selectedFineId?: string | number | null;
     generatedAtIso: string;
+    paperPreset: BondPaperPreset;
 };
 
 function formatPHP(n: number) {
@@ -105,10 +115,10 @@ function fmtDateTime(value?: string | null) {
 }
 
 function statusText(status: PrintableFineStatus) {
-    if (status === "active") return "Active";
-    if (status === "paid") return "Paid";
-    if (status === "cancelled") return "Cancelled";
-    return status || "Unknown";
+    if (status === "active") return "ACTIVE";
+    if (status === "paid") return "PAID";
+    if (status === "cancelled") return "CANCELLED";
+    return String(status || "UNKNOWN").toUpperCase();
 }
 
 function safeToken(value: string) {
@@ -124,195 +134,359 @@ function getDatePaid(record: PrintableFineRecord) {
     return record.paidDate || record.resolvedAt || null;
 }
 
+function trimText(value: string, maxLength: number) {
+    const safe = value.trim();
+    if (safe.length <= maxLength) return safe;
+    return `${safe.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+type BondPaperPresetMeta = {
+    label: string;
+    description: string;
+    size: [number, number];
+};
+
+function inchesToPdfPoints(value: number) {
+    return value * 72;
+}
+
+const BOND_PAPER_PRESETS: Record<BondPaperPreset, BondPaperPresetMeta> = {
+    "quarter-short": {
+        label: "Quarter Short Bond",
+        description: "4.25 × 5.50 in (1/4 of 8.5 × 11 in)",
+        size: [inchesToPdfPoints(4.25), inchesToPdfPoints(5.5)],
+    },
+    "quarter-long": {
+        label: "Quarter Long Bond",
+        description: "4.25 × 6.50 in (1/4 of 8.5 × 13 in)",
+        size: [inchesToPdfPoints(4.25), inchesToPdfPoints(6.5)],
+    },
+    "quarter-legal": {
+        label: "Quarter Legal",
+        description: "4.25 × 7.00 in (1/4 of 8.5 × 14 in)",
+        size: [inchesToPdfPoints(4.25), inchesToPdfPoints(7)],
+    },
+    "quarter-a4": {
+        label: "Quarter A4",
+        description: "3.94 × 5.83 in (1/4 of A4)",
+        size: [inchesToPdfPoints(8.27 / 2), inchesToPdfPoints(11.69 / 2)],
+    },
+    "quarter-folio": {
+        label: "Quarter Folio",
+        description: "4.25 × 8.25 in (1/4 of 8.5 × 16.5 in)",
+        size: [inchesToPdfPoints(4.25), inchesToPdfPoints(8.25)],
+    },
+};
+
 const pdfStyles = StyleSheet.create({
     page: {
-        paddingTop: 24,
-        paddingHorizontal: 24,
-        paddingBottom: 24,
-        fontSize: 9.5,
+        paddingTop: 14,
+        paddingHorizontal: 14,
+        paddingBottom: 14,
+        fontSize: 7.4,
         color: "#0f172a",
         fontFamily: "Helvetica",
-        lineHeight: 1.35,
+        lineHeight: 1.25,
+        backgroundColor: "#ffffff",
     },
-    hero: {
-        backgroundColor: "#0f172a",
+    header: {
+        borderWidth: 1,
+        borderColor: "#0f172a",
         borderRadius: 6,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        marginBottom: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 9,
+        marginBottom: 8,
+        backgroundColor: "#f8fafc",
     },
-    heroTitle: {
-        color: "#f8fafc",
-        fontSize: 14,
+    brand: {
+        fontSize: 10,
         fontWeight: 700,
+        color: "#0f172a",
     },
-    heroSub: {
-        color: "#cbd5e1",
-        fontSize: 9,
+    title: {
+        marginTop: 1,
+        fontSize: 8.2,
+        fontWeight: 700,
+        color: "#111827",
+    },
+    subtitle: {
         marginTop: 2,
+        fontSize: 6.6,
+        color: "#475569",
     },
-    metaGrid: {
+    section: {
+        borderWidth: 1,
+        borderColor: "#cbd5e1",
+        borderRadius: 6,
+        padding: 7,
+        marginBottom: 7,
+    },
+    sectionTitle: {
+        fontSize: 7.2,
+        fontWeight: 700,
+        color: "#0f172a",
+        marginBottom: 5,
+        textTransform: "uppercase",
+    },
+    keyValueRow: {
         flexDirection: "row",
-        marginBottom: 10,
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        marginBottom: 3,
     },
-    metaCard: {
+    keyValueLabel: {
+        fontSize: 6.7,
+        color: "#475569",
+        flexShrink: 0,
+        marginRight: 6,
+    },
+    keyValueValue: {
+        fontSize: 7.4,
+        color: "#0f172a",
+        fontWeight: 700,
+        textAlign: "right",
+        flexGrow: 1,
+    },
+    summaryGrid: {
+        flexDirection: "row",
+        marginBottom: 7,
+    },
+    summaryCard: {
         flexGrow: 1,
         flexBasis: 0,
         borderWidth: 1,
         borderColor: "#cbd5e1",
         borderRadius: 6,
-        padding: 8,
-        marginRight: 6,
+        paddingVertical: 6,
+        paddingHorizontal: 7,
         backgroundColor: "#f8fafc",
     },
-    metaCardLast: {
-        marginRight: 0,
-    },
-    metaLabel: {
-        fontSize: 8,
+    summaryLabel: {
+        fontSize: 6.5,
         color: "#475569",
     },
-    metaValue: {
+    summaryValue: {
         marginTop: 2,
-        fontSize: 10,
+        fontSize: 8,
         fontWeight: 700,
         color: "#0f172a",
     },
-    sectionTitle: {
-        fontSize: 10,
-        color: "#0f172a",
-        fontWeight: 700,
-        marginBottom: 6,
+    recordsWrap: {
     },
-    tableHead: {
-        flexDirection: "row",
-        backgroundColor: "#e2e8f0",
-        borderTopLeftRadius: 4,
-        borderTopRightRadius: 4,
+    recordCard: {
         borderWidth: 1,
         borderColor: "#cbd5e1",
-        paddingVertical: 6,
-        paddingHorizontal: 6,
+        borderRadius: 6,
+        padding: 7,
+        backgroundColor: "#ffffff",
     },
-    row: {
-        flexDirection: "row",
-        borderLeftWidth: 1,
-        borderRightWidth: 1,
-        borderBottomWidth: 1,
-        borderColor: "#cbd5e1",
-        paddingVertical: 5,
-        paddingHorizontal: 6,
-        alignItems: "center",
-    },
-    selectedRow: {
+    focusedRecordCard: {
+        borderColor: "#2563eb",
         backgroundColor: "#eff6ff",
     },
-    colFineId: { width: "11%" },
-    colDetails: { width: "39%", paddingRight: 6 },
-    colStatus: {
-        width: "11%",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    colDate: { width: "13%" },
-    colDatePaid: { width: "13%" },
-    colAmount: { width: "13%", alignItems: "flex-end" },
-    th: {
-        fontSize: 8.25,
-        fontWeight: 700,
-        color: "#1e293b",
-    },
-    td: {
-        fontSize: 8.75,
-        color: "#0f172a",
-    },
-    tdSubtle: {
-        fontSize: 7.8,
-        color: "#475569",
-        marginTop: 1,
-    },
-    statusBadgeWrap: {
-        minHeight: 14,
-        borderRadius: 999,
-        paddingHorizontal: 8,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    statusBadgeText: {
-        fontSize: 7.4,
-        lineHeight: 1.1,
-        color: "#ffffff",
-        fontWeight: 700,
-        textAlign: "center",
-    },
-    statusActive: { backgroundColor: "#d97706" },
-    statusPaid: { backgroundColor: "#059669" },
-    statusCancelled: { backgroundColor: "#64748b" },
-    statusDefault: { backgroundColor: "#334155" },
-    totalsWrap: {
-        marginTop: 10,
-        borderWidth: 1,
-        borderColor: "#cbd5e1",
-        borderRadius: 6,
-        padding: 8,
-        backgroundColor: "#f8fafc",
-    },
-    totalsLine: {
+    recordTop: {
         flexDirection: "row",
         justifyContent: "space-between",
-        marginBottom: 3,
-    },
-    totalsLabel: {
-        color: "#334155",
-        fontSize: 9,
-    },
-    totalsValue: {
-        color: "#0f172a",
-        fontSize: 9,
-        fontWeight: 700,
-    },
-    totalsGrand: {
-        marginTop: 4,
-        paddingTop: 5,
-        borderTopWidth: 1,
-        borderTopColor: "#cbd5e1",
-    },
-    notesWrap: {
-        marginTop: 10,
-        borderWidth: 1,
-        borderColor: "#cbd5e1",
-        borderRadius: 6,
-        padding: 8,
-    },
-    notesTitle: {
-        fontSize: 9,
-        color: "#0f172a",
-        fontWeight: 700,
+        alignItems: "flex-start",
         marginBottom: 4,
     },
-    noteText: {
-        fontSize: 8,
-        color: "#334155",
-        marginBottom: 2,
+    recordId: {
+        fontSize: 7.6,
+        fontWeight: 700,
+        color: "#0f172a",
     },
-    footer: {
-        marginTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: "#e2e8f0",
-        paddingTop: 6,
+    amount: {
+        fontSize: 8.2,
+        fontWeight: 700,
+        color: "#0f172a",
+        textAlign: "right",
+    },
+    amountSubtle: {
+        fontSize: 6.2,
+        color: "#64748b",
+        textAlign: "right",
+        marginTop: 1,
+    },
+    badgeRow: {
         flexDirection: "row",
         justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 4,
     },
-    footerText: {
-        fontSize: 7.5,
+    badge: {
+        borderRadius: 999,
+        paddingVertical: 2,
+        paddingHorizontal: 7,
+        minHeight: 14,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    badgeText: {
+        fontSize: 6.3,
+        color: "#ffffff",
+        fontWeight: 700,
+        lineHeight: 1,
+    },
+    badgeActive: { backgroundColor: "#d97706" },
+    badgePaid: { backgroundColor: "#059669" },
+    badgeCancelled: { backgroundColor: "#64748b" },
+    badgeDefault: { backgroundColor: "#334155" },
+    focusedText: {
+        fontSize: 6.2,
+        color: "#2563eb",
+        fontWeight: 700,
+    },
+    primaryText: {
+        fontSize: 7.4,
+        color: "#0f172a",
+        fontWeight: 700,
+    },
+    subtleText: {
+        marginTop: 2,
+        fontSize: 6.7,
+        color: "#475569",
+    },
+    tinyText: {
+        marginTop: 1,
+        fontSize: 6.2,
         color: "#64748b",
     },
+    footer: {
+        marginTop: 8,
+        paddingTop: 5,
+        borderTopWidth: 1,
+        borderTopColor: "#e2e8f0",
+    },
+    footerText: {
+        fontSize: 6.1,
+        color: "#64748b",
+        textAlign: "center",
+    },
 });
+
+type FinesLayoutProfile = {
+    pagePadding: number;
+    sectionPadding: number;
+    sectionGap: number;
+    headerScale: number;
+    sectionTitleScale: number;
+    keyLabelScale: number;
+    keyValueScale: number;
+    summaryLabelScale: number;
+    summaryValueScale: number;
+    recordScale: number;
+    subtleScale: number;
+    tinyScale: number;
+    amountScale: number;
+    badgeScale: number;
+    recordPadding: number;
+    recordGap: number;
+    recordsJustifyContent: "flex-start" | "space-between" | "space-evenly" | "center";
+    maxBookLength: number;
+    maxReasonLength: number;
+};
+
+function getFinesLayoutProfile(recordCount: number): FinesLayoutProfile {
+    if (recordCount <= 1) {
+        return {
+            pagePadding: 18,
+            sectionPadding: 10,
+            sectionGap: 10,
+            headerScale: 1.45,
+            sectionTitleScale: 1.3,
+            keyLabelScale: 1.2,
+            keyValueScale: 1.34,
+            summaryLabelScale: 1.18,
+            summaryValueScale: 1.46,
+            recordScale: 1.55,
+            subtleScale: 1.3,
+            tinyScale: 1.22,
+            amountScale: 1.58,
+            badgeScale: 1.26,
+            recordPadding: 12,
+            recordGap: 12,
+            recordsJustifyContent: "center",
+            maxBookLength: 88,
+            maxReasonLength: 180,
+        };
+    }
+
+    if (recordCount === 2) {
+        return {
+            pagePadding: 17,
+            sectionPadding: 9,
+            sectionGap: 9,
+            headerScale: 1.34,
+            sectionTitleScale: 1.22,
+            keyLabelScale: 1.12,
+            keyValueScale: 1.24,
+            summaryLabelScale: 1.1,
+            summaryValueScale: 1.3,
+            recordScale: 1.34,
+            subtleScale: 1.18,
+            tinyScale: 1.12,
+            amountScale: 1.36,
+            badgeScale: 1.16,
+            recordPadding: 10,
+            recordGap: 10,
+            recordsJustifyContent: "space-evenly",
+            maxBookLength: 78,
+            maxReasonLength: 160,
+        };
+    }
+
+    if (recordCount === 3) {
+        return {
+            pagePadding: 16,
+            sectionPadding: 8,
+            sectionGap: 8,
+            headerScale: 1.2,
+            sectionTitleScale: 1.12,
+            keyLabelScale: 1.06,
+            keyValueScale: 1.12,
+            summaryLabelScale: 1.04,
+            summaryValueScale: 1.16,
+            recordScale: 1.14,
+            subtleScale: 1.08,
+            tinyScale: 1.04,
+            amountScale: 1.18,
+            badgeScale: 1.08,
+            recordPadding: 8,
+            recordGap: 8,
+            recordsJustifyContent: "space-between",
+            maxBookLength: 66,
+            maxReasonLength: 126,
+        };
+    }
+
+    return {
+        pagePadding: 14,
+        sectionPadding: 7,
+        sectionGap: 7,
+        headerScale: 1,
+        sectionTitleScale: 1,
+        keyLabelScale: 1,
+        keyValueScale: 1,
+        summaryLabelScale: 1,
+        summaryValueScale: 1,
+        recordScale: 1,
+        subtleScale: 1,
+        tinyScale: 1,
+        amountScale: 1,
+        badgeScale: 1,
+        recordPadding: 7,
+        recordGap: 6,
+        recordsJustifyContent: "flex-start",
+        maxBookLength: 52,
+        maxReasonLength: 90,
+    };
+}
 
 function FinesPdfDocument({
     records,
     selectedFineId,
     generatedAtIso,
+    paperPreset,
 }: FinesPdfDocProps) {
     const sorted = [...records].sort((a, b) =>
         String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""))
@@ -327,167 +501,240 @@ function FinesPdfDocument({
     const userId = first?.studentId || first?.userId || "—";
 
     const total = sorted.reduce((sum, r) => sum + normalizeAmount(r.amount), 0);
-    const paidTotal = sorted
-        .filter((r) => r.status === "paid")
-        .reduce((sum, r) => sum + normalizeAmount(r.amount), 0);
-    const activeTotal = sorted
-        .filter((r) => r.status === "active")
-        .reduce((sum, r) => sum + normalizeAmount(r.amount), 0);
-
-    const rowCount = sorted.length;
+    const paidCount = sorted.filter((r) => r.status === "paid").length;
+    const activeCount = sorted.filter((r) => r.status === "active").length;
+    const cancelledCount = sorted.filter((r) => r.status === "cancelled").length;
+    const profile = getFinesLayoutProfile(sorted.length);
+    const selectedPaperMeta = BOND_PAPER_PRESETS[paperPreset];
 
     return (
-        <Document title="BookHive Fines Record">
-            <Page size="A4" style={pdfStyles.page}>
-                <View style={pdfStyles.hero}>
-                    <Text style={pdfStyles.heroTitle}>BookHive Library • Fines Record Slip</Text>
-                    <Text style={pdfStyles.heroSub}>
-                        Printable payment/fine record for student/faculty release and cashier validation.
+        <Document title="BookHive Fines Record Slip">
+            <Page
+                size={selectedPaperMeta.size}
+                style={[
+                    pdfStyles.page,
+                    {
+                        paddingTop: profile.pagePadding,
+                        paddingRight: profile.pagePadding,
+                        paddingBottom: profile.pagePadding,
+                        paddingLeft: profile.pagePadding,
+                    },
+                ]}
+            >
+                <View
+                    style={[
+                        pdfStyles.header,
+                        {
+                            paddingVertical: profile.sectionPadding + 1,
+                            paddingHorizontal: profile.sectionPadding + 2,
+                            marginBottom: profile.sectionGap,
+                        },
+                    ]}
+                >
+                    <Text style={[pdfStyles.brand, { fontSize: 10 * profile.headerScale }]}>
+                        BookHive Library
+                    </Text>
+                    <Text style={[pdfStyles.title, { fontSize: 8.2 * profile.headerScale }]}>
+                        Fines Record Slip
+                    </Text>
+                    <Text style={[pdfStyles.subtitle, { fontSize: 6.6 * profile.headerScale }]}> 
+                        {`${selectedPaperMeta.label} • ${selectedPaperMeta.description} • sized to fill one page when printed at actual size.`}
                     </Text>
                 </View>
 
-                <View style={pdfStyles.metaGrid}>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Student / Faculty</Text>
-                        <Text style={pdfStyles.metaValue}>{userName}</Text>
+                <View
+                    style={[
+                        pdfStyles.section,
+                        {
+                            padding: profile.sectionPadding,
+                            marginBottom: profile.sectionGap,
+                        },
+                    ]}
+                >
+                    <Text
+                        style={[
+                            pdfStyles.sectionTitle,
+                            {
+                                fontSize: 7.2 * profile.sectionTitleScale,
+                                marginBottom: Math.max(5, profile.sectionGap - 1),
+                            },
+                        ]}
+                    >
+                        Account Details
+                    </Text>
+                    <View style={[pdfStyles.keyValueRow, { marginBottom: Math.max(4, profile.sectionGap - 3) }]}>
+                        <Text style={[pdfStyles.keyValueLabel, { fontSize: 6.7 * profile.keyLabelScale }]}>Name</Text>
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: 7.4 * profile.keyValueScale }]}>
+                            {trimText(String(userName), sorted.length <= 2 ? 54 : 42)}
+                        </Text>
                     </View>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>School/User ID</Text>
-                        <Text style={pdfStyles.metaValue}>{String(userId)}</Text>
+                    <View style={[pdfStyles.keyValueRow, { marginBottom: Math.max(4, profile.sectionGap - 3) }]}>
+                        <Text style={[pdfStyles.keyValueLabel, { fontSize: 6.7 * profile.keyLabelScale }]}>ID</Text>
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: 7.4 * profile.keyValueScale }]}>
+                            {trimText(String(userId), sorted.length <= 2 ? 30 : 24)}
+                        </Text>
                     </View>
-                    <View style={[pdfStyles.metaCard, pdfStyles.metaCardLast]}>
-                        <Text style={pdfStyles.metaLabel}>Email</Text>
-                        <Text style={pdfStyles.metaValue}>{userEmail}</Text>
+                    <View style={[pdfStyles.keyValueRow, { marginBottom: Math.max(4, profile.sectionGap - 3) }]}>
+                        <Text style={[pdfStyles.keyValueLabel, { fontSize: 6.7 * profile.keyLabelScale }]}>Email</Text>
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: 7.4 * profile.keyValueScale }]}>
+                            {trimText(String(userEmail), sorted.length <= 2 ? 46 : 34)}
+                        </Text>
                     </View>
-                </View>
-
-                <View style={pdfStyles.metaGrid}>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>Generated</Text>
-                        <Text style={pdfStyles.metaValue}>{fmtDateTime(generatedAtIso)}</Text>
-                    </View>
-                    <View style={pdfStyles.metaCard}>
-                        <Text style={pdfStyles.metaLabel}>No. of Fine Records</Text>
-                        <Text style={pdfStyles.metaValue}>{rowCount}</Text>
-                    </View>
-                    <View style={[pdfStyles.metaCard, pdfStyles.metaCardLast]}>
-                        <Text style={pdfStyles.metaLabel}>Focused Fine</Text>
-                        <Text style={pdfStyles.metaValue}>
-                            {selectedFineId != null ? String(selectedFineId) : "—"}
+                    <View style={[pdfStyles.keyValueRow, { marginBottom: 0 }]}> 
+                        <Text style={[pdfStyles.keyValueLabel, { fontSize: 6.7 * profile.keyLabelScale }]}>Generated</Text>
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: 7.4 * profile.keyValueScale }]}>
+                            {fmtDateTime(generatedAtIso)}
                         </Text>
                     </View>
                 </View>
 
-                <Text style={pdfStyles.sectionTitle}>Fine Items</Text>
-
-                <View style={pdfStyles.tableHead}>
-                    <View style={pdfStyles.colFineId}>
-                        <Text style={pdfStyles.th}>Fine ID</Text>
+                <View style={[pdfStyles.summaryGrid, { marginBottom: profile.sectionGap }]}> 
+                    <View style={[pdfStyles.summaryCard, { marginRight: 6, paddingVertical: profile.sectionPadding - 1, paddingHorizontal: profile.sectionPadding }]}>
+                        <Text style={[pdfStyles.summaryLabel, { fontSize: 6.5 * profile.summaryLabelScale }]}>Records</Text>
+                        <Text style={[pdfStyles.summaryValue, { fontSize: 8 * profile.summaryValueScale }]}>{sorted.length}</Text>
                     </View>
-                    <View style={pdfStyles.colDetails}>
-                        <Text style={pdfStyles.th}>Book / Reason</Text>
+                    <View style={[pdfStyles.summaryCard, { marginRight: 6, paddingVertical: profile.sectionPadding - 1, paddingHorizontal: profile.sectionPadding }]}>
+                        <Text style={[pdfStyles.summaryLabel, { fontSize: 6.5 * profile.summaryLabelScale }]}>Active</Text>
+                        <Text style={[pdfStyles.summaryValue, { fontSize: 8 * profile.summaryValueScale }]}>{activeCount}</Text>
                     </View>
-                    <View style={pdfStyles.colStatus}>
-                        <Text style={pdfStyles.th}>Status</Text>
-                    </View>
-                    <View style={pdfStyles.colDate}>
-                        <Text style={pdfStyles.th}>Created</Text>
-                    </View>
-                    <View style={pdfStyles.colDatePaid}>
-                        <Text style={pdfStyles.th}>Date Paid</Text>
-                    </View>
-                    <View style={pdfStyles.colAmount}>
-                        <Text style={pdfStyles.th}>Amount</Text>
+                    <View style={[pdfStyles.summaryCard, { paddingVertical: profile.sectionPadding - 1, paddingHorizontal: profile.sectionPadding }]}>
+                        <Text style={[pdfStyles.summaryLabel, { fontSize: 6.5 * profile.summaryLabelScale }]}>Paid</Text>
+                        <Text style={[pdfStyles.summaryValue, { fontSize: 8 * profile.summaryValueScale }]}>{paidCount}</Text>
                     </View>
                 </View>
 
-                {sorted.map((r) => {
-                    const isFocused = selectedFineId != null && String(r.id) === String(selectedFineId);
-                    const statusStyle =
-                        r.status === "paid"
-                            ? pdfStyles.statusPaid
-                            : r.status === "active"
-                                ? pdfStyles.statusActive
-                                : r.status === "cancelled"
-                                    ? pdfStyles.statusCancelled
-                                    : pdfStyles.statusDefault;
+                <View style={[pdfStyles.summaryGrid, { marginBottom: profile.sectionGap }]}> 
+                    <View style={[pdfStyles.summaryCard, { marginRight: 6, paddingVertical: profile.sectionPadding - 1, paddingHorizontal: profile.sectionPadding }]}>
+                        <Text style={[pdfStyles.summaryLabel, { fontSize: 6.5 * profile.summaryLabelScale }]}>Cancelled</Text>
+                        <Text style={[pdfStyles.summaryValue, { fontSize: 8 * profile.summaryValueScale }]}>{cancelledCount}</Text>
+                    </View>
+                    <View style={[pdfStyles.summaryCard, { paddingVertical: profile.sectionPadding - 1, paddingHorizontal: profile.sectionPadding }]}>
+                        <Text style={[pdfStyles.summaryLabel, { fontSize: 6.5 * profile.summaryLabelScale }]}>Grand Total</Text>
+                        <Text style={[pdfStyles.summaryValue, { fontSize: 8 * profile.summaryValueScale }]}>{formatPHP(total)}</Text>
+                    </View>
+                </View>
 
-                    return (
-                        <View
-                            key={String(r.id)}
-                            style={isFocused ? [pdfStyles.row, pdfStyles.selectedRow] : pdfStyles.row}
-                        >
-                            <View style={pdfStyles.colFineId}>
-                                <Text style={pdfStyles.td}>{String(r.id)}</Text>
-                            </View>
+                <View
+                    style={[
+                        pdfStyles.section,
+                        {
+                            padding: profile.sectionPadding,
+                            marginBottom: 0,
+                            flexGrow: 1,
+                        },
+                    ]}
+                >
+                    <Text
+                        style={[
+                            pdfStyles.sectionTitle,
+                            {
+                                fontSize: 7.2 * profile.sectionTitleScale,
+                                marginBottom: Math.max(5, profile.sectionGap - 1),
+                            },
+                        ]}
+                    >
+                        Fine Items
+                    </Text>
+                    <View
+                        style={[
+                            pdfStyles.recordsWrap,
+                            {
+                                justifyContent: profile.recordsJustifyContent,
+                                flexGrow: 1,
+                            },
+                        ]}
+                    >
+                        {sorted.map((record, index) => {
+                            const isFocused =
+                                selectedFineId != null && String(record.id) === String(selectedFineId);
+                            const badgeStyle =
+                                record.status === "paid"
+                                    ? pdfStyles.badgePaid
+                                    : record.status === "active"
+                                        ? pdfStyles.badgeActive
+                                        : record.status === "cancelled"
+                                            ? pdfStyles.badgeCancelled
+                                            : pdfStyles.badgeDefault;
 
-                            <View style={pdfStyles.colDetails}>
-                                <Text style={pdfStyles.td}>
-                                    {r.bookTitle ? r.bookTitle : r.bookId ? `Book #${r.bookId}` : "—"}
-                                </Text>
-                                {!!r.reason && <Text style={pdfStyles.tdSubtle}>Reason: {r.reason}</Text>}
-                                {r.sourceLabel === "damage" && (
-                                    <Text style={pdfStyles.tdSubtle}>Type: Damage-related fine</Text>
-                                )}
-                            </View>
+                            const bookLabel = record.bookTitle
+                                ? trimText(record.bookTitle, profile.maxBookLength)
+                                : record.bookId
+                                    ? `Book #${record.bookId}`
+                                    : "No book title";
 
-                            <View style={pdfStyles.colStatus}>
-                                <View style={[pdfStyles.statusBadgeWrap, statusStyle]}>
-                                    <Text style={pdfStyles.statusBadgeText}>{statusText(r.status)}</Text>
+                            const reasonLabel = record.reason
+                                ? trimText(record.reason, profile.maxReasonLength)
+                                : "No reason provided";
+
+                            return (
+                                <View
+                                    key={String(record.id)}
+                                    style={[
+                                        pdfStyles.recordCard,
+                                        {
+                                            padding: profile.recordPadding,
+                                            marginBottom:
+                                                index === sorted.length - 1 ? 0 : profile.recordGap,
+                                        },
+                                        ...(isFocused ? [pdfStyles.focusedRecordCard] : []),
+                                    ]}
+                                    wrap={false}
+                                >
+                                    <View style={[pdfStyles.recordTop, { marginBottom: Math.max(5, profile.recordGap - 3) }]}>
+                                        <View style={{ flex: 1, marginRight: 6 }}>
+                                            <Text style={[pdfStyles.recordId, { fontSize: 7.6 * profile.recordScale }]}>
+                                                Fine #{String(record.id)}
+                                            </Text>
+                                            <Text style={[pdfStyles.tinyText, { fontSize: 6.2 * profile.tinyScale }]}>
+                                                {record.sourceLabel === "damage" ? "Damage-based record" : "Fine record"}
+                                            </Text>
+                                        </View>
+                                        <View>
+                                            <Text style={[pdfStyles.amount, { fontSize: 8.2 * profile.amountScale }]}>
+                                                {formatPHP(normalizeAmount(record.amount))}
+                                            </Text>
+                                            <Text style={[pdfStyles.amountSubtle, { fontSize: 6.2 * profile.tinyScale }]}>Due amount</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={[pdfStyles.badgeRow, { marginBottom: Math.max(5, profile.recordGap - 3) }]}>
+                                        <View
+                                            style={[
+                                                pdfStyles.badge,
+                                                badgeStyle,
+                                                {
+                                                    paddingVertical: 2 * profile.badgeScale,
+                                                    paddingHorizontal: 7 * profile.badgeScale,
+                                                    minHeight: 14 * profile.badgeScale,
+                                                },
+                                            ]}
+                                        >
+                                            <Text style={[pdfStyles.badgeText, { fontSize: 6.3 * profile.badgeScale }]}>
+                                                {statusText(record.status)}
+                                            </Text>
+                                        </View>
+                                        {isFocused && (
+                                            <Text style={[pdfStyles.focusedText, { fontSize: 6.2 * profile.tinyScale }]}>Focused item</Text>
+                                        )}
+                                    </View>
+
+                                    <Text style={[pdfStyles.primaryText, { fontSize: 7.4 * profile.recordScale }]}>{bookLabel}</Text>
+                                    <Text style={[pdfStyles.subtleText, { fontSize: 6.7 * profile.subtleScale }]}>Reason: {reasonLabel}</Text>
+                                    <Text style={[pdfStyles.subtleText, { fontSize: 6.7 * profile.subtleScale }]}>Created: {fmtDate(record.createdAt)}</Text>
+                                    <Text style={[pdfStyles.subtleText, { fontSize: 6.7 * profile.subtleScale }]}>Paid: {fmtDate(getDatePaid(record))}</Text>
                                 </View>
-                            </View>
-
-                            <View style={pdfStyles.colDate}>
-                                <Text style={pdfStyles.td}>{fmtDate(r.createdAt)}</Text>
-                            </View>
-
-                            <View style={pdfStyles.colDatePaid}>
-                                <Text style={pdfStyles.td}>{fmtDate(getDatePaid(r))}</Text>
-                            </View>
-
-                            <View style={pdfStyles.colAmount}>
-                                <Text style={pdfStyles.td}>{formatPHP(normalizeAmount(r.amount))}</Text>
-                            </View>
-                        </View>
-                    );
-                })}
-
-                <View style={pdfStyles.totalsWrap}>
-                    <View style={pdfStyles.totalsLine}>
-                        <Text style={pdfStyles.totalsLabel}>Active / Unpaid Total</Text>
-                        <Text style={pdfStyles.totalsValue}>{formatPHP(activeTotal)}</Text>
-                    </View>
-                    <View style={pdfStyles.totalsLine}>
-                        <Text style={pdfStyles.totalsLabel}>Paid Total</Text>
-                        <Text style={pdfStyles.totalsValue}>{formatPHP(paidTotal)}</Text>
-                    </View>
-                    <View style={[pdfStyles.totalsLine, pdfStyles.totalsGrand]}>
-                        <Text style={[pdfStyles.totalsLabel, { fontWeight: 700 }]}>Grand Total</Text>
-                        <Text style={[pdfStyles.totalsValue, { fontSize: 10 }]}>{formatPHP(total)}</Text>
+                            );
+                        })}
                     </View>
                 </View>
 
-                <View style={pdfStyles.notesWrap}>
-                    <Text style={pdfStyles.notesTitle}>Processing Notes</Text>
-                    <Text style={pdfStyles.noteText}>1) Librarian issues payment slip for fines.</Text>
-                    <Text style={pdfStyles.noteText}>
-                        2) Student/Faculty pays at cashier and gets receipt.
+                <View style={[pdfStyles.footer, { marginTop: profile.sectionGap, paddingTop: Math.max(5, profile.sectionGap - 1) }]}> 
+                    <Text style={[pdfStyles.footerText, { fontSize: 6.1 * profile.tinyScale }]}> 
+                        {`Present this ${selectedPaperMeta.label.toLowerCase()} slip to the cashier and library staff for verification.`}
                     </Text>
-                    <Text style={pdfStyles.noteText}>
-                        3) Student/Faculty returns to library with receipt.
+                    <Text style={[pdfStyles.footerText, { fontSize: 6.1 * profile.tinyScale }]}> 
+                        BookHive Library • Printed {fmtDateTime(generatedAtIso)}
                     </Text>
-                    <Text style={pdfStyles.noteText}>
-                        4) Librarian prints this record as paid confirmation slip.
-                    </Text>
-                    <Text style={pdfStyles.noteText}>
-                        (Cebuano) Human bayad sa cashier ug resibo, mobalik sa library para ma-print ang paid
-                        record.
-                    </Text>
-                </View>
-
-                <View style={pdfStyles.footer}>
-                    <Text style={pdfStyles.footerText}>BookHive Library • Generated via Fines Module</Text>
-                    <Text style={pdfStyles.footerText}>Printed: {fmtDateTime(generatedAtIso)}</Text>
                 </View>
             </Page>
         </Document>
@@ -505,6 +752,7 @@ export function ExportPreviewFines({
     const [smartView, setSmartView] = React.useState(true);
     const [viewerHeight, setViewerHeight] = React.useState(720);
     const [generatedAtIso, setGeneratedAtIso] = React.useState(() => new Date().toISOString());
+    const [paperPreset, setPaperPreset] = React.useState<BondPaperPreset>("quarter-short");
     const [smartPreviewUrl, setSmartPreviewUrl] = React.useState<string | null>(null);
     const [smartPreviewBusy, setSmartPreviewBusy] = React.useState(false);
     const autoPrintedRef = React.useRef(false);
@@ -537,6 +785,7 @@ export function ExportPreviewFines({
                 records={records}
                 selectedFineId={selectedFineId}
                 generatedAtIso={generatedAtIso}
+                paperPreset={paperPreset}
             />
         ),
         [records, selectedFineId, generatedAtIso]
@@ -578,10 +827,11 @@ export function ExportPreviewFines({
                 URL.revokeObjectURL(localUrl);
             }
         };
-    }, [open, records.length, pdfNode]);
+    }, [open, records.length, pdfNode, paperPreset]);
 
     const fileName = React.useMemo(() => {
         if (!records.length) return `${fileNamePrefix}.pdf`;
+        const presetSuffix = safeToken(BOND_PAPER_PRESETS[paperPreset].label);
         const first = records[0];
         const rawUser =
             String(first.studentId ?? "").trim() ||
@@ -589,8 +839,8 @@ export function ExportPreviewFines({
             String(first.studentEmail ?? "").trim() ||
             "user";
         const ymd = new Date(generatedAtIso).toISOString().slice(0, 10);
-        return `${safeToken(fileNamePrefix)}-${safeToken(rawUser)}-${ymd}.pdf`;
-    }, [records, generatedAtIso, fileNamePrefix]);
+        return `${safeToken(fileNamePrefix)}-${presetSuffix}-${safeToken(rawUser)}-${ymd}.pdf`;
+    }, [records, generatedAtIso, fileNamePrefix, paperPreset]);
 
     const handlePrint = React.useCallback(async () => {
         if (!records.length) return;
@@ -657,8 +907,7 @@ export function ExportPreviewFines({
                             Fines PDF Preview & Export
                         </DialogTitle>
                         <DialogDescription className="text-white/70">
-                            Smart View uses a fit-width pre-rendered preview. Standard View uses PDF React Viewer
-                            with toolbar.
+                            Choose a bond paper preset below. The exported fines record slip uses the selected quarter-paper size and scales its content to stay on one page.
                         </DialogDescription>
                     </DialogHeader>
                 </div>
@@ -680,6 +929,9 @@ export function ExportPreviewFines({
                                     <Badge className="bg-purple-500/20 text-purple-100 border-purple-300/40">
                                         Total: {formatPHP(total)}
                                     </Badge>
+                                    <Badge className="bg-indigo-500/20 text-indigo-100 border-indigo-300/40">
+                                        {BOND_PAPER_PRESETS[paperPreset].label}
+                                    </Badge>
                                     <Badge
                                         className={
                                             smartView
@@ -694,7 +946,22 @@ export function ExportPreviewFines({
                                     </Badge>
                                 </div>
 
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                    <div className="w-full sm:w-60">
+                                        <Select value={paperPreset} onValueChange={(value) => setPaperPreset(value as BondPaperPreset)}>
+                                            <SelectTrigger className="border-white/20 bg-slate-950/70 text-white">
+                                                <SelectValue placeholder="Paper size" />
+                                            </SelectTrigger>
+                                            <SelectContent className="border-white/10 bg-slate-950 text-white">
+                                                {Object.entries(BOND_PAPER_PRESETS).map(([value, meta]) => (
+                                                    <SelectItem key={value} value={value}>
+                                                        {meta.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -738,6 +1005,10 @@ export function ExportPreviewFines({
                                     </PDFDownloadLink>
                                 </div>
                             </div>
+
+                            <p className="mt-3 text-xs text-white/60">
+                                {BOND_PAPER_PRESETS[paperPreset].description}. Print using <span className="font-medium text-white">Actual size</span> or <span className="font-medium text-white">100%</span> for accurate physical output.
+                            </p>
                         </CardContent>
                     </Card>
 
