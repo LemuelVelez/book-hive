@@ -1096,6 +1096,28 @@ export default function LibrarianSettingsPage() {
                                     </div>
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
+                                        <div className="text-xs text-white/60">Contact number</div>
+                                        {!editing ? (
+                                            <div className="mt-0.5 font-medium">{fmtValue(contactNumber)}</div>
+                                        ) : (
+                                            <div className="mt-2 space-y-1">
+                                                <Label className="text-xs text-white/80">Contact number</Label>
+                                                <Input
+                                                    value={contactNumberInput}
+                                                    onChange={(e) => setContactNumberInput(e.target.value)}
+                                                    className="bg-slate-900/70 border-white/20 text-white"
+                                                    type="tel"
+                                                    autoComplete="tel"
+                                                    placeholder="Enter contact number"
+                                                />
+                                                <p className="text-[11px] text-white/50">
+                                                    Optional. Use digits and common phone characters only.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="rounded-md border border-white/10 bg-slate-900/40 p-3">
                                         <div className="text-xs text-white/60">Role</div>
                                         <div className="mt-0.5 font-medium">{roleLabel(effectiveRole)}</div>
                                         <p className="mt-1 text-[11px] text-white/45">
