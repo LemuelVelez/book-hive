@@ -78,6 +78,7 @@ import ExportPreviewFines, {
 } from "@/components/fines-preview/export-preview-fines";
 
 type StatusFilter = "all" | "unresolved" | FineStatus;
+type YearFilter = "all" | string;
 
 /* ----------------------- Extra types for merging ----------------------- */
 
@@ -175,6 +176,22 @@ function parseLooseDate(raw?: string | null): Date | null {
 function getFineDatePaid(fine: FineRow): string | null {
     if (fine.status !== "paid") return null;
     return ((fine as any).resolvedAt || (fine as any).updatedAt || (fine as any).createdAt || null) as any;
+}
+
+function getFineYear(fine: FineRow): string | null {
+    const candidates = [
+        fine.createdAt,
+        fine.borrowDueDate,
+        fine.borrowReturnDate,
+        getFineDatePaid(fine),
+    ];
+
+    for (const candidate of candidates) {
+        const parsed = parseLooseDate(candidate);
+        if (parsed) return String(parsed.getFullYear());
+    }
+
+    return null;
 }
 
 /**
@@ -494,6 +511,7 @@ export default function LibrarianFinesPage() {
 
     const [search, setSearch] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("unresolved");
+    const [yearFilter, setYearFilter] = React.useState<YearFilter>("all");
     const [updateBusyId, setUpdateBusyId] = React.useState<string | null>(null);
 
     const [editAmountFineId, setEditAmountFineId] = React.useState<string | null>(null);
@@ -584,6 +602,18 @@ export default function LibrarianFinesPage() {
         }
     }
 
+    const yearOptions = React.useMemo(() => {
+        const years = Array.from(
+            new Set(
+                fines
+                    .map((fine) => getFineYear(fine))
+                    .filter((year): year is string => Boolean(year))
+            )
+        );
+
+        return years.sort((a, b) => Number(b) - Number(a));
+    }, [fines]);
+
     const filtered = React.useMemo(() => {
         let rows = [...fines];
 
@@ -591,6 +621,10 @@ export default function LibrarianFinesPage() {
             rows = rows.filter((f) => f.status === "active");
         } else if (statusFilter !== "all") {
             rows = rows.filter((f) => f.status === statusFilter);
+        }
+
+        if (yearFilter !== "all") {
+            rows = rows.filter((f) => getFineYear(f) === yearFilter);
         }
 
         const q = search.trim().toLowerCase();
@@ -611,7 +645,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
             if (sa !== sb) return sa - sb;
             return String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""));
         });
-    }, [fines, statusFilter, search]);
+    }, [fines, statusFilter, yearFilter, search]);
 
     const groupedByUser = React.useMemo(() => {
         const map = new Map<
@@ -978,6 +1012,22 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                 />
                             </div>
 
+                            <div className="w-full md:w-52">
+                                <Select value={yearFilter} onValueChange={setYearFilter}>
+                                    <SelectTrigger className="h-9 w-full border-white/20 bg-slate-900/70 text-white">
+                                        <SelectValue placeholder="Year" />
+                                    </SelectTrigger>
+                                    <SelectContent className="border-white/10 bg-slate-900 text-white">
+                                        <SelectItem value="all">All years</SelectItem>
+                                        {yearOptions.map((year) => (
+                                            <SelectItem key={year} value={year}>
+                                                {year}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             <div className="w-full md:w-60">
                                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
                                     <SelectTrigger className="h-9 w-full border-white/20 bg-slate-900/70 text-white">
@@ -1010,7 +1060,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                             No fines matched your filters.
                             <br />
                             <span className="text-xs opacity-80">
-                                Try clearing the search or changing the status filter.
+                                Try clearing the search or changing the year or status filter.
                             </span>
                         </div>
                     ) : (
@@ -1020,6 +1070,11 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                 {filtered.length === 1 ? "fine" : "fines"} across{" "}
                                 <span className="font-semibold text-white/80">{groupedByUser.length}</span>{" "}
                                 {groupedByUser.length === 1 ? "user" : "users"}.
+                                {yearFilter !== "all" && (
+                                    <span className="ml-2">
+                                        Filtered to <span className="font-semibold text-white/80">{yearFilter}</span>.
+                                    </span>
+                                )}
                                 <span className="ml-2">
                                     Use the <span className="font-semibold text-sky-200">View</span> button to
                                     open the PDF preview or download for the selected user.
