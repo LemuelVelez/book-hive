@@ -25,7 +25,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { CopyPlus, Download, LayoutGrid, Printer } from "lucide-react";
+import { CopyPlus, Download, LayoutGrid, Printer, Scissors } from "lucide-react";
 import { toast } from "sonner";
 
 export type PrintableFineStatus = "active" | "paid" | "cancelled" | string;
@@ -58,14 +58,16 @@ type ExportPreviewFinesProps = {
     fileNamePrefix?: string;
 };
 
-type BondPaperPreset = "short" | "long" | "legal" | "a4" | "folio";
+type BondPaperPreset = "short" | "long" | "legal" | "a4" | "a6" | "folio";
 type SlipDistributionMode = "duplicate" | "different-data";
+type SlipSheetLayout = "grid-4-up" | "quarter-slip";
 
 type FinesPdfDocProps = {
     records: PrintableFineRecord[];
     generatedAtIso: string;
     paperPreset: BondPaperPreset;
     distributionMode: SlipDistributionMode;
+    sheetLayout: SlipSheetLayout;
 };
 
 type BondPaperPresetMeta = {
@@ -129,6 +131,11 @@ const BOND_PAPER_PRESETS: Record<BondPaperPreset, BondPaperPresetMeta> = {
         fullDescription: "8.27 × 11.69 in",
         fullSize: [inchesToPdfPoints(8.27), inchesToPdfPoints(11.69)],
     },
+    a6: {
+        label: "A6 (1/4 A4)",
+        fullDescription: "4.13 × 5.83 in",
+        fullSize: [inchesToPdfPoints(4.13), inchesToPdfPoints(5.83)],
+    },
     folio: {
         label: "Folio",
         fullDescription: "8.5 × 16.5 in",
@@ -153,12 +160,38 @@ const DISTRIBUTION_MODE_OPTIONS: Array<{
     },
 ];
 
+const SHEET_LAYOUT_OPTIONS: Array<{
+    value: SlipSheetLayout;
+    label: string;
+    description: string;
+}> = [
+    {
+        value: "grid-4-up",
+        label: "4-up sheet layout",
+        description: "Place 4 slips on one full paper sheet with cut guides.",
+    },
+    {
+        value: "quarter-slip",
+        label: "1/4 paper slip",
+        description: "Generate one slip per page using the selected paper size.",
+    },
+];
+
 const MAX_FINE_ITEMS_PER_SLIP = 2;
 const SLIPS_PER_PAGE = 4;
-
+const A6_PAPER_PRESET: BondPaperPreset = "a6";
+const A6_LOCKED_LAYOUT: SlipSheetLayout = "quarter-slip";
+const DEFAULT_NON_A6_PAPER_PRESET: BondPaperPreset = "short";
 const pdfStyles = StyleSheet.create({
     page: {
         padding: 18,
+        fontSize: 7,
+        color: "#0f172a",
+        fontFamily: "Helvetica",
+        backgroundColor: "#ffffff",
+    },
+    quarterPage: {
+        padding: 10,
         fontSize: 7,
         color: "#0f172a",
         fontFamily: "Helvetica",
@@ -204,6 +237,16 @@ const pdfStyles = StyleSheet.create({
         borderWidth: 1,
         borderStyle: "dashed",
         borderColor: "#94a3b8",
+        borderRadius: 6,
+        backgroundColor: "#ffffff",
+        overflow: "hidden",
+    },
+    standaloneSlip: {
+        height: "100%",
+        width: "100%",
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: "#cbd5e1",
         borderRadius: 6,
         backgroundColor: "#ffffff",
         overflow: "hidden",
@@ -486,7 +529,7 @@ function paginateArray<T>(items: T[], size: number) {
     return pages;
 }
 
-function getSlipLayoutProfile(records: PrintableFineRecord[]): SlipLayoutProfile {
+function getSlipLayoutProfile(records: PrintableFineRecord[], sheetLayout: SlipSheetLayout): SlipLayoutProfile {
     const longestTitle = Math.max(
         ...records.map((record) => String(record.bookTitle ?? record.bookId ?? "").length),
         0
@@ -497,6 +540,34 @@ function getSlipLayoutProfile(records: PrintableFineRecord[]): SlipLayoutProfile
     );
     const dense = records.length >= 2 || longestTitle > 42 || longestReason > 70;
     const extraDense = records.length >= 2 && (longestTitle > 56 || longestReason > 96);
+    const standaloneBoost = sheetLayout === "quarter-slip";
+
+    if (standaloneBoost && !extraDense) {
+        return {
+            containerPadding: 12,
+            sectionPadding: 9,
+            sectionGap: 8,
+            headerBrandSize: 9.6,
+            headerTitleSize: 7.8,
+            sectionTitleSize: 6.9,
+            labelSize: 6.1,
+            valueSize: 6.8,
+            summaryLabelSize: 5.9,
+            summaryValueSize: 7,
+            amountSize: 7.5,
+            amountMetaSize: 5.6,
+            badgeSize: 5.7,
+            primarySize: 6.6,
+            detailSize: 6,
+            tinySize: 5.6,
+            footerSize: 5.5,
+            titleMaxLength: 66,
+            reasonMaxLength: 104,
+            amountWidth: 82,
+            itemPadding: 7,
+            itemGap: 6,
+        };
+    }
 
     if (extraDense) {
         return {
@@ -581,12 +652,14 @@ function getSlipLayoutProfile(records: PrintableFineRecord[]): SlipLayoutProfile
 function FineSlip({
     records,
     generatedAtIso,
+    sheetLayout,
 }: {
     records: PrintableFineRecord[];
     generatedAtIso: string;
+    sheetLayout: SlipSheetLayout;
 }) {
     const limitedRecords = records.slice(0, MAX_FINE_ITEMS_PER_SLIP);
-    const profile = getSlipLayoutProfile(limitedRecords);
+    const profile = getSlipLayoutProfile(limitedRecords, sheetLayout);
     const first = limitedRecords[0];
 
     const userName =
@@ -601,10 +674,13 @@ function FineSlip({
     const activeCount = limitedRecords.filter((record) => record.status === "active").length;
     const cancelledCount = limitedRecords.filter((record) => record.status === "cancelled").length;
 
+    const slipShellStyle =
+        sheetLayout === "quarter-slip" ? pdfStyles.standaloneSlip : pdfStyles.quadrant;
+
     return (
         <View
             style={[
-                pdfStyles.quadrant,
+                slipShellStyle,
                 {
                     padding: profile.containerPadding,
                 },
@@ -646,27 +722,27 @@ function FineSlip({
                         Account Details
                     </Text>
 
-                    <View style={[pdfStyles.keyValueRow, { marginBottom: 3 }]}> 
+                    <View style={[pdfStyles.keyValueRow, { marginBottom: 3 }]}>
                         <Text style={[pdfStyles.keyValueLabel, { fontSize: profile.labelSize }]}>Name</Text>
-                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}> 
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}>
                             {trimText(String(userName), 36)}
                         </Text>
                     </View>
-                    <View style={[pdfStyles.keyValueRow, { marginBottom: 3 }]}> 
+                    <View style={[pdfStyles.keyValueRow, { marginBottom: 3 }]}>
                         <Text style={[pdfStyles.keyValueLabel, { fontSize: profile.labelSize }]}>ID</Text>
-                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}> 
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}>
                             {trimText(String(userId), 22)}
                         </Text>
                     </View>
-                    <View style={[pdfStyles.keyValueRow, { marginBottom: 3 }]}> 
+                    <View style={[pdfStyles.keyValueRow, { marginBottom: 3 }]}>
                         <Text style={[pdfStyles.keyValueLabel, { fontSize: profile.labelSize }]}>Email</Text>
-                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}> 
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}>
                             {trimText(String(userEmail), 28)}
                         </Text>
                     </View>
                     <View style={pdfStyles.keyValueRow}>
                         <Text style={[pdfStyles.keyValueLabel, { fontSize: profile.labelSize }]}>Generated</Text>
-                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}> 
+                        <Text style={[pdfStyles.keyValueValue, { fontSize: profile.valueSize }]}>
                             {fmtDateTime(generatedAtIso)}
                         </Text>
                     </View>
@@ -824,8 +900,39 @@ function FinesPdfDocument({
     generatedAtIso,
     paperPreset,
     distributionMode,
+    sheetLayout,
 }: FinesPdfDocProps) {
     const selectedPaperMeta = BOND_PAPER_PRESETS[paperPreset];
+    const chunks = chunkRecords(records, MAX_FINE_ITEMS_PER_SLIP);
+
+    if (sheetLayout === "quarter-slip") {
+        return (
+            <Document title="BookHive Fines Record Slip">
+                {chunks.length ? (
+                    chunks.map((chunk, pageIndex) => (
+                        <Page
+                            key={`quarter-slip-page-${pageIndex}-${chunk.key}`}
+                            size={selectedPaperMeta.fullSize}
+                            style={pdfStyles.quarterPage}
+                        >
+                            <FineSlip
+                                records={chunk.records}
+                                generatedAtIso={generatedAtIso}
+                                sheetLayout={sheetLayout}
+                            />
+                        </Page>
+                    ))
+                ) : (
+                    <Page size={selectedPaperMeta.fullSize} style={pdfStyles.quarterPage}>
+                        <View style={pdfStyles.emptyQuadrant}>
+                            <Text style={pdfStyles.emptyQuadrantText}>No fine records available</Text>
+                        </View>
+                    </Page>
+                )}
+            </Document>
+        );
+    }
+
     const pages = buildSlipPages(records, distributionMode);
     const pagePadding = 18;
     const gap = 10;
@@ -877,6 +984,7 @@ function FinesPdfDocument({
                                             <FineSlip
                                                 records={chunk.records}
                                                 generatedAtIso={generatedAtIso}
+                                                sheetLayout={sheetLayout}
                                             />
                                         ) : (
                                             <View style={pdfStyles.emptyQuadrant}>
@@ -913,7 +1021,13 @@ export function ExportPreviewFines({
     const [paperPreset, setPaperPreset] = React.useState<BondPaperPreset>("short");
     const [distributionMode, setDistributionMode] =
         React.useState<SlipDistributionMode>("duplicate");
+    const [sheetLayout, setSheetLayout] = React.useState<SlipSheetLayout>("grid-4-up");
     const autoPrintedRef = React.useRef(false);
+    const lastNonA6PaperPresetRef = React.useRef<BondPaperPreset>(DEFAULT_NON_A6_PAPER_PRESET);
+
+    const isQuarterSlipLayout = sheetLayout === A6_LOCKED_LAYOUT;
+    const effectivePaperPreset = paperPreset;
+    const effectiveSheetLayout = sheetLayout;
 
     React.useEffect(() => {
         if (!open) {
@@ -923,6 +1037,12 @@ export function ExportPreviewFines({
 
         setGeneratedAtIso(new Date().toISOString());
     }, [open, records.length]);
+
+    React.useEffect(() => {
+        if (paperPreset !== A6_PAPER_PRESET) {
+            lastNonA6PaperPresetRef.current = paperPreset;
+        }
+    }, [paperPreset]);
 
     React.useEffect(() => {
         if (!open) return;
@@ -937,23 +1057,59 @@ export function ExportPreviewFines({
         return () => window.removeEventListener("resize", onResize);
     }, [open]);
 
+
+    const handlePaperPresetChange = React.useCallback(
+        (value: string) => {
+            const nextPreset = value as BondPaperPreset;
+            setPaperPreset(nextPreset);
+
+            if (nextPreset === A6_PAPER_PRESET) {
+                setSheetLayout(A6_LOCKED_LAYOUT);
+                return;
+            }
+
+            lastNonA6PaperPresetRef.current = nextPreset;
+
+            if (sheetLayout === A6_LOCKED_LAYOUT) {
+                setSheetLayout("grid-4-up");
+            }
+        },
+        [sheetLayout]
+    );
+
+    const handleSheetLayoutChange = React.useCallback((value: string) => {
+        const nextLayout = value as SlipSheetLayout;
+        setSheetLayout(nextLayout);
+
+        if (nextLayout === A6_LOCKED_LAYOUT) {
+            setPaperPreset(A6_PAPER_PRESET);
+            return;
+        }
+
+        if (paperPreset === A6_PAPER_PRESET) {
+            setPaperPreset(lastNonA6PaperPresetRef.current || DEFAULT_NON_A6_PAPER_PRESET);
+        }
+    }, [paperPreset]);
+
     const pdfNode = React.useMemo(
         () => (
             <FinesPdfDocument
                 records={records}
                 generatedAtIso={generatedAtIso}
-                paperPreset={paperPreset}
+                paperPreset={effectivePaperPreset}
                 distributionMode={distributionMode}
+                sheetLayout={effectiveSheetLayout}
             />
         ),
-        [records, generatedAtIso, paperPreset, distributionMode]
+        [records, generatedAtIso, effectivePaperPreset, distributionMode, effectiveSheetLayout]
     );
 
     const fileName = React.useMemo(() => {
         if (!records.length) return `${fileNamePrefix}.pdf`;
 
-        const presetSuffix = safeToken(BOND_PAPER_PRESETS[paperPreset].label);
+        const presetSuffix = safeToken(BOND_PAPER_PRESETS[effectivePaperPreset].label);
         const modeSuffix = safeToken(distributionMode);
+        const layoutSuffix = safeToken(effectiveSheetLayout);
         const first = records[0];
         const rawUser =
             String(first.studentId ?? "").trim() ||
@@ -961,8 +1117,8 @@ export function ExportPreviewFines({
             String(first.studentEmail ?? "").trim() ||
             "user";
         const ymd = new Date(generatedAtIso).toISOString().slice(0, 10);
-        return `${safeToken(fileNamePrefix)}-${presetSuffix}-${modeSuffix}-${safeToken(rawUser)}-${ymd}.pdf`;
-    }, [records, generatedAtIso, fileNamePrefix, paperPreset, distributionMode]);
+        return `${safeToken(fileNamePrefix)}-${presetSuffix}-${layoutSuffix}-${modeSuffix}-${safeToken(rawUser)}-${ymd}.pdf`;
+    }, [records, generatedAtIso, fileNamePrefix, effectivePaperPreset, distributionMode, effectiveSheetLayout]);
 
     const handlePrint = React.useCallback(async () => {
         if (!records.length) return;
@@ -1024,6 +1180,11 @@ export function ExportPreviewFines({
     const selectedModeMeta =
         DISTRIBUTION_MODE_OPTIONS.find((option) => option.value === distributionMode) ??
         DISTRIBUTION_MODE_OPTIONS[0];
+    const selectedLayoutMeta =
+        SHEET_LAYOUT_OPTIONS.find((option) => option.value === effectiveSheetLayout) ??
+        SHEET_LAYOUT_OPTIONS[0];
+    const standalonePaperDescription = BOND_PAPER_PRESETS[effectivePaperPreset].fullDescription;
+    const showDistributionSelect = effectiveSheetLayout === "grid-4-up";
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1059,8 +1220,8 @@ export function ExportPreviewFines({
                                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                     <div className="w-full sm:w-52">
                                         <Select
-                                            value={paperPreset}
-                                            onValueChange={(value) => setPaperPreset(value as BondPaperPreset)}
+                                            value={effectivePaperPreset}
+                                            onValueChange={handlePaperPresetChange}
                                         >
                                             <SelectTrigger className="border-white/20 bg-slate-950/70 text-white">
                                                 <SelectValue placeholder="Paper size" />
@@ -1075,18 +1236,16 @@ export function ExportPreviewFines({
                                         </Select>
                                     </div>
 
-                                    <div className="w-full sm:w-72">
+                                    <div className="w-full sm:w-60">
                                         <Select
-                                            value={distributionMode}
-                                            onValueChange={(value) =>
-                                                setDistributionMode(value as SlipDistributionMode)
-                                            }
+                                            value={effectiveSheetLayout}
+                                            onValueChange={handleSheetLayoutChange}
                                         >
                                             <SelectTrigger className="border-white/20 bg-slate-950/70 text-white">
-                                                <SelectValue placeholder="Slip mode" />
+                                                <SelectValue placeholder="Slip layout" />
                                             </SelectTrigger>
                                             <SelectContent className="border-white/10 bg-slate-950 text-white">
-                                                {DISTRIBUTION_MODE_OPTIONS.map((option) => (
+                                                {SHEET_LAYOUT_OPTIONS.map((option) => (
                                                     <SelectItem key={option.value} value={option.value}>
                                                         {option.label}
                                                     </SelectItem>
@@ -1094,6 +1253,28 @@ export function ExportPreviewFines({
                                             </SelectContent>
                                         </Select>
                                     </div>
+
+                                    {showDistributionSelect ? (
+                                        <div className="w-full sm:w-72">
+                                            <Select
+                                                value={distributionMode}
+                                                onValueChange={(value) =>
+                                                    setDistributionMode(value as SlipDistributionMode)
+                                                }
+                                            >
+                                                <SelectTrigger className="border-white/20 bg-slate-950/70 text-white">
+                                                    <SelectValue placeholder="Slip mode" />
+                                                </SelectTrigger>
+                                                <SelectContent className="border-white/10 bg-slate-950 text-white">
+                                                    {DISTRIBUTION_MODE_OPTIONS.map((option) => (
+                                                        <SelectItem key={option.value} value={option.value}>
+                                                            {option.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    ) : null}
 
                                     <Button
                                         type="button"
@@ -1124,12 +1305,24 @@ export function ExportPreviewFines({
                             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/70">
                                 <span className="inline-flex items-center gap-1">
                                     <LayoutGrid className="h-3.5 w-3.5" />
-                                    {BOND_PAPER_PRESETS[paperPreset].label} • {BOND_PAPER_PRESETS[paperPreset].fullDescription}
+                                    {BOND_PAPER_PRESETS[effectivePaperPreset].label} • {BOND_PAPER_PRESETS[effectivePaperPreset].fullDescription}
                                 </span>
                                 <span className="inline-flex items-center gap-1">
-                                    <CopyPlus className="h-3.5 w-3.5" />
-                                    {selectedModeMeta.description}
+                                    <Scissors className="h-3.5 w-3.5" />
+                                    {selectedLayoutMeta.description}
                                 </span>
+                                {showDistributionSelect ? (
+                                    <span className="inline-flex items-center gap-1">
+                                        <CopyPlus className="h-3.5 w-3.5" />
+                                        {selectedModeMeta.description}
+                                    </span>
+                                ) : (
+                                    <span>
+                                        {isQuarterSlipLayout
+                                            ? "1/4 paper slip uses A6. Choosing 4-up switches paper size back to a full sheet."
+                                            : `Slip page size: ${standalonePaperDescription}`}
+                                    </span>
+                                )}
                                 <span>Each slip shows up to 2 fine items.</span>
                             </div>
                         </CardContent>
