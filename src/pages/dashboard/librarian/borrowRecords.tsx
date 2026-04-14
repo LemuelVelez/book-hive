@@ -115,11 +115,11 @@ function fmtDateTime(d?: string | null) {
   try {
     const date = new Date(d);
     if (Number.isNaN(date.getTime())) return d;
-    return date.toLocaleString("en-CA", {
+    return date.toLocaleString("en-PH", {
       year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
       minute: "2-digit",
     });
   } catch {
@@ -234,6 +234,91 @@ function computeAutoFine(dueDate?: string | null) {
   return { overdueDays, autoFine };
 }
 
+function normalizeBorrowStatus(status?: string | null): string {
+  return (status ?? "").toLowerCase().trim();
+}
+
+function isPendingPickupBorrowRecord(rec: BorrowRecordDTO) {
+  return normalizeBorrowStatus(rec.status) === "pending_pickup";
+}
+
+function isPendingReturnBorrowRecord(rec: BorrowRecordDTO) {
+  const status = normalizeBorrowStatus(rec.status);
+  return status === "pending_return" || status === "pending";
+}
+
+function isBorrowedBorrowRecord(rec: BorrowRecordDTO) {
+  return normalizeBorrowStatus(rec.status) === "borrowed";
+}
+
+function hasOpenReturnRequest(rec: BorrowRecordDTO) {
+  return !isReturnedBorrowRecord(rec) && Boolean(rec.returnRequestedAt);
+}
+
+function isOverdueBorrowRecord(rec: BorrowRecordDTO) {
+  if (isReturnedBorrowRecord(rec) || isPendingPickupBorrowRecord(rec)) {
+    return false;
+  }
+
+  return computeAutoFine(rec.dueDate).overdueDays > 0;
+}
+
+function isDueTodayBorrowRecord(rec: BorrowRecordDTO) {
+  if (isReturnedBorrowRecord(rec) || isPendingPickupBorrowRecord(rec) || !rec.dueDate) {
+    return false;
+  }
+
+  const due = parseYmdToDate(rec.dueDate);
+  if (!due) {
+    return false;
+  }
+
+  return formatDateForApi(due) === formatDateForApi(new Date());
+}
+
+function getBorrowRecordSortPriority(
+  rec: BorrowRecordDTO,
+  canManageExtensions: boolean
+): number {
+  if (isOverdueBorrowRecord(rec)) return 0;
+  if (isPendingPickupBorrowRecord(rec)) return 1;
+  if (isPendingReturnBorrowRecord(rec) || hasOpenReturnRequest(rec)) return 2;
+  if (canManageExtensions && hasPendingExtensionRequest(rec)) return 3;
+  if (isBorrowedBorrowRecord(rec)) return 4;
+  if (isReturnedBorrowRecord(rec)) return 5;
+  return 6;
+}
+
+function compareBorrowRecordsByUrgency(
+  a: BorrowRecordDTO,
+  b: BorrowRecordDTO,
+  canManageExtensions: boolean
+): number {
+  const priorityDiff =
+    getBorrowRecordSortPriority(a, canManageExtensions) -
+    getBorrowRecordSortPriority(b, canManageExtensions);
+
+  if (priorityDiff !== 0) {
+    return priorityDiff;
+  }
+
+  const aDueDate = a.dueDate ?? "9999-12-31";
+  const bDueDate = b.dueDate ?? "9999-12-31";
+  const dueDateDiff = aDueDate.localeCompare(bDueDate);
+  if (dueDateDiff !== 0) {
+    return dueDateDiff;
+  }
+
+  const aBorrowDate = a.borrowDate ?? "";
+  const bBorrowDate = b.borrowDate ?? "";
+  const borrowDateDiff = bBorrowDate.localeCompare(aBorrowDate);
+  if (borrowDateDiff !== 0) {
+    return borrowDateDiff;
+  }
+
+  return String(a.id).localeCompare(String(b.id));
+}
+
 function parseYmdToDate(d?: string | null): Date | undefined {
   if (!d) return undefined;
   const parts = d.split("-");
@@ -274,6 +359,29 @@ type EmailSyncState = {
   status: BorrowEmailNotificationSyncDTO | null;
   error: string | null;
   syncedAt: string | null;
+};
+
+type BorrowEmailDigestPreviewItem = {
+  id: string;
+  borrowerName: string;
+  bookTitle: string;
+  statusLabel: string;
+  dueDateLabel: string;
+  overdueDays: number;
+};
+
+type BorrowDashboardMetrics = {
+  dueTodayCount: number;
+  overdueCount: number;
+  pendingPickupCount: number;
+  pendingReturnCount: number;
+  pendingExtensionCount: number;
+  pendingReturnOrExtensionCount: number;
+  overlappingPendingReturnExtensionCount: number;
+  unreadCount: number;
+  readCount: number;
+  totalNotifications: number;
+  emailDigestPreview: BorrowEmailDigestPreviewItem[];
 };
 
 function DetailItem({ label, value }: DetailItemProps) {
@@ -346,6 +454,9 @@ export default function LibrarianBorrowRecordsPage() {
   const [emailSyncInFlight, setEmailSyncInFlight] = React.useState<
     "manual" | "automatic" | null
   >(null);
+  const [manualEmailDialogOpen, setManualEmailDialogOpen] = React.useState(false);
+  const [automaticEmailDialogOpen, setAutomaticEmailDialogOpen] =
+    React.useState(false);
 
   const runEmailSync = React.useCallback(
     async (
@@ -538,6 +649,7 @@ export default function LibrarianBorrowRecordsPage() {
 
       replaceRecordInState(updated);
       await refreshNotificationSummary();
+      void runEmailSync("automatic");
 
       toast.success("Marked as Borrowed", {
         description: `Record #${updated.id} is now marked as Borrowed.`,
@@ -571,6 +683,7 @@ export default function LibrarianBorrowRecordsPage() {
 
       replaceRecordInState(updated);
       await refreshNotificationSummary();
+      void runEmailSync("automatic");
 
       toast.success("Marked as Returned", {
         description: `Record #${updated.id} marked as returned with fine ${peso(
@@ -600,6 +713,7 @@ export default function LibrarianBorrowRecordsPage() {
 
       replaceRecordInState(updated);
       await refreshNotificationSummary();
+      void runEmailSync("automatic");
 
       toast.success("Return Requested", {
         description:
@@ -634,6 +748,8 @@ export default function LibrarianBorrowRecordsPage() {
       const updated = await updateBorrowDueDate(dueRecord.id, ymd);
 
       replaceRecordInState(updated);
+      await refreshNotificationSummary();
+      void runEmailSync("automatic");
 
       toast.success("Due Date Updated", {
         description: `New Due Date: ${fmtDate(updated.dueDate)}.`,
@@ -659,6 +775,7 @@ export default function LibrarianBorrowRecordsPage() {
 
       replaceRecordInState(updated);
       await refreshNotificationSummary();
+      void runEmailSync("automatic");
 
       toast.success("Extension Approved", {
         description: `Extension Added (+${FIXED_EXTENSION_DAYS} day). New Due Date: ${fmtDate(
@@ -686,6 +803,7 @@ export default function LibrarianBorrowRecordsPage() {
 
       replaceRecordInState(updated);
       await refreshNotificationSummary();
+      void runEmailSync("automatic");
 
       toast.success("Extension Disapproved", {
         description: "The extension request has been disapproved.",
@@ -704,14 +822,95 @@ export default function LibrarianBorrowRecordsPage() {
 
   const effectiveNotificationSummary = React.useMemo(
     () =>
-      notificationSummary ??
       buildFallbackNotificationSummary(records, canManageExtensions),
-    [notificationSummary, records, canManageExtensions]
+    [records, canManageExtensions]
   );
+
+  const dashboardMetrics = React.useMemo<BorrowDashboardMetrics>(() => {
+    const dueTodayCount = records.filter((rec) => isDueTodayBorrowRecord(rec)).length;
+    const overdueCount = records.filter((rec) => isOverdueBorrowRecord(rec)).length;
+    const pendingPickupCount = records.filter((rec) =>
+      isPendingPickupBorrowRecord(rec)
+    ).length;
+    const pendingReturnCount = records.filter(
+      (rec) => isPendingReturnBorrowRecord(rec) || hasOpenReturnRequest(rec)
+    ).length;
+    const pendingExtensionCount = canManageExtensions
+      ? records.filter(
+          (rec) => !isReturnedBorrowRecord(rec) && hasPendingExtensionRequest(rec)
+        ).length
+      : 0;
+    const pendingReturnOrExtensionCount = records.filter(
+      (rec) =>
+        !isReturnedBorrowRecord(rec) &&
+        (isPendingReturnBorrowRecord(rec) ||
+          hasOpenReturnRequest(rec) ||
+          (canManageExtensions && hasPendingExtensionRequest(rec)))
+    ).length;
+    const overlappingPendingReturnExtensionCount = canManageExtensions
+      ? records.filter(
+          (rec) =>
+            !isReturnedBorrowRecord(rec) &&
+            (isPendingReturnBorrowRecord(rec) || hasOpenReturnRequest(rec)) &&
+            hasPendingExtensionRequest(rec)
+        ).length
+      : 0;
+    const emailDigestPreview = [...records]
+      .filter(
+        (rec) =>
+          isOverdueBorrowRecord(rec) ||
+          isDueTodayBorrowRecord(rec) ||
+          isPendingPickupBorrowRecord(rec) ||
+          isPendingReturnBorrowRecord(rec) ||
+          hasOpenReturnRequest(rec) ||
+          (canManageExtensions &&
+            !isReturnedBorrowRecord(rec) &&
+            hasPendingExtensionRequest(rec))
+      )
+      .sort((a, b) => compareBorrowRecordsByUrgency(a, b, canManageExtensions))
+      .map((rec) => {
+        const { overdueDays } = computeAutoFine(rec.dueDate);
+        let statusLabel = formatBorrowStatusLabel(rec.status);
+
+        if (isOverdueBorrowRecord(rec)) {
+          statusLabel = `Overdue${overdueDays > 0 ? ` (${overdueDays} day${overdueDays === 1 ? "" : "s"})` : ""}`;
+        } else if (isPendingPickupBorrowRecord(rec)) {
+          statusLabel = "Pending Pickup";
+        } else if (isPendingReturnBorrowRecord(rec)) {
+          statusLabel = "Pending Return";
+        } else if (hasOpenReturnRequest(rec)) {
+          statusLabel = "Return Requested";
+        } else if (hasPendingExtensionRequest(rec)) {
+          statusLabel = "Extension Pending";
+        }
+
+        return {
+          id: String(rec.id),
+          borrowerName: studentFullName(rec),
+          bookTitle: rec.bookTitle || `Book #${rec.bookId}`,
+          statusLabel,
+          dueDateLabel: fmtDate(rec.dueDate),
+          overdueDays,
+        };
+      });
+
+    return {
+      dueTodayCount,
+      overdueCount,
+      pendingPickupCount,
+      pendingReturnCount,
+      pendingExtensionCount,
+      pendingReturnOrExtensionCount,
+      overlappingPendingReturnExtensionCount,
+      unreadCount: effectiveNotificationSummary.unreadCount,
+      readCount: effectiveNotificationSummary.readCount,
+      totalNotifications: emailDigestPreview.length,
+      emailDigestPreview,
+    };
+  }, [records, canManageExtensions, effectiveNotificationSummary]);
 
   const latestManualEmailSync = manualEmailSync.status;
   const latestAutomaticEmailSync = automaticEmailSync.status;
-  const latestAnyEmailSync = latestManualEmailSync ?? latestAutomaticEmailSync;
   const manualEmailSyncStatusLabel = manualEmailSync.error
     ? "Manual email sending failed"
     : latestManualEmailSync?.suppressed
@@ -747,7 +946,7 @@ export default function LibrarianBorrowRecordsPage() {
 
     if (!q) {
       return [...rows].sort((a, b) =>
-        (b.borrowDate ?? "").localeCompare(a.borrowDate ?? "")
+        compareBorrowRecordsByUrgency(a, b, canManageExtensions)
       );
     }
 
@@ -771,7 +970,7 @@ export default function LibrarianBorrowRecordsPage() {
     });
 
     return matched.sort((a, b) =>
-      (b.borrowDate ?? "").localeCompare(a.borrowDate ?? "")
+      compareBorrowRecordsByUrgency(a, b, canManageExtensions)
     );
   }, [records, statusFilter, search, canManageExtensions]);
 
@@ -791,13 +990,17 @@ export default function LibrarianBorrowRecordsPage() {
 
     const groups = Array.from(map.values()).map((g) => {
       const rows = [...g.rows].sort((a, b) =>
-        (b.borrowDate ?? "").localeCompare(a.borrowDate ?? "")
+        compareBorrowRecordsByUrgency(a, b, canManageExtensions)
       );
-      const activeCount = rows.filter((r) => r.status !== "returned").length;
+      const activeCount = rows.filter((r) => !isReturnedBorrowRecord(r)).length;
       const returnedCount = rows.length - activeCount;
       const actionRequiredCount = rows.filter((r) =>
         isBorrowRecordActionRequired(r, canManageExtensions)
       ).length;
+      const topPriority = rows[0]
+        ? getBorrowRecordSortPriority(rows[0], canManageExtensions)
+        : Number.MAX_SAFE_INTEGER;
+      const earliestDueDate = rows[0]?.dueDate ?? "9999-12-31";
       const latestBorrowDate = rows[0]?.borrowDate ?? "";
 
       return {
@@ -808,14 +1011,18 @@ export default function LibrarianBorrowRecordsPage() {
         activeCount,
         returnedCount,
         actionRequiredCount,
+        topPriority,
+        earliestDueDate,
         latestBorrowDate,
       };
     });
 
     groups.sort(
       (a, b) =>
-        (b.latestBorrowDate ?? "").localeCompare(a.latestBorrowDate ?? "") ||
+        a.topPriority - b.topPriority ||
         b.actionRequiredCount - a.actionRequiredCount ||
+        a.earliestDueDate.localeCompare(b.earliestDueDate) ||
+        (b.latestBorrowDate ?? "").localeCompare(a.latestBorrowDate ?? "") ||
         a.name.localeCompare(b.name) ||
         a.userId.localeCompare(b.userId)
     );
@@ -920,25 +1127,59 @@ export default function LibrarianBorrowRecordsPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <Card className="border-emerald-400/20 bg-emerald-500/10">
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-100">
-                  <Send className="h-4 w-4" />
-                  Manual email updates
-                </div>
-                <p className="mt-2 text-sm text-emerald-50/85">
-                  Librarians can send borrow workflow email updates on demand while still receiving the same reminders in their inbox.
-                </p>
-                <p className="mt-2 text-xs text-emerald-100/70 wrap-break-word">
-                  {manualEmailSync.error ||
-                    latestManualEmailSync?.message ||
-                    "Use this action to send the latest borrow reminders and workflow alerts right away."}
-                </p>
+      <div className="mb-4">
+        <Accordion type="multiple" className="space-y-3">
+          <AccordionItem className="overflow-hidden rounded-lg border border-emerald-400/20 bg-emerald-500/10" value="manual-email-updates">
+            <AccordionTrigger className="px-4 py-4 text-emerald-100 hover:bg-emerald-500/5 hover:no-underline">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold">
+                <Send className="h-4 w-4" />
+                Manual email updates
               </div>
+            </AccordionTrigger>
+            <AccordionContent className="border-t border-emerald-300/15 px-4 pb-4 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-emerald-300/30 text-emerald-50 hover:bg-emerald-500/15"
+                onClick={() => setManualEmailDialogOpen(true)}
+              >
+                Details
+              </Button>
+            </AccordionContent>
+          </AccordionItem>
 
+          <AccordionItem className="overflow-hidden rounded-lg border border-sky-400/20 bg-sky-500/10" value="automatic-email-updates">
+            <AccordionTrigger className="px-4 py-4 text-sky-100 hover:bg-sky-500/5 hover:no-underline">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold">
+                <BellRing className="h-4 w-4" />
+                Automatic email updates
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="border-t border-sky-300/15 px-4 pb-4 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-sky-300/30 text-sky-50 hover:bg-sky-500/15"
+                onClick={() => setAutomaticEmailDialogOpen(true)}
+              >
+                Details
+              </Button>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
+        <Dialog open={manualEmailDialogOpen} onOpenChange={setManualEmailDialogOpen}>
+          <DialogContent
+            className={`w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-3xl ${dialogScrollbarClasses}`}
+          >
+            <DialogHeader>
+              <DialogTitle className="pr-6">Manual email updates</DialogTitle>
+              <DialogDescription className="text-white/70">
+                Librarians can send borrow workflow email updates on demand while still receiving the same reminders in their inbox.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex justify-start sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -960,73 +1201,129 @@ export default function LibrarianBorrowRecordsPage() {
               </Button>
             </div>
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-4 wrap-break-word">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 wrap-break-word">
               <DetailItem
                 label="Recipient"
-                value={latestManualEmailSync?.recipient || latestAnyEmailSync?.recipient || "Not available"}
+                value={
+                  latestManualEmailSync?.recipient ||
+                  latestAutomaticEmailSync?.recipient ||
+                  "Not available"
+                }
               />
               <DetailItem
                 label="Notifications"
-                value={String(latestManualEmailSync?.totalNotifications ?? latestAnyEmailSync?.totalNotifications ?? 0)}
+                value={String(dashboardMetrics.totalNotifications)}
               />
               <DetailItem
                 label="Pending return"
-                value={String(latestManualEmailSync?.pendingReturnCount ?? latestAnyEmailSync?.pendingReturnCount ?? 0)}
+                value={String(dashboardMetrics.pendingReturnCount)}
               />
               <DetailItem
                 label="Pending extension"
-                value={String(latestManualEmailSync?.pendingExtensionCount ?? latestAnyEmailSync?.pendingExtensionCount ?? 0)}
+                value={String(dashboardMetrics.pendingExtensionCount)}
               />
             </div>
 
-            <p className="mt-3 text-[11px] text-emerald-100/70">
-              Status: {manualEmailSyncStatusLabel}
-              {manualEmailSync.syncedAt
-                ? ` • Last manual send: ${fmtDateTime(manualEmailSync.syncedAt)}`
-                : ""}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-sky-400/20 bg-sky-500/10">
-          <CardContent className="p-4">
-            <div className="inline-flex items-center gap-2 text-sm font-semibold text-sky-100">
-              <BellRing className="h-4 w-4" />
-              Automatic email updates
+            <div className="space-y-2">
+              <p className="text-sm text-emerald-50/85 wrap-break-word">
+                {manualEmailSync.error ||
+                  latestManualEmailSync?.message ||
+                  "Use this action to send the latest borrow reminders and workflow alerts right away."}
+              </p>
+              <p className="text-[11px] text-emerald-100/70">
+                Status: {manualEmailSyncStatusLabel}
+                {manualEmailSync.syncedAt
+                  ? ` • Last manual send: ${fmtDateTime(manualEmailSync.syncedAt)}`
+                  : ""}
+              </p>
             </div>
-            <p className="mt-2 text-sm text-sky-50/85">
-              This dashboard also checks email updates automatically whenever the librarian borrow records page loads or refreshes.
-            </p>
+          </DialogContent>
+        </Dialog>
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <Dialog
+          open={automaticEmailDialogOpen}
+          onOpenChange={setAutomaticEmailDialogOpen}
+        >
+          <DialogContent
+            className={`w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-4xl ${dialogScrollbarClasses}`}
+          >
+            <DialogHeader>
+              <DialogTitle className="pr-6">Automatic email updates</DialogTitle>
+              <DialogDescription className="text-white/70">
+                This dashboard also checks email updates automatically whenever the librarian borrow records page loads or refreshes.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-2 sm:grid-cols-3">
               <DetailItem
                 label="Due today"
-                value={String(latestAutomaticEmailSync?.dueTodayCount ?? latestAnyEmailSync?.dueTodayCount ?? 0)}
+                value={String(dashboardMetrics.dueTodayCount)}
               />
               <DetailItem
                 label="Overdue"
-                value={String(latestAutomaticEmailSync?.overdueCount ?? latestAnyEmailSync?.overdueCount ?? 0)}
+                value={String(dashboardMetrics.overdueCount)}
               />
               <DetailItem
                 label="Pending pickup"
-                value={String(latestAutomaticEmailSync?.pendingPickupCount ?? latestAnyEmailSync?.pendingPickupCount ?? 0)}
+                value={String(dashboardMetrics.pendingPickupCount)}
               />
             </div>
 
-            <p className="mt-3 text-xs text-sky-100/75 wrap-break-word">
+            <p className="text-sm text-sky-50/85 wrap-break-word">
               {automaticEmailSync.error ||
                 latestAutomaticEmailSync?.message ||
                 "Automatic email status will appear here after the dashboard finishes loading."}
             </p>
 
-            <p className="mt-2 text-[11px] text-sky-100/70">
+            <div className="rounded-md border border-sky-300/15 bg-sky-950/30 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-sky-100/65">
+                    Included borrower records in Automatic email updates
+                  </div>
+                  <p className="mt-1 text-[11px] text-sky-100/60">
+                    These are the borrower records currently included in the automatic email update snapshot.
+                  </p>
+                </div>
+                <Badge className="border-sky-300/30 bg-sky-400/10 text-sky-50 hover:bg-sky-400/10">
+                  {dashboardMetrics.totalNotifications} included
+                </Badge>
+              </div>
+              {dashboardMetrics.emailDigestPreview.length === 0 ? (
+                <p className="mt-2 text-xs text-sky-50/75">
+                  No due-today, overdue, pending pickup, pending return, return-requested, or pending extension records are currently queued.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2 text-xs text-sky-50/85">
+                  {dashboardMetrics.emailDigestPreview.slice(0, 5).map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-md border border-sky-300/10 bg-slate-950/35 px-3 py-2"
+                    >
+                      <div className="font-medium text-sky-50">{item.borrowerName}</div>
+                      <div className="mt-1 text-sky-100/80">{item.bookTitle}</div>
+                      <div className="mt-1 text-[11px] text-sky-100/65">
+                        {item.statusLabel} • Due {item.dueDateLabel}
+                      </div>
+                    </div>
+                  ))}
+                  {dashboardMetrics.emailDigestPreview.length > 5 ? (
+                    <p className="text-[11px] text-sky-100/60">
+                      +{dashboardMetrics.emailDigestPreview.length - 5} more record(s) included in the current automatic email snapshot.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-sky-100/70">
               Status: {automaticEmailSyncStatusLabel}
               {automaticEmailSync.syncedAt
                 ? ` • Last automatic check: ${fmtDateTime(automaticEmailSync.syncedAt)}`
                 : ""}
             </p>
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1036,7 +1333,7 @@ export default function LibrarianBorrowRecordsPage() {
               Unread / Needs Action
             </div>
             <div className="mt-2 text-2xl font-semibold text-amber-100">
-              {effectiveNotificationSummary.unreadCount}
+              {dashboardMetrics.unreadCount}
             </div>
             <div className="mt-1 text-xs text-amber-50/70">
               Transactions or requests still waiting for staff.
@@ -1050,7 +1347,7 @@ export default function LibrarianBorrowRecordsPage() {
               Read / Handled
             </div>
             <div className="mt-2 text-2xl font-semibold text-emerald-100">
-              {effectiveNotificationSummary.readCount}
+              {dashboardMetrics.readCount}
             </div>
             <div className="mt-1 text-xs text-emerald-50/70">
               Records not currently waiting on staff action.
@@ -1064,7 +1361,7 @@ export default function LibrarianBorrowRecordsPage() {
               Pending Pickup
             </div>
             <div className="mt-2 text-2xl font-semibold text-sky-100">
-              {effectiveNotificationSummary.pendingPickupCount}
+              {dashboardMetrics.pendingPickupCount}
             </div>
             <div className="mt-1 text-xs text-sky-50/70">
               Borrow requests waiting to be released.
@@ -1079,14 +1376,14 @@ export default function LibrarianBorrowRecordsPage() {
               {canManageExtensions ? " + Extension" : ""}
             </div>
             <div className="mt-2 text-2xl font-semibold text-fuchsia-100">
-              {effectiveNotificationSummary.pendingReturnCount +
-                (canManageExtensions
-                  ? effectiveNotificationSummary.pendingExtensionCount
-                  : 0)}
+              {dashboardMetrics.pendingReturnOrExtensionCount}
             </div>
             <div className="mt-1 text-xs text-fuchsia-50/70">
               {canManageExtensions
-                ? `${effectiveNotificationSummary.pendingReturnCount} return request(s) and ${effectiveNotificationSummary.pendingExtensionCount} extension request(s).`
+                ? `${dashboardMetrics.pendingReturnCount} pending return record(s), ${dashboardMetrics.pendingExtensionCount} pending extension request(s)` +
+                  (dashboardMetrics.overlappingPendingReturnExtensionCount > 0
+                    ? `, ${dashboardMetrics.overlappingPendingReturnExtensionCount} overlapping record(s).`
+                    : ".")
                 : "Return requests waiting for confirmation."}
             </div>
           </CardContent>
@@ -1241,17 +1538,18 @@ export default function LibrarianBorrowRecordsPage() {
                               const bookLabel =
                                 rec.bookTitle || `Book #${rec.bookId}`;
 
-                              const isReturned = rec.status === "returned";
+                              const isReturned = isReturnedBorrowRecord(rec);
                               const isPendingPickup =
-                                rec.status === "pending_pickup";
+                                isPendingPickupBorrowRecord(rec);
                               const isPendingReturn =
-                                rec.status === "pending_return";
-                              const isLegacyPending = rec.status === "pending";
+                                normalizeBorrowStatus(rec.status) === "pending_return";
+                              const isLegacyPending =
+                                normalizeBorrowStatus(rec.status) === "pending";
                               const isAnyPending =
                                 isPendingPickup ||
                                 isPendingReturn ||
                                 isLegacyPending;
-                              const isBorrowed = rec.status === "borrowed";
+                              const isBorrowed = isBorrowedBorrowRecord(rec);
 
                               const { overdueDays, autoFine } = computeAutoFine(
                                 rec.dueDate
