@@ -122,6 +122,10 @@ function roleLabel(role: VisibleRole) {
   }
 }
 
+function roleBadgeLabel(role: VisibleRole) {
+  return roleLabel(role).toUpperCase();
+}
+
 function roleDescription(role: VisibleRole) {
   switch (role) {
     case "admin":
@@ -829,7 +833,7 @@ export default function AdminUsersPage() {
                         {u.isApproved ? "approved" : "pending"}
                       </Badge>
                       <Badge variant="default" className={roleBadgeClasses(currentRole)}>
-                        {roleLabel(currentRole)}
+                        {roleBadgeLabel(currentRole)}
                       </Badge>
                     </div>
 
@@ -989,25 +993,25 @@ export default function AdminUsersPage() {
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("student")}>{roleLabel("student")}</Badge>
+                <Badge className={roleBadgeClasses("student")}>{roleBadgeLabel("student")}</Badge>
                 <span className="opacity-80">{countsByRole.student}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("faculty")}>{roleLabel("faculty")}</Badge>
+                <Badge className={roleBadgeClasses("faculty")}>{roleBadgeLabel("faculty")}</Badge>
                 <span className="opacity-80">{countsByRole.faculty}</span>
               </span>
               <span className="inline-flex items-center gap-1">
                 <Badge className={roleBadgeClasses("assistant_librarian")}>
-                  {roleLabel("assistant_librarian")}
+                  {roleBadgeLabel("assistant_librarian")}
                 </Badge>
                 <span className="opacity-80">{countsByRole.assistant_librarian}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("librarian")}>{roleLabel("librarian")}</Badge>
+                <Badge className={roleBadgeClasses("librarian")}>{roleBadgeLabel("librarian")}</Badge>
                 <span className="opacity-80">{countsByRole.librarian}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("admin")}>{roleLabel("admin")}</Badge>
+                <Badge className={roleBadgeClasses("admin")}>{roleBadgeLabel("admin")}</Badge>
                 <span className="opacity-80">{countsByRole.admin}</span>
               </span>
             </div>
@@ -1388,7 +1392,7 @@ export default function AdminUsersPage() {
                   >
                     <AccordionTrigger className="items-start gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:mt-1 [&>svg]:shrink-0">
                       <div className="flex min-w-0 flex-1 flex-col items-start gap-2 pr-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
-                        <Badge className={roleBadgeClasses(group.role)}>{roleLabel(group.role)}</Badge>
+                        <Badge className={roleBadgeClasses(group.role)}>{roleBadgeLabel(group.role)}</Badge>
                         <span className="text-sm font-semibold text-white truncate sm:overflow-visible sm:text-clip sm:whitespace-normal sm:wrap-anywhere">{group.total} user{group.total === 1 ? "" : "s"}</span>
                         <span className="text-xs text-white/55 wrap-anywhere">{roleDescription(group.role)}</span>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/65">
