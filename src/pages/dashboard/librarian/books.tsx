@@ -249,7 +249,6 @@ function BookCatalogDetails({
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
             <CatalogDetail label="Accession #" value={formatDetailValue(book.accessionNumber)} />
-            <CatalogDetail label="Copy no." value={formatDetailValue(book.copyNumber)} />
             <CatalogDetail label="Title" value={formatDetailValue(book.title)} />
             <CatalogDetail label="Sub." value={formatDetailValue(book.subtitle)} />
             <CatalogDetail label="Pub. year" value={formatDetailValue(book.publicationYear)} />
@@ -343,9 +342,6 @@ function BookCatalogCard({
                         <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
                             {formatDetailValue(book.callNumber)}
                         </span>
-                        <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                            Copy {formatDetailValue(book.copyNumber)}
-                        </span>
                         <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
                             {status.label}
                         </span>
@@ -380,8 +376,8 @@ function BookCatalogCard({
                     <DialogHeader>
                         <DialogTitle className="pr-6">{formatDetailValue(book.title)}</DialogTitle>
                         <DialogDescription className="text-white/70">
-                            Review the complete catalog details, individual copy details, inventory
-                            status, and available actions for this book record.
+                            Review the complete catalog details, inventory status, and available
+                            actions for this book record.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -389,9 +385,6 @@ function BookCatalogCard({
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
                                 {formatDetailValue(book.callNumber)}
-                            </span>
-                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                                Copy {formatDetailValue(book.copyNumber)}
                             </span>
                             <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
                                 {status.label}
