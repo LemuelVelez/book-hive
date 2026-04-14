@@ -110,6 +110,8 @@ type IncomeOverview = {
   paidCount: number;
 };
 
+type BorrowSummaryStatus = "borrowed" | "pending" | "returned" | "other";
+
 /* -------------------------- Default states ------------------------- */
 
 const EMPTY_BOOKS_OVERVIEW: BooksOverview = {
@@ -199,19 +201,48 @@ function summarizeBooks(books: BookDTO[]): BooksOverview {
   return { total, available, unavailable };
 }
 
+function resolveBorrowSummaryStatus(record: BorrowRecordDTO): BorrowSummaryStatus {
+  const status = String(record.status ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (status === "returned" || Boolean(record.returnDate)) {
+    return "returned";
+  }
+
+  if (
+    status === "pending" ||
+    status === "pending_pickup" ||
+    status === "pending_return"
+  ) {
+    return "pending";
+  }
+
+  if (status === "borrowed") {
+    return "borrowed";
+  }
+
+  if (record.borrowDate || record.dueDate) {
+    return "borrowed";
+  }
+
+  return "other";
+}
+
 function summarizeBorrows(records: BorrowRecordDTO[]): BorrowOverview {
   let borrowed = 0;
   let pending = 0;
   let returned = 0;
   let totalFine = 0;
 
-  for (const r of records) {
-    const status = String(r.status ?? "").toLowerCase();
-    if (status === "borrowed") borrowed += 1;
-    else if (status === "pending") pending += 1;
-    else if (status === "returned") returned += 1;
+  for (const record of records) {
+    const summaryStatus = resolveBorrowSummaryStatus(record);
 
-    const fine = Number((r as any)?.fine ?? 0);
+    if (summaryStatus === "borrowed") borrowed += 1;
+    else if (summaryStatus === "pending") pending += 1;
+    else if (summaryStatus === "returned") returned += 1;
+
+    const fine = Number((record as any)?.fine ?? 0);
     if (!Number.isNaN(fine) && fine > 0) totalFine += fine;
   }
 
@@ -778,7 +809,7 @@ export default function LibrarianDashboard() {
               <CardContent className="space-y-1">
                 <div className="text-2xl font-semibold">{borrowOverview.pending}</div>
                 <p className="text-[11px] text-white/70">
-                  Pending borrow records that may need follow-up.
+                  Pending pickup and pending return records that may need follow-up.
                 </p>
               </CardContent>
             </Card>
@@ -811,7 +842,7 @@ export default function LibrarianDashboard() {
                     Borrowing status overview
                   </CardTitle>
                   <p className="text-[11px] text-white/60">
-                    Distribution of borrowed, pending, and returned records.
+                    Distribution of borrowed, pending pickup or return, and returned records.
                   </p>
                 </div>
                 <Badge
@@ -1228,7 +1259,7 @@ export default function LibrarianDashboard() {
                     Borrowing status overview
                   </CardTitle>
                   <p className="text-[11px] text-white/60">
-                    Distribution of borrowed, pending, and returned records.
+                    Distribution of borrowed, pending pickup or return, and returned records.
                   </p>
                 </div>
                 <Badge
