@@ -245,9 +245,12 @@ export type UpdateBookPayload = Partial<CreateBookPayload> & {
 };
 
 export type AddBookCopyPayload = {
-  accessionNumber: string;
-  copyNumber: number;
-  barcode: string;
+  count?: number;
+  copiesToAdd?: number;
+  numberOfCopies?: number;
+  accessionNumber?: string;
+  copyNumber?: number;
+  barcode?: string;
   callNumber?: string;
   volumeNumber?: string;
   libraryArea?: LibraryArea | null;

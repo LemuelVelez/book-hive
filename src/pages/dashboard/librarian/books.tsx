@@ -61,20 +61,12 @@ import {
 } from "@/lib/books";
 
 type AddCopyFormValues = {
-    accessionNumber: string;
-    copyNumber: string;
-    barcode: string;
-    callNumber: string;
-    volumeNumber: string;
+    count: string;
 };
 
 function getDefaultAddCopyFormValues(): AddCopyFormValues {
     return {
-        accessionNumber: "",
-        copyNumber: "",
-        barcode: "",
-        callNumber: "",
-        volumeNumber: "",
+        count: "1",
     };
 }
 
@@ -215,36 +207,9 @@ function getStatusMeta(book: BookDTO): { label: string; classes: string } {
     };
 }
 
-function createCopyGroupKey(book: Pick<BookDTO, "title" | "author" | "callNumber" | "isbn">) {
-    return [
-        normalizeSearchText(book.title),
-        normalizeSearchText(book.author),
-        normalizeSearchText(book.callNumber || ""),
-        normalizeSearchText(book.isbn || ""),
-    ].join("|");
-}
-
-function getSuggestedNextCopyNumber(source: BookDTO, books: BookDTO[]) {
-    const sourceKey = createCopyGroupKey(source);
-
-    const maxCopyNumber = books.reduce((max, candidate) => {
-        if (createCopyGroupKey(candidate) !== sourceKey) return max;
-        if (typeof candidate.copyNumber !== "number" || !Number.isFinite(candidate.copyNumber)) {
-            return max;
-        }
-        return Math.max(max, Math.floor(candidate.copyNumber));
-    }, 0);
-
-    return maxCopyNumber > 0 ? String(maxCopyNumber + 1) : "";
-}
-
-function buildAddCopyFormValues(source: BookDTO): AddCopyFormValues {
+function buildAddCopyFormValues(_source: BookDTO): AddCopyFormValues {
     return {
-        accessionNumber: "",
-        copyNumber: "",
-        barcode: "",
-        callNumber: source.callNumber || "",
-        volumeNumber: source.volumeNumber || "",
+        count: "1",
     };
 }
 
@@ -908,34 +873,9 @@ export default function LibrarianBooksPage() {
 
         setCopyError("");
 
-        const accessionNumber = copyForm.accessionNumber.trim();
-        const barcode = copyForm.barcode.trim();
-        const callNumber = copyForm.callNumber.trim();
-        const copyNumber = parsePositiveIntOrNull(copyForm.copyNumber);
-
-        if (!accessionNumber) {
-            const message = "Accession number is required for the new copy.";
-            setCopyError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!barcode) {
-            const message = "Barcode is required for the new copy.";
-            setCopyError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (copyNumber === null) {
-            const message = "Copy number is required and must be a positive number.";
-            setCopyError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!callNumber) {
-            const message = "Call number is required for the new copy.";
+        const count = parsePositiveIntOrNull(copyForm.count);
+        if (count === null) {
+            const message = "Please enter a valid positive number of copies to add.";
             setCopyError(message);
             toast.error("Validation error", { description: message });
             return;
@@ -943,20 +883,22 @@ export default function LibrarianBooksPage() {
 
         setCopying(true);
         try {
-            const created = await addBookCopy(copySourceBook.id, {
-                accessionNumber,
-                copyNumber,
-                barcode,
-                callNumber,
-                volumeNumber: copyForm.volumeNumber.trim() || undefined,
+            const updated = await addBookCopy(copySourceBook.id, {
+                count,
             });
 
-            const nextBooks = [created, ...books];
-            setBooks(nextBooks);
+            setBooks((prev) => {
+                const exists = prev.some((book) => book.id === updated.id);
+                if (!exists) {
+                    return [updated, ...prev];
+                }
+
+                return prev.map((book) => (book.id === updated.id ? updated : book));
+            });
             setCopyForm(buildAddCopyFormValues(copySourceBook));
 
-            toast.success("Copy added", {
-                description: `A new copy record for "${copySourceBook.title}" has been created. Enter the next accession number and copy number to continue.`,
+            toast.success("Copy count updated", {
+                description: `${count} cop${count === 1 ? "y has" : "ies have"} been added to "${copySourceBook.title}".`,
             });
         } catch (err: unknown) {
             const message = getErrorMessage(err) || "Failed to add the copy. Please try again later.";
@@ -1212,9 +1154,9 @@ export default function LibrarianBooksPage() {
                     <div className="min-w-0">
                         <h2 className="text-lg font-semibold leading-tight">Catalog &amp; inventory</h2>
                         <p className="text-xs text-white/70">
-                            Add the first copy of a title, use <span className="font-semibold text-white">Add copy</span>{" "}
-                            for additional physical copies, and manage each copy&apos;s accession
-                            number, barcode, and copy number separately.
+                            Add the first copy of a title, then use <span className="font-semibold text-white">Add copy</span>{" "}
+                            to increase the inventory count for the same catalog entry without
+                            creating repeated duplicate rows for saved copies.
                         </p>
                     </div>
                 </div>
@@ -1307,10 +1249,8 @@ export default function LibrarianBooksPage() {
                             Add copy
                         </DialogTitle>
                         <DialogDescription className="text-white/70">
-                            Duplicate the catalog details from the selected book and enter the new
-                            copy&apos;s accession number, barcode, and copy number. After each save,
-                            the copy-specific fields are cleared so you can continue adding the next
-                            copy.
+                            Add more inventory to the selected catalog entry without creating a
+                            separate duplicate row for each saved copy.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1327,56 +1267,20 @@ export default function LibrarianBooksPage() {
                                     Call no. {copySourceBook ? formatDetailValue(copySourceBook.callNumber) : "—"}
                                 </span>
                                 <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/75">
-                                    Source copy {copySourceBook ? formatDetailValue(copySourceBook.copyNumber) : "—"}
-                                </span>
-                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/75">
                                     {copySourceBook ? getLibraryAreaValue(copySourceBook) : "—"}
                                 </span>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/75">
+                                    {copySourceBook ? getInventoryValue(copySourceBook) : "—"}
+                                </span>
                             </div>
-                            {copySourceBook ? (
-                                <p className="mt-3 text-[11px] text-white/60">
-                                    Suggested next copy number:{" "}
-                                    <span className="font-medium text-white/85">
-                                        {getSuggestedNextCopyNumber(copySourceBook, books) || "Add manually"}
-                                    </span>
-                                </p>
-                            ) : null}
                         </div>
 
                         <Field>
-                            <FieldLabel className="text-white">Accession number *</FieldLabel>
+                            <FieldLabel className="text-white">Number of copies to add *</FieldLabel>
                             <FieldContent>
                                 <Input
-                                    value={copyForm.accessionNumber}
-                                    onChange={(e) =>
-                                        patchCopyForm({ accessionNumber: e.target.value })
-                                    }
-                                    placeholder="Required"
-                                    className="border-white/20 bg-slate-900/70 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel className="text-white">Barcode *</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={copyForm.barcode}
-                                    onChange={(e) => patchCopyForm({ barcode: e.target.value })}
-                                    placeholder="Required"
-                                    className="border-white/20 bg-slate-900/70 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel className="text-white">Copy number *</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={copyForm.copyNumber}
-                                    onChange={(e) => patchCopyForm({ copyNumber: e.target.value })}
+                                    value={copyForm.count}
+                                    onChange={(e) => patchCopyForm({ count: e.target.value })}
                                     placeholder="Required (positive number)"
                                     className="border-white/20 bg-slate-900/70 text-white"
                                     inputMode="numeric"
@@ -1384,36 +1288,9 @@ export default function LibrarianBooksPage() {
                                 />
                             </FieldContent>
                             <p className="mt-1 text-[11px] text-white/60">
-                                This field is cleared again after every successful save.
+                                This increases the inventory count for the same book entry instead of
+                                creating a repeated catalog record.
                             </p>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel className="text-white">Call number *</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={copyForm.callNumber}
-                                    onChange={(e) => patchCopyForm({ callNumber: e.target.value })}
-                                    placeholder="Required"
-                                    className="border-white/20 bg-slate-900/70 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel className="text-white">Volume number</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={copyForm.volumeNumber}
-                                    onChange={(e) =>
-                                        patchCopyForm({ volumeNumber: e.target.value })
-                                    }
-                                    placeholder="Optional"
-                                    className="border-white/20 bg-slate-900/70 text-white"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
                         </Field>
 
                         {copyError ? <FieldError>{copyError}</FieldError> : null}
@@ -1445,7 +1322,7 @@ export default function LibrarianBooksPage() {
                                     Saving…
                                 </span>
                             ) : (
-                                "Save copy"
+                                "Add copies"
                             )}
                         </Button>
                     </DialogFooter>
