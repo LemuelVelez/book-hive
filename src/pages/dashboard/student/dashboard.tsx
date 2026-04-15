@@ -431,7 +431,7 @@ export default function StudentDashboardPage() {
                             My Library overview
                         </h2>
                         <p className="text-xs text-white/70">
-                            Quick snapshot of your books, circulation, fines, feedback, and
+                            Quick snapshot of your books, borrowed books, fines, feedback, and
                             damage reports.
                         </p>
                     </div>
@@ -471,8 +471,8 @@ export default function StudentDashboardPage() {
                             variant="outline"
                             className="w-full sm:w-auto border-white/20 text-white/90 hover:bg-white/10 justify-center"
                         >
-                            <Link to="/dashboard/circulation">
-                                My circulation
+                            <Link to="/dashboard/borrowed-books">
+                                Borrowed books
                                 <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
                             </Link>
                         </Button>
@@ -541,15 +541,15 @@ export default function StudentDashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* Circulation summary */}
+                {/* Borrowed books summary */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2 flex flex-row items-center justify-between">
                         <div className="space-y-1">
                             <CardTitle className="text-sm font-semibold">
-                                Circulation
+                                Borrowed books
                             </CardTitle>
                             <p className="text-[11px] text-white/60">
-                                From <span className="font-medium">My Circulation</span>.
+                                From <span className="font-medium">Borrowed Books</span>.
                             </p>
                         </div>
                         <div className="rounded-full bg-emerald-500/20 p-2">
@@ -596,8 +596,8 @@ export default function StudentDashboardPage() {
                             variant="ghost"
                             className="px-0 text-xs text-emerald-200 hover:text-emerald-100 hover:bg-transparent"
                         >
-                            <Link to="/dashboard/circulation">
-                                View circulation
+                            <Link to="/dashboard/borrowed-books">
+                                View borrowed books
                                 <ArrowRight className="h-3 w-3 ml-1" />
                             </Link>
                         </Button>
@@ -900,16 +900,16 @@ export default function StudentDashboardPage() {
                 </Card>
             </div>
 
-            {/* Main content: circulation & insights previews */}
+            {/* Main content: borrowed books & insights previews */}
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)]">
-                {/* Recent circulation */}
+                {/* Recent borrowed books */}
                 <Card className="bg-slate-800/60 border-white/10">
                     <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                                 <Layers className="h-4 w-4 text-emerald-300" />
                                 <CardTitle className="text-sm font-semibold">
-                                    Recent circulation
+                                    Recent borrowed books
                                 </CardTitle>
                             </div>
                             <Button
@@ -918,12 +918,12 @@ export default function StudentDashboardPage() {
                                 variant="outline"
                                 className="border-white/20 text-xs text-white/80 hover:bg-white/10"
                             >
-                                <Link to="/dashboard/circulation">View all</Link>
+                                <Link to="/dashboard/borrowed-books">View all</Link>
                             </Button>
                         </div>
                         <p className="mt-1 text-[11px] text-white/60">
                             Direct overview from your{" "}
-                            <span className="font-medium">My Circulation</span> page.
+                            <span className="font-medium">Borrowed Books</span> page.
                         </p>
                     </CardHeader>
                     <CardContent className="overflow-x-hidden md:overflow-x-auto">
@@ -935,7 +935,7 @@ export default function StudentDashboardPage() {
                             </div>
                         ) : recentBorrows.length === 0 ? (
                             <div className="py-8 text-center text-sm text-white/70">
-                                No circulation activity yet.
+                                No borrowed books activity yet.
                                 <br />
                                 <span className="text-xs opacity-80">
                                     Borrow a book from the catalog to see it here.

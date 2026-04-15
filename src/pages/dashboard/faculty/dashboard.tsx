@@ -526,9 +526,9 @@ export default function FacultyDashboardPage() {
                         variant="outline"
                         className="border-white/20 text-white hover:bg-white/10"
                     >
-                        <Link to="/dashboard/faculty/circulation">
+                        <Link to="/dashboard/faculty/borrowed-books">
                             <Layers className="h-4 w-4 mr-2" aria-hidden="true" />
-                            My circulation
+                            Borrowed books
                         </Link>
                     </Button>
 
