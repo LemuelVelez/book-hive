@@ -922,7 +922,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                     <div>
                         <h2 className="text-lg font-semibold leading-tight">Fines</h2>
                         <p className="text-xs text-white/70">
-                            Over-the-counter payments only. Collect the payment physically, require the cashier OR,
+                            Over-the-counter payments only. Librarian and assistant librarian staff can collect the payment physically, require the cashier OR,
                             then mark the fine as <span className="font-semibold text-emerald-200">Paid</span>.
                         </p>
                         <p className="mt-1 text-xs text-amber-200/90">

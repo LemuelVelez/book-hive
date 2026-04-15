@@ -924,7 +924,7 @@ export default function LibrarianBorrowRecordsPage() {
         if (isOverdueBorrowRecord(rec)) {
           statusLabel = `Overdue${overdueDays > 0 ? ` (${overdueDays} day${overdueDays === 1 ? "" : "s"})` : ""}`;
         } else if (isPendingPickupBorrowRecord(rec)) {
-          statusLabel = "Pending Pickup";
+          statusLabel = "Reserved Pending Pickup";
         } else if (isPendingReturnBorrowRecord(rec)) {
           statusLabel = "Pending Return";
         } else if (hasOpenReturnRequest(rec)) {
@@ -1351,7 +1351,7 @@ export default function LibrarianBorrowRecordsPage() {
               </div>
               {dashboardMetrics.emailDigestPreview.length === 0 ? (
                 <p className="mt-2 text-xs text-sky-50/75">
-                  No due-today, overdue, pending pickup, pending return, return-requested, or pending extension records are currently queued.
+                  No due-today, overdue, reserved pending pickup, pending return, return-requested, or pending extension records are currently queued.
                 </p>
               ) : (
                 <div className="mt-2 space-y-2 text-xs text-sky-50/85">
@@ -1418,13 +1418,13 @@ export default function LibrarianBorrowRecordsPage() {
         <Card className="border-sky-400/20 bg-sky-500/10">
           <CardContent className="p-4">
             <div className="text-[11px] uppercase tracking-wide text-sky-100/70">
-              Pending Pickup
+              Reserved Pending Pickup
             </div>
             <div className="mt-2 text-2xl font-semibold text-sky-100">
               {dashboardMetrics.pendingPickupCount}
             </div>
             <div className="mt-1 text-xs text-sky-50/70">
-              Borrow requests waiting to be released.
+              Reserved books waiting to be picked up within 24 hours.
             </div>
           </CardContent>
         </Card>
@@ -1704,7 +1704,7 @@ export default function LibrarianBorrowRecordsPage() {
                                           <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
                                             <span className="inline-flex items-center gap-1">
                                               <Clock3 className="h-3 w-3" />
-                                              Pending Pickup
+                                              Reserved Pending Pickup
                                             </span>
                                           </Badge>
                                         ) : isPendingReturn || isLegacyPending ? (
@@ -1951,7 +1951,7 @@ export default function LibrarianBorrowRecordsPage() {
                                                     <span className="font-semibold text-emerald-200">
                                                       Returned
                                                     </span>
-                                                    .
+                                                    . If it is not picked up within 24 hours, the reservation automatically becomes available again.
                                                   </p>
                                                 </div>
 

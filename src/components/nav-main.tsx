@@ -173,6 +173,11 @@ export function NavMain() {
             badgeCount: borrowRecordsBadgeCount,
         },
         {
+            label: "Fines",
+            icon: ReceiptText,
+            to: `${assistantBasePath}/fines`,
+        },
+        {
             label: "Settings",
             icon: Settings,
             to: `${assistantBasePath}/settings`,
