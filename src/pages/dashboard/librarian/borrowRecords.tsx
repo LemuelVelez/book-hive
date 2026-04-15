@@ -234,6 +234,39 @@ function computeAutoFine(dueDate?: string | null) {
   return { overdueDays, autoFine };
 }
 
+function parseDateValue(dateValue?: string | null): Date | undefined {
+  if (!dateValue) return undefined;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getReturnedOverdueDays(rec: BorrowRecordDTO): number {
+  if (!isReturnedBorrowRecord(rec) || !rec.dueDate || !rec.returnDate) {
+    return 0;
+  }
+
+  const dueDate = parseYmdToDate(rec.dueDate);
+  const returnDate = parseDateValue(rec.returnDate);
+
+  if (!dueDate || !returnDate) {
+    return 0;
+  }
+
+  const diffMs = returnDate.getTime() - dueDate.getTime();
+  const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  return rawDays > 0 ? rawDays : 0;
+}
+
+function isReturnedOverdueBorrowRecord(rec: BorrowRecordDTO) {
+  return isReturnedBorrowRecord(rec) && getReturnedOverdueDays(rec) > 0;
+}
+
+function isReturnedOnTimeBorrowRecord(rec: BorrowRecordDTO) {
+  return isReturnedBorrowRecord(rec) && !isReturnedOverdueBorrowRecord(rec);
+}
+
 function normalizeBorrowStatus(status?: string | null): string {
   return (status ?? "").toLowerCase().trim();
 }
@@ -321,16 +354,22 @@ function compareBorrowRecordsByUrgency(
 
 function parseYmdToDate(d?: string | null): Date | undefined {
   if (!d) return undefined;
-  const parts = d.split("-");
-  if (parts.length !== 3) return undefined;
-  const [yStr, mStr, dayStr] = parts;
-  const y = Number(yStr);
-  const m = Number(mStr);
-  const day = Number(dayStr);
-  if (!y || !m || !day) return undefined;
-  const date = new Date(y, m - 1, day);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date;
+
+  const trimmed = d.trim();
+  const ymdMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (ymdMatch) {
+    const [, yStr, mStr, dayStr] = ymdMatch;
+    const y = Number(yStr);
+    const m = Number(mStr);
+    const day = Number(dayStr);
+    if (!y || !m || !day) return undefined;
+    const date = new Date(y, m - 1, day);
+    if (Number.isNaN(date.getTime())) return undefined;
+    return date;
+  }
+
+  return parseDateValue(trimmed);
 }
 
 function formatDateForApi(date: Date): string {
@@ -373,6 +412,9 @@ type BorrowEmailDigestPreviewItem = {
 type BorrowDashboardMetrics = {
   dueTodayCount: number;
   overdueCount: number;
+  overdueCardCount: number;
+  returnedOnTimeCount: number;
+  returnedOverdueCount: number;
   pendingPickupCount: number;
   pendingReturnCount: number;
   pendingExtensionCount: number;
@@ -829,6 +871,13 @@ export default function LibrarianBorrowRecordsPage() {
   const dashboardMetrics = React.useMemo<BorrowDashboardMetrics>(() => {
     const dueTodayCount = records.filter((rec) => isDueTodayBorrowRecord(rec)).length;
     const overdueCount = records.filter((rec) => isOverdueBorrowRecord(rec)).length;
+    const returnedOnTimeCount = records.filter((rec) =>
+      isReturnedOnTimeBorrowRecord(rec)
+    ).length;
+    const returnedOverdueCount = records.filter((rec) =>
+      isReturnedOverdueBorrowRecord(rec)
+    ).length;
+    const overdueCardCount = overdueCount + returnedOverdueCount;
     const pendingPickupCount = records.filter((rec) =>
       isPendingPickupBorrowRecord(rec)
     ).length;
@@ -897,6 +946,9 @@ export default function LibrarianBorrowRecordsPage() {
     return {
       dueTodayCount,
       overdueCount,
+      overdueCardCount,
+      returnedOnTimeCount,
+      returnedOverdueCount,
       pendingPickupCount,
       pendingReturnCount,
       pendingExtensionCount,
@@ -994,6 +1046,12 @@ export default function LibrarianBorrowRecordsPage() {
       );
       const activeCount = rows.filter((r) => !isReturnedBorrowRecord(r)).length;
       const returnedCount = rows.length - activeCount;
+      const returnedOnTimeCount = rows.filter((r) =>
+        isReturnedOnTimeBorrowRecord(r)
+      ).length;
+      const returnedOverdueCount = rows.filter((r) =>
+        isReturnedOverdueBorrowRecord(r)
+      ).length;
       const actionRequiredCount = rows.filter((r) =>
         isBorrowRecordActionRequired(r, canManageExtensions)
       ).length;
@@ -1010,6 +1068,8 @@ export default function LibrarianBorrowRecordsPage() {
         rows,
         activeCount,
         returnedCount,
+        returnedOnTimeCount,
+        returnedOverdueCount,
         actionRequiredCount,
         topPriority,
         earliestDueDate,
@@ -1375,10 +1435,10 @@ export default function LibrarianBorrowRecordsPage() {
               Overdue
             </div>
             <div className="mt-2 text-2xl font-semibold text-red-100">
-              {dashboardMetrics.overdueCount}
+              {dashboardMetrics.overdueCardCount}
             </div>
             <div className="mt-1 text-xs text-red-50/70">
-              Active borrow records already past the due date.
+              {dashboardMetrics.overdueCount} active overdue record(s), {dashboardMetrics.returnedOverdueCount} returned but overdue record(s).
             </div>
           </CardContent>
         </Card>
@@ -1472,6 +1532,9 @@ export default function LibrarianBorrowRecordsPage() {
                 </span>{" "}
                 {groupedByUser.length === 1 ? "user" : "users"}.
                 <span className="ml-2">
+                  Returned: {dashboardMetrics.returnedOnTimeCount} on time • {dashboardMetrics.returnedOverdueCount} overdue.
+                </span>
+                <span className="ml-2">
                   Tip: use{" "}
                   <span className="font-semibold text-amber-200">
                     Needs Action
@@ -1504,7 +1567,7 @@ export default function LibrarianBorrowRecordsPage() {
                             </Badge>
                           ) : null}
                           <span className="min-w-0 truncate text-sm font-semibold text-white">
-                            {group.name} • {group.activeCount} Active • {group.returnedCount} Returned • {group.rows.length} Total
+                            {group.name} • {group.activeCount} Active • {group.returnedOnTimeCount} Returned On Time • {group.returnedOverdueCount} Returned Overdue • {group.rows.length} Total
                           </span>
                         </div>
                       </AccordionTrigger>
@@ -1574,6 +1637,11 @@ export default function LibrarianBorrowRecordsPage() {
                                   isPendingReturn ||
                                   isLegacyPending) &&
                                 overdueDays > 0;
+                              const returnedOverdueDays = getReturnedOverdueDays(rec);
+                              const isReturnedOverdue =
+                                isReturned && returnedOverdueDays > 0;
+                              const isReturnedOnTime =
+                                isReturned && !isReturnedOverdue;
 
                               const fineAmount = normalizeFine(rec.fine as any);
 
@@ -1617,12 +1685,21 @@ export default function LibrarianBorrowRecordsPage() {
 
                                       <div className="flex flex-wrap gap-2">
                                         {isReturned ? (
-                                          <Badge className="border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500">
-                                            <span className="inline-flex items-center gap-1">
-                                              <CheckCircle2 className="h-3 w-3" />
-                                              Returned
-                                            </span>
-                                          </Badge>
+                                          isReturnedOverdue ? (
+                                            <Badge className="border-red-400/80 bg-red-500/80 text-white hover:bg-red-500">
+                                              <span className="inline-flex items-center gap-1">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Returned Overdue
+                                              </span>
+                                            </Badge>
+                                          ) : (
+                                            <Badge className="border-emerald-400/80 bg-emerald-500/80 text-white hover:bg-emerald-500">
+                                              <span className="inline-flex items-center gap-1">
+                                                <CheckCircle2 className="h-3 w-3" />
+                                                Returned On Time
+                                              </span>
+                                            </Badge>
+                                          )
                                         ) : isPendingPickup ? (
                                           <Badge className="border-amber-400/80 bg-amber-500/80 text-white hover:bg-amber-500">
                                             <span className="inline-flex items-center gap-1">
@@ -1663,7 +1740,7 @@ export default function LibrarianBorrowRecordsPage() {
                                   </CardHeader>
 
                                   <CardContent className="space-y-4">
-                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                                       <DetailItem
                                         label="Borrow Date"
                                         value={fmtDate(rec.borrowDate)}
@@ -1675,6 +1752,24 @@ export default function LibrarianBorrowRecordsPage() {
                                       <DetailItem
                                         label="Return Date"
                                         value={fmtDate(rec.returnDate)}
+                                      />
+                                      <DetailItem
+                                        label="Return Outcome"
+                                        value={
+                                          isReturned ? (
+                                            isReturnedOverdue ? (
+                                              <span className="text-red-200">
+                                                Returned overdue by {returnedOverdueDays} day{returnedOverdueDays === 1 ? "" : "s"}
+                                              </span>
+                                            ) : (
+                                              <span className="text-emerald-200">
+                                                Returned on time
+                                              </span>
+                                            )
+                                          ) : (
+                                            "Still active"
+                                          )
+                                        }
                                       />
                                       <DetailItem
                                         label="Fine"
@@ -1691,6 +1786,14 @@ export default function LibrarianBorrowRecordsPage() {
                                                   No overdue fine yet
                                                 </div>
                                               )
+                                            ) : isReturnedOverdue ? (
+                                              <div className="text-xs text-red-200">
+                                                Returned {returnedOverdueDays} day{returnedOverdueDays === 1 ? "" : "s"} overdue
+                                              </div>
+                                            ) : isReturnedOnTime ? (
+                                              <div className="text-xs text-emerald-200">
+                                                Returned on time
+                                              </div>
                                             ) : fineAmount > 0 ? (
                                               <div className="text-xs text-emerald-200">
                                                 Fine assessed for this borrow
