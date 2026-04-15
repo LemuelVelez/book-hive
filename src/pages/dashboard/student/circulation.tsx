@@ -81,10 +81,16 @@ type EmailSyncState = {
   syncedAt: string | null;
 };
 
+type RecordSortMeta = {
+  finalFineAmount: number;
+  serverNow: string | null;
+};
+
 const FIXED_EXTENSION_DAYS = 1;
 const APP_TIME_ZONE = "Asia/Manila";
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 1000 * 60 * 60 * 24;
+const MAX_SORT_TIME = Number.MAX_SAFE_INTEGER;
 
 function getErrorMessage(e: unknown): string {
   if (!e) return "";
@@ -191,6 +197,67 @@ function computeOverdueDays(
   const rawDays = Math.floor(diffMs / DAY_MS);
 
   return rawDays > 0 ? rawDays : 0;
+}
+
+function getDateSortValue(value?: string | null): number {
+  if (!value) return MAX_SORT_TIME;
+
+  if (isDateOnly(value)) {
+    return dateOnlyToUtcMs(value);
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return MAX_SORT_TIME;
+  return parsed.getTime();
+}
+
+function getRecordSortPriority(
+  record: BorrowRecordDTO,
+  meta: RecordSortMeta
+): number {
+  const status = String(record.status ?? "").toLowerCase().trim();
+  const isReturned = status === "returned";
+  const isPendingPickup = status === "pending_pickup";
+  const isPendingReturn = status === "pending_return" || status === "pending";
+  const isBorrowed = status === "borrowed";
+  const isActiveBorrow = !isReturned && (isBorrowed || isPendingPickup || isPendingReturn);
+  const isOverdue =
+    isActiveBorrow &&
+    (computeOverdueDays(record.dueDate, meta.serverNow) > 0 ||
+      meta.finalFineAmount > 0);
+
+  if (isOverdue) return 0;
+  if (isPendingPickup) return 1;
+  if (isPendingReturn) return 2;
+  if (isBorrowed) return 3;
+  if (isReturned) return 5;
+  return 4;
+}
+
+function compareBorrowRecords(
+  a: BorrowRecordDTO,
+  b: BorrowRecordDTO,
+  metaById: Record<string, RecordSortMeta>
+): number {
+  const metaA = metaById[a.id] ?? { finalFineAmount: 0, serverNow: null };
+  const metaB = metaById[b.id] ?? { finalFineAmount: 0, serverNow: null };
+
+  const priorityDiff =
+    getRecordSortPriority(a, metaA) - getRecordSortPriority(b, metaB);
+  if (priorityDiff !== 0) return priorityDiff;
+
+  const dueDiff = getDateSortValue(a.dueDate) - getDateSortValue(b.dueDate);
+  if (dueDiff !== 0) return dueDiff;
+
+  const borrowDiff =
+    getDateSortValue(a.borrowDate) - getDateSortValue(b.borrowDate);
+  if (borrowDiff !== 0) return borrowDiff;
+
+  const returnDiff =
+    getDateSortValue(a.returnDate) - getDateSortValue(b.returnDate);
+  if (returnDiff !== 0) return returnDiff;
+
+  return String(a.id).localeCompare(String(b.id));
 }
 
 async function fetchBorrowRecordsSnapshot(): Promise<{
@@ -548,6 +615,16 @@ export default function StudentCirculationPage() {
     }
   }
 
+  const finesByBorrowId = React.useMemo(() => {
+    const map: Record<string, FineDTO> = {};
+    for (const f of fines) {
+      if (f.borrowRecordId) {
+        map[f.borrowRecordId] = f;
+      }
+    }
+    return map;
+  }, [fines]);
+
   const filtered = React.useMemo(() => {
     let rows = [...records];
 
@@ -578,23 +655,27 @@ export default function StudentCirculationPage() {
       });
     }
 
-    return rows.sort((a, b) => b.borrowDate.localeCompare(a.borrowDate));
-  }, [records, statusFilter, search]);
+    const metaById: Record<string, RecordSortMeta> = {};
+    for (const row of rows) {
+      const linkedFine = finesByBorrowId[row.id];
+      const fineAmountFromRecord = normalizeFine((row as any).fine);
+      const finalFineAmount = linkedFine
+        ? normalizeFine(linkedFine.amount)
+        : fineAmountFromRecord;
+
+      metaById[row.id] = {
+        finalFineAmount,
+        serverNow,
+      };
+    }
+
+    return rows.sort((a, b) => compareBorrowRecords(a, b, metaById));
+  }, [records, statusFilter, search, finesByBorrowId, serverNow]);
 
   const activeBorrows = React.useMemo(
     () => records.filter((r) => r.status !== "returned"),
     [records]
   );
-
-  const finesByBorrowId = React.useMemo(() => {
-    const map: Record<string, FineDTO> = {};
-    for (const f of fines) {
-      if (f.borrowRecordId) {
-        map[f.borrowRecordId] = f;
-      }
-    }
-    return map;
-  }, [fines]);
 
   const totalActiveFine = React.useMemo(
     () =>
@@ -799,7 +880,6 @@ export default function StudentCirculationPage() {
       </div>
 
       <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-
         <Card className="border-white/10 bg-slate-800/60">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -839,7 +919,10 @@ export default function StudentCirculationPage() {
             </p>
 
             <p className="mt-2 text-[11px] text-white/45">
-              Last checked: {emailSyncState.syncedAt ? fmtDateTime(emailSyncState.syncedAt) : "Waiting for automatic check"}
+              Last checked:{" "}
+              {emailSyncState.syncedAt
+                ? fmtDateTime(emailSyncState.syncedAt)
+                : "Waiting for automatic check"}
             </p>
           </CardContent>
         </Card>
@@ -1136,487 +1219,487 @@ export default function StudentCirculationPage() {
                                           </DialogDescription>
                                         </DialogHeader>
                                         <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
-                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                      <CirculationDetail
-                                        label="Borrow ID"
-                                        value={record.id}
-                                      />
-                                      <CirculationDetail
-                                        label="Book"
-                                        value={record.bookTitle ?? `Book #${record.bookId}`}
-                                      />
-                                      <CirculationDetail
-                                        label="Borrowed on"
-                                        value={fmtDate(record.borrowDate)}
-                                      />
-
-                                      <CirculationDetail label="Due details">
-                                        <div className="space-y-2 text-sm text-white/90">
-                                          <div>{fmtDate(record.dueDate)}</div>
-
-                                          {extensionCount > 0 ? (
-                                            <div className="inline-flex items-center gap-1 rounded-full border border-sky-300/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
-                                              <span className="h-1.5 w-1.5 rounded-full bg-sky-200" />
-                                              Extended {extensionCount}× (+{extensionTotalDays}d)
-                                            </div>
-                                          ) : null}
-
-                                          {extensionCount > 0 && lastExtendedAt ? (
-                                            <div className="text-xs text-white/60">
-                                              Last: {fmtDateTime(lastExtendedAt)}
-                                              {typeof lastExtensionDays === "number"
-                                                ? ` (+${lastExtensionDays}d)`
-                                                : ""}
-                                            </div>
-                                          ) : null}
-
-                                          {reqStatus === "pending" ? (
-                                            <div className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                                              <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                              Extension pending
-                                              {typeof reqDays === "number"
-                                                ? ` (+${reqDays}d)`
-                                                : ""}
-                                            </div>
-                                          ) : null}
-
-                                          {reqStatus === "approved" ? (
-                                            <div className="text-xs text-white/60">
-                                              Extension approved:{" "}
-                                              {fmtDateTime(decidedAt ?? reqAt)}
-                                            </div>
-                                          ) : null}
-
-                                          {reqStatus === "disapproved" ? (
-                                            <div className="text-xs text-white/60">
-                                              Extension disapproved:{" "}
-                                              {fmtDateTime(decidedAt ?? reqAt)}
-                                            </div>
-                                          ) : null}
-
-                                          {extensionDecisionNote ? (
-                                            <ExtensionDecisionNotice
-                                              status={reqStatus}
-                                              decidedAt={decidedAt ?? reqAt}
-                                              note={extensionDecisionNote}
-                                              className="mt-1"
+                                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                            <CirculationDetail
+                                              label="Borrow ID"
+                                              value={record.id}
                                             />
-                                          ) : null}
-                                        </div>
-                                      </CirculationDetail>
+                                            <CirculationDetail
+                                              label="Book"
+                                              value={record.bookTitle ?? `Book #${record.bookId}`}
+                                            />
+                                            <CirculationDetail
+                                              label="Borrowed on"
+                                              value={fmtDate(record.borrowDate)}
+                                            />
 
-                                      <CirculationDetail
-                                        label="Returned on"
-                                        value={fmtDate(record.returnDate)}
-                                      />
+                                            <CirculationDetail label="Due details">
+                                              <div className="space-y-2 text-sm text-white/90">
+                                                <div>{fmtDate(record.dueDate)}</div>
 
-                                      <CirculationDetail label="Status">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <RecordStatusBadge
-                                            isReturned={isReturned}
-                                            isAnyPending={isAnyPending}
-                                            hasLibrarianReturnRequest={showLibrarianReturnRequest}
-                                            isOverdue={isOverdue}
-                                          />
-                                          {showLibrarianReturnRequest ? (
-                                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
-                                              <BellRing className="h-3 w-3" />
-                                              Requested by librarian
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                      </CirculationDetail>
+                                                {extensionCount > 0 ? (
+                                                  <div className="inline-flex items-center gap-1 rounded-full border border-sky-300/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-sky-200" />
+                                                    Extended {extensionCount}× (+{extensionTotalDays}d)
+                                                  </div>
+                                                ) : null}
 
-                                      <CirculationDetail label="Fine summary">
-                                        <div className="space-y-2">
-                                          <div className="text-sm text-white/90">
-                                            {peso(finalFineAmount)}
-                                          </div>
+                                                {extensionCount > 0 && lastExtendedAt ? (
+                                                  <div className="text-xs text-white/60">
+                                                    Last: {fmtDateTime(lastExtendedAt)}
+                                                    {typeof lastExtensionDays === "number"
+                                                      ? ` (+${lastExtensionDays}d)`
+                                                      : ""}
+                                                  </div>
+                                                ) : null}
 
-                                          <div className="flex flex-wrap gap-2">
-                                            {isActiveBorrow &&
-                                            isOverdue &&
-                                            finalFineAmount > 0 ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                                Accruing overdue fine
-                                              </span>
-                                            ) : null}
+                                                {reqStatus === "pending" ? (
+                                                  <div className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                                                    Extension pending
+                                                    {typeof reqDays === "number"
+                                                      ? ` (+${reqDays}d)`
+                                                      : ""}
+                                                  </div>
+                                                ) : null}
 
-                                            {linkedFine &&
-                                            linkedFineStatus === "active" ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                                                Active fine (unpaid)
-                                              </span>
-                                            ) : null}
+                                                {reqStatus === "approved" ? (
+                                                  <div className="text-xs text-white/60">
+                                                    Extension approved:{" "}
+                                                    {fmtDateTime(decidedAt ?? reqAt)}
+                                                  </div>
+                                                ) : null}
 
-                                            {linkedFine &&
-                                            linkedFineStatus ===
-                                              "pending_verification" ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/40 bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                                                Awaiting librarian update
-                                              </span>
-                                            ) : null}
+                                                {reqStatus === "disapproved" ? (
+                                                  <div className="text-xs text-white/60">
+                                                    Extension disapproved:{" "}
+                                                    {fmtDateTime(decidedAt ?? reqAt)}
+                                                  </div>
+                                                ) : null}
 
-                                            {linkedFine &&
-                                            linkedFineStatus === "paid" ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                                                Fine paid
-                                              </span>
-                                            ) : null}
+                                                {extensionDecisionNote ? (
+                                                  <ExtensionDecisionNotice
+                                                    status={reqStatus}
+                                                    decidedAt={decidedAt ?? reqAt}
+                                                    note={extensionDecisionNote}
+                                                    className="mt-1"
+                                                  />
+                                                ) : null}
+                                              </div>
+                                            </CirculationDetail>
 
-                                            {linkedFine &&
-                                            linkedFineStatus === "cancelled" ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/40 bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                                                Fine cancelled
-                                              </span>
-                                            ) : null}
-                                          </div>
-                                        </div>
-                                      </CirculationDetail>
+                                            <CirculationDetail
+                                              label="Returned on"
+                                              value={fmtDate(record.returnDate)}
+                                            />
 
-                                      <CirculationDetail
-                                        label={
-                                          showLibrarianReturnRequest
-                                            ? "Librarian note"
-                                            : isPendingReturn || isLegacyPending
-                                              ? "Return request status"
-                                              : "Librarian note"
-                                        }
-                                        className="xl:col-span-2"
-                                      >
-                                        {showLibrarianReturnRequest ? (
-                                          <LibrarianReturnRequestNotice
-                                            requesterName={librarianRequesterName}
-                                            requestedAt={record.returnRequestedAt}
-                                            note={librarianRequestNote}
-                                          />
-                                        ) : isPendingReturn || isLegacyPending ? (
-                                          <BorrowerReturnRequestNotice
-                                            requestedAt={record.returnRequestedAt}
-                                          />
-                                        ) : (
-                                          <span className="text-xs text-white/50">
-                                            No librarian note for this record.
-                                          </span>
-                                        )}
-                                      </CirculationDetail>
+                                            <CirculationDetail label="Status">
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <RecordStatusBadge
+                                                  isReturned={isReturned}
+                                                  isAnyPending={isAnyPending}
+                                                  hasLibrarianReturnRequest={showLibrarianReturnRequest}
+                                                  isOverdue={isOverdue}
+                                                />
+                                                {showLibrarianReturnRequest ? (
+                                                  <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
+                                                    <BellRing className="h-3 w-3" />
+                                                    Requested by librarian
+                                                  </span>
+                                                ) : null}
+                                              </div>
+                                            </CirculationDetail>
 
-                                      <CirculationDetail
-                                        label="Actions"
-                                        className="xl:col-span-3"
-                                      >
-                                        {isBorrowed ? (
-                                          <div className="flex flex-col gap-2 lg:flex-row">
-                                            <AlertDialog>
-                                              <AlertDialogTrigger asChild>
-                                                <Button
-                                                  type="button"
-                                                  className={
-                                                    "bg-purple-600 text-white hover:bg-purple-700 lg:min-w-48 " +
-                                                    actionButtonBaseClasses
-                                                  }
-                                                  disabled={returnBusyId === record.id}
-                                                >
-                                                  {returnBusyId === record.id ? (
-                                                    <span className="inline-flex items-center gap-2">
-                                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                                      Sending…
-                                                    </span>
-                                                  ) : showLibrarianReturnRequest ? (
-                                                    "Respond with return request"
-                                                  ) : (
-                                                    "Request return"
-                                                  )}
-                                                </Button>
-                                              </AlertDialogTrigger>
-
-                                              <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-900 text-white">
-                                                <AlertDialogHeader>
-                                                  <AlertDialogTitle>
-                                                    Request to return this book?
-                                                  </AlertDialogTitle>
-                                                  <AlertDialogDescription className="text-white/70">
-                                                    This will change the status to{" "}
-                                                    <span className="font-semibold text-amber-200">
-                                                      Pending
-                                                    </span>
-                                                    .
-                                                  </AlertDialogDescription>
-                                                </AlertDialogHeader>
-
-                                                <div className="mt-3 space-y-1 text-sm text-white/80">
-                                                  <p>
-                                                    <span className="text-white/60">
-                                                      Book:
-                                                    </span>{" "}
-                                                    <span className="font-semibold text-white">
-                                                      {record.bookTitle ??
-                                                        `Book #${record.bookId}`}
-                                                    </span>
-                                                  </p>
-                                                  <p>
-                                                    <span className="text-white/60">
-                                                      Borrowed on:
-                                                    </span>{" "}
-                                                    {fmtDate(record.borrowDate)}
-                                                  </p>
-                                                  <p>
-                                                    <span className="text-white/60">
-                                                      Due date:
-                                                    </span>{" "}
-                                                    {fmtDate(record.dueDate)}
-                                                  </p>
-
-                                                  {showLibrarianReturnRequest ? (
-                                                    <LibrarianReturnRequestNotice
-                                                      requesterName={librarianRequesterName}
-                                                      requestedAt={record.returnRequestedAt}
-                                                      note={librarianRequestNote}
-                                                      className="mt-2"
-                                                    />
-                                                  ) : null}
-
-                                                  {finalFineAmount > 0 ? (
-                                                    <p className="text-red-300">
-                                                      Estimated fine if returned
-                                                      today:{" "}
-                                                      <span className="font-semibold">
-                                                        {peso(finalFineAmount)}
-                                                      </span>
-                                                    </p>
-                                                  ) : null}
+                                            <CirculationDetail label="Fine summary">
+                                              <div className="space-y-2">
+                                                <div className="text-sm text-white/90">
+                                                  {peso(finalFineAmount)}
                                                 </div>
 
-                                                <AlertDialogFooter>
-                                                  <AlertDialogCancel
-                                                    className="border-white/20 text-white hover:bg-black/20"
-                                                    disabled={returnBusyId === record.id}
-                                                  >
-                                                    Cancel
-                                                  </AlertDialogCancel>
-                                                  <AlertDialogAction
-                                                    className="bg-purple-600 text-white hover:bg-purple-700"
-                                                    disabled={returnBusyId === record.id}
-                                                    onClick={() =>
-                                                      void handleRequestReturn(record)
-                                                    }
-                                                  >
-                                                    {returnBusyId === record.id ? (
-                                                      <span className="inline-flex items-center gap-2">
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                        Sending…
-                                                      </span>
-                                                    ) : (
-                                                      "Submit request"
-                                                    )}
-                                                  </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                              </AlertDialogContent>
-                                            </AlertDialog>
+                                                <div className="flex flex-wrap gap-2">
+                                                  {isActiveBorrow &&
+                                                  isOverdue &&
+                                                  finalFineAmount > 0 ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                                                      <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                                                      Accruing overdue fine
+                                                    </span>
+                                                  ) : null}
 
-                                            <AlertDialog>
-                                              <AlertDialogTrigger asChild>
+                                                  {linkedFine &&
+                                                  linkedFineStatus === "active" ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                                                      <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                                                      Active fine (unpaid)
+                                                    </span>
+                                                  ) : null}
+
+                                                  {linkedFine &&
+                                                  linkedFineStatus ===
+                                                    "pending_verification" ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/40 bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
+                                                      <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                                                      Awaiting librarian update
+                                                    </span>
+                                                  ) : null}
+
+                                                  {linkedFine &&
+                                                  linkedFineStatus === "paid" ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                                                      Fine paid
+                                                    </span>
+                                                  ) : null}
+
+                                                  {linkedFine &&
+                                                  linkedFineStatus === "cancelled" ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/40 bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
+                                                      <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                                                      Fine cancelled
+                                                    </span>
+                                                  ) : null}
+                                                </div>
+                                              </div>
+                                            </CirculationDetail>
+
+                                            <CirculationDetail
+                                              label={
+                                                showLibrarianReturnRequest
+                                                  ? "Librarian note"
+                                                  : isPendingReturn || isLegacyPending
+                                                    ? "Return request status"
+                                                    : "Librarian note"
+                                              }
+                                              className="xl:col-span-2"
+                                            >
+                                              {showLibrarianReturnRequest ? (
+                                                <LibrarianReturnRequestNotice
+                                                  requesterName={librarianRequesterName}
+                                                  requestedAt={record.returnRequestedAt}
+                                                  note={librarianRequestNote}
+                                                />
+                                              ) : isPendingReturn || isLegacyPending ? (
+                                                <BorrowerReturnRequestNotice
+                                                  requestedAt={record.returnRequestedAt}
+                                                />
+                                              ) : (
+                                                <span className="text-xs text-white/50">
+                                                  No librarian note for this record.
+                                                </span>
+                                              )}
+                                            </CirculationDetail>
+
+                                            <CirculationDetail
+                                              label="Actions"
+                                              className="xl:col-span-3"
+                                            >
+                                              {isBorrowed ? (
+                                                <div className="flex flex-col gap-2 lg:flex-row">
+                                                  <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                      <Button
+                                                        type="button"
+                                                        className={
+                                                          "bg-purple-600 text-white hover:bg-purple-700 lg:min-w-48 " +
+                                                          actionButtonBaseClasses
+                                                        }
+                                                        disabled={returnBusyId === record.id}
+                                                      >
+                                                        {returnBusyId === record.id ? (
+                                                          <span className="inline-flex items-center gap-2">
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                            Sending…
+                                                          </span>
+                                                        ) : showLibrarianReturnRequest ? (
+                                                          "Respond with return request"
+                                                        ) : (
+                                                          "Request return"
+                                                        )}
+                                                      </Button>
+                                                    </AlertDialogTrigger>
+
+                                                    <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-900 text-white">
+                                                      <AlertDialogHeader>
+                                                        <AlertDialogTitle>
+                                                          Request to return this book?
+                                                        </AlertDialogTitle>
+                                                        <AlertDialogDescription className="text-white/70">
+                                                          This will change the status to{" "}
+                                                          <span className="font-semibold text-amber-200">
+                                                            Pending
+                                                          </span>
+                                                          .
+                                                        </AlertDialogDescription>
+                                                      </AlertDialogHeader>
+
+                                                      <div className="mt-3 space-y-1 text-sm text-white/80">
+                                                        <p>
+                                                          <span className="text-white/60">
+                                                            Book:
+                                                          </span>{" "}
+                                                          <span className="font-semibold text-white">
+                                                            {record.bookTitle ??
+                                                              `Book #${record.bookId}`}
+                                                          </span>
+                                                        </p>
+                                                        <p>
+                                                          <span className="text-white/60">
+                                                            Borrowed on:
+                                                          </span>{" "}
+                                                          {fmtDate(record.borrowDate)}
+                                                        </p>
+                                                        <p>
+                                                          <span className="text-white/60">
+                                                            Due date:
+                                                          </span>{" "}
+                                                          {fmtDate(record.dueDate)}
+                                                        </p>
+
+                                                        {showLibrarianReturnRequest ? (
+                                                          <LibrarianReturnRequestNotice
+                                                            requesterName={librarianRequesterName}
+                                                            requestedAt={record.returnRequestedAt}
+                                                            note={librarianRequestNote}
+                                                            className="mt-2"
+                                                          />
+                                                        ) : null}
+
+                                                        {finalFineAmount > 0 ? (
+                                                          <p className="text-red-300">
+                                                            Estimated fine if returned
+                                                            today:{" "}
+                                                            <span className="font-semibold">
+                                                              {peso(finalFineAmount)}
+                                                            </span>
+                                                          </p>
+                                                        ) : null}
+                                                      </div>
+
+                                                      <AlertDialogFooter>
+                                                        <AlertDialogCancel
+                                                          className="border-white/20 text-white hover:bg-black/20"
+                                                          disabled={returnBusyId === record.id}
+                                                        >
+                                                          Cancel
+                                                        </AlertDialogCancel>
+                                                        <AlertDialogAction
+                                                          className="bg-purple-600 text-white hover:bg-purple-700"
+                                                          disabled={returnBusyId === record.id}
+                                                          onClick={() =>
+                                                            void handleRequestReturn(record)
+                                                          }
+                                                        >
+                                                          {returnBusyId === record.id ? (
+                                                            <span className="inline-flex items-center gap-2">
+                                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                                              Sending…
+                                                            </span>
+                                                          ) : (
+                                                            "Submit request"
+                                                          )}
+                                                        </AlertDialogAction>
+                                                      </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                  </AlertDialog>
+
+                                                  <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                      <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className={
+                                                          "border-sky-300/40 text-sky-200 hover:bg-sky-500/10 lg:min-w-48 " +
+                                                          actionButtonBaseClasses
+                                                        }
+                                                        disabled={
+                                                          extendBusyId === record.id ||
+                                                          extensionPending
+                                                        }
+                                                        onClick={() => {
+                                                          setExtendReasonById((prev) => ({
+                                                            ...prev,
+                                                            [record.id]:
+                                                              prev[record.id] ?? "",
+                                                          }));
+                                                        }}
+                                                      >
+                                                        {extensionPending ? (
+                                                          "Extension pending"
+                                                        ) : extendBusyId === record.id ? (
+                                                          <span className="inline-flex items-center gap-2">
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                            Sending…
+                                                          </span>
+                                                        ) : (
+                                                          "Request extension"
+                                                        )}
+                                                      </Button>
+                                                    </AlertDialogTrigger>
+
+                                                    <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-900 text-white">
+                                                      <AlertDialogHeader>
+                                                        <AlertDialogTitle>
+                                                          Request due date extension
+                                                        </AlertDialogTitle>
+                                                        <AlertDialogDescription className="text-white/70">
+                                                          Extension is fixed to{" "}
+                                                          <span className="font-semibold text-sky-200">
+                                                            +1 day
+                                                          </span>{" "}
+                                                          and cannot be changed.
+                                                        </AlertDialogDescription>
+                                                      </AlertDialogHeader>
+
+                                                      <div className="mt-3 space-y-3">
+                                                        <div className="space-y-1 text-sm text-white/80">
+                                                          <p>
+                                                            <span className="text-white/60">
+                                                              Current due date:
+                                                            </span>{" "}
+                                                            {fmtDate(record.dueDate)}
+                                                          </p>
+
+                                                          {extensionCount > 0 ? (
+                                                            <p className="text-xs text-white/60">
+                                                              Approved extensions:{" "}
+                                                              <span className="font-semibold text-sky-200">
+                                                                {extensionCount}×
+                                                              </span>{" "}
+                                                              (total +{extensionTotalDays} days)
+                                                            </p>
+                                                          ) : null}
+
+                                                          {reqStatus === "pending" ? (
+                                                            <p className="text-xs text-amber-200/90">
+                                                              You already have a pending
+                                                              request{" "}
+                                                              {typeof reqDays === "number"
+                                                                ? `(+${reqDays} days)`
+                                                                : ""}{" "}
+                                                              {reqAt
+                                                                ? `submitted at ${fmtDateTime(
+                                                                    reqAt
+                                                                  )}.`
+                                                                : "."}
+                                                            </p>
+                                                          ) : null}
+
+                                                          {extensionDecisionNote ? (
+                                                            <ExtensionDecisionNotice
+                                                              status={reqStatus}
+                                                              decidedAt={decidedAt ?? reqAt}
+                                                              note={extensionDecisionNote}
+                                                              className="mt-2"
+                                                            />
+                                                          ) : null}
+                                                        </div>
+
+                                                        <div className="rounded-md border border-sky-300/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+                                                          Extension days:{" "}
+                                                          <span className="font-semibold">
+                                                            {FIXED_EXTENSION_DAYS} day
+                                                          </span>{" "}
+                                                          (fixed)
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 gap-2">
+                                                          <label className="text-xs text-white/70">
+                                                            Reason (optional)
+                                                          </label>
+                                                          <Input
+                                                            value={
+                                                              extendReasonById[record.id] ??
+                                                              ""
+                                                            }
+                                                            onChange={(e) =>
+                                                              setExtendReasonById((prev) => ({
+                                                                ...prev,
+                                                                [record.id]:
+                                                                  e.target.value,
+                                                              }))
+                                                            }
+                                                            placeholder="e.g. Research requirement"
+                                                            className="border-white/20 bg-slate-950/60 text-white"
+                                                            disabled={
+                                                              extendBusyId === record.id ||
+                                                              extensionPending
+                                                            }
+                                                          />
+                                                        </div>
+                                                      </div>
+
+                                                      <AlertDialogFooter>
+                                                        <AlertDialogCancel
+                                                          className="border-white/20 text-white hover:bg-black/20"
+                                                          disabled={extendBusyId === record.id}
+                                                        >
+                                                          Cancel
+                                                        </AlertDialogCancel>
+                                                        <AlertDialogAction
+                                                          className="bg-sky-600 text-white hover:bg-sky-700"
+                                                          disabled={
+                                                            extendBusyId === record.id ||
+                                                            extensionPending
+                                                          }
+                                                          onClick={() =>
+                                                            void handleRequestExtension(record)
+                                                          }
+                                                        >
+                                                          {extendBusyId === record.id ? (
+                                                            <span className="inline-flex items-center gap-2">
+                                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                                              Submitting…
+                                                            </span>
+                                                          ) : extensionPending ? (
+                                                            "Already pending"
+                                                          ) : (
+                                                            "Submit request"
+                                                          )}
+                                                        </AlertDialogAction>
+                                                      </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                  </AlertDialog>
+                                                </div>
+                                              ) : isPendingReturn || isLegacyPending ? (
                                                 <Button
                                                   type="button"
                                                   variant="outline"
+                                                  disabled
                                                   className={
-                                                    "border-sky-300/40 text-sky-200 hover:bg-sky-500/10 lg:min-w-48 " +
+                                                    "border-amber-400/50 text-amber-200/80 lg:min-w-48 " +
                                                     actionButtonBaseClasses
                                                   }
-                                                  disabled={
-                                                    extendBusyId === record.id ||
-                                                    extensionPending
-                                                  }
-                                                  onClick={() => {
-                                                    setExtendReasonById((prev) => ({
-                                                      ...prev,
-                                                      [record.id]:
-                                                        prev[record.id] ?? "",
-                                                    }));
-                                                  }}
                                                 >
-                                                  {extensionPending ? (
-                                                    "Extension pending"
-                                                  ) : extendBusyId === record.id ? (
-                                                    <span className="inline-flex items-center gap-2">
-                                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                                      Sending…
-                                                    </span>
-                                                  ) : (
-                                                    "Request extension"
-                                                  )}
+                                                  Pending return
                                                 </Button>
-                                              </AlertDialogTrigger>
-
-                                              <AlertDialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-900 text-white">
-                                                <AlertDialogHeader>
-                                                  <AlertDialogTitle>
-                                                    Request due date extension
-                                                  </AlertDialogTitle>
-                                                  <AlertDialogDescription className="text-white/70">
-                                                    Extension is fixed to{" "}
-                                                    <span className="font-semibold text-sky-200">
-                                                      +1 day
-                                                    </span>{" "}
-                                                    and cannot be changed.
-                                                  </AlertDialogDescription>
-                                                </AlertDialogHeader>
-
-                                                <div className="mt-3 space-y-3">
-                                                  <div className="space-y-1 text-sm text-white/80">
-                                                    <p>
-                                                      <span className="text-white/60">
-                                                        Current due date:
-                                                      </span>{" "}
-                                                      {fmtDate(record.dueDate)}
-                                                    </p>
-
-                                                    {extensionCount > 0 ? (
-                                                      <p className="text-xs text-white/60">
-                                                        Approved extensions:{" "}
-                                                        <span className="font-semibold text-sky-200">
-                                                          {extensionCount}×
-                                                        </span>{" "}
-                                                        (total +{extensionTotalDays} days)
-                                                      </p>
-                                                    ) : null}
-
-                                                    {reqStatus === "pending" ? (
-                                                      <p className="text-xs text-amber-200/90">
-                                                        You already have a pending
-                                                        request{" "}
-                                                        {typeof reqDays === "number"
-                                                          ? `(+${reqDays} days)`
-                                                          : ""}{" "}
-                                                        {reqAt
-                                                          ? `submitted at ${fmtDateTime(
-                                                              reqAt
-                                                            )}.`
-                                                          : "."}
-                                                      </p>
-                                                    ) : null}
-
-                                                    {extensionDecisionNote ? (
-                                                      <ExtensionDecisionNotice
-                                                        status={reqStatus}
-                                                        decidedAt={decidedAt ?? reqAt}
-                                                        note={extensionDecisionNote}
-                                                        className="mt-2"
-                                                      />
-                                                    ) : null}
-                                                  </div>
-
-                                                  <div className="rounded-md border border-sky-300/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
-                                                    Extension days:{" "}
-                                                    <span className="font-semibold">
-                                                      {FIXED_EXTENSION_DAYS} day
-                                                    </span>{" "}
-                                                    (fixed)
-                                                  </div>
-
-                                                  <div className="grid grid-cols-1 gap-2">
-                                                    <label className="text-xs text-white/70">
-                                                      Reason (optional)
-                                                    </label>
-                                                    <Input
-                                                      value={
-                                                        extendReasonById[record.id] ??
-                                                        ""
-                                                      }
-                                                      onChange={(e) =>
-                                                        setExtendReasonById((prev) => ({
-                                                          ...prev,
-                                                          [record.id]:
-                                                            e.target.value,
-                                                        }))
-                                                      }
-                                                      placeholder="e.g. Research requirement"
-                                                      className="border-white/20 bg-slate-950/60 text-white"
-                                                      disabled={
-                                                        extendBusyId === record.id ||
-                                                        extensionPending
-                                                      }
-                                                    />
-                                                  </div>
-                                                </div>
-
-                                                <AlertDialogFooter>
-                                                  <AlertDialogCancel
-                                                    className="border-white/20 text-white hover:bg-black/20"
-                                                    disabled={extendBusyId === record.id}
-                                                  >
-                                                    Cancel
-                                                  </AlertDialogCancel>
-                                                  <AlertDialogAction
-                                                    className="bg-sky-600 text-white hover:bg-sky-700"
-                                                    disabled={
-                                                      extendBusyId === record.id ||
-                                                      extensionPending
-                                                    }
-                                                    onClick={() =>
-                                                      void handleRequestExtension(record)
-                                                    }
-                                                  >
-                                                    {extendBusyId === record.id ? (
-                                                      <span className="inline-flex items-center gap-2">
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                        Submitting…
-                                                      </span>
-                                                    ) : extensionPending ? (
-                                                      "Already pending"
-                                                    ) : (
-                                                      "Submit request"
-                                                    )}
-                                                  </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                              </AlertDialogContent>
-                                            </AlertDialog>
+                                              ) : record.status === "pending_pickup" ? (
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  disabled
+                                                  className={
+                                                    "border-amber-400/50 text-amber-200/80 lg:min-w-48 " +
+                                                    actionButtonBaseClasses
+                                                  }
+                                                >
+                                                  Pending pickup
+                                                </Button>
+                                              ) : (
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  disabled
+                                                  className={
+                                                    "border-white/20 text-white/60 lg:min-w-48 " +
+                                                    actionButtonBaseClasses
+                                                  }
+                                                >
+                                                  Already returned
+                                                </Button>
+                                              )}
+                                            </CirculationDetail>
                                           </div>
-                                        ) : isPendingReturn || isLegacyPending ? (
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled
-                                            className={
-                                              "border-amber-400/50 text-amber-200/80 lg:min-w-48 " +
-                                              actionButtonBaseClasses
-                                            }
-                                          >
-                                            Pending return
-                                          </Button>
-                                        ) : record.status === "pending_pickup" ? (
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled
-                                            className={
-                                              "border-amber-400/50 text-amber-200/80 lg:min-w-48 " +
-                                              actionButtonBaseClasses
-                                            }
-                                          >
-                                            Pending pickup
-                                          </Button>
-                                        ) : (
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled
-                                            className={
-                                              "border-white/20 text-white/60 lg:min-w-48 " +
-                                              actionButtonBaseClasses
-                                            }
-                                          >
-                                            Already returned
-                                          </Button>
-                                        )}
-                                      </CirculationDetail>
-                                    </div>
-                                  </div>
+                                        </div>
                                       </DialogContent>
                                     </Dialog>
                                   </AccordionContent>
