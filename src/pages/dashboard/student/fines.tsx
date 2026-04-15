@@ -250,6 +250,68 @@ function normalizeStatus(raw: any): FineStatus {
     return "active";
 }
 
+function getDateSortValue(value?: string | null): number {
+    if (!value) return 0;
+    const parsed = new Date(value);
+    const time = parsed.getTime();
+    return Number.isNaN(time) ? 0 : time;
+}
+
+function getFineReferenceEndDate(
+    fine: FineDTO,
+    status: FineStatus
+): string | null {
+    if (fine.borrowReturnDate) return fine.borrowReturnDate;
+
+    if (status !== "active") {
+        return (fine as any).resolvedAt ?? fine.createdAt ?? null;
+    }
+
+    return new Date().toISOString();
+}
+
+function getFineSortRank(fine: FineDTO): number {
+    const status = normalizeStatus((fine as any).status);
+    const damage = isDamageFine(fine);
+    const overdueDays = computeOverdueDays(
+        fine.borrowDueDate ?? null,
+        getFineReferenceEndDate(fine, status)
+    );
+
+    if (status === "active") {
+        if (!damage && (overdueDays ?? 0) > 0) return 0;
+        if (damage) return 1;
+        return 2;
+    }
+
+    if (status === "paid") return 3;
+    return 4;
+}
+
+function compareFinesByPriority(a: FineDTO, b: FineDTO): number {
+    const rankDiff = getFineSortRank(a) - getFineSortRank(b);
+    if (rankDiff !== 0) return rankDiff;
+
+    const statusA = normalizeStatus((a as any).status);
+    const statusB = normalizeStatus((b as any).status);
+
+    const overdueA = computeOverdueDays(
+        a.borrowDueDate ?? null,
+        getFineReferenceEndDate(a, statusA)
+    ) ?? 0;
+    const overdueB = computeOverdueDays(
+        b.borrowDueDate ?? null,
+        getFineReferenceEndDate(b, statusB)
+    ) ?? 0;
+    const overdueDiff = overdueB - overdueA;
+    if (overdueDiff !== 0) return overdueDiff;
+
+    const amountDiff = normalizeFine(b.amount) - normalizeFine(a.amount);
+    if (amountDiff !== 0) return amountDiff;
+
+    return getDateSortValue(b.createdAt ?? null) - getDateSortValue(a.createdAt ?? null);
+}
+
 function renderStatusLabel(statusRaw: any) {
     const status = normalizeStatus(statusRaw);
     if (status === "active") return "Active (unpaid)";
@@ -372,9 +434,7 @@ export default function StudentFinesPage() {
             });
         }
 
-        return rows.sort((a, b) =>
-            String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""))
-        );
+        return rows.sort(compareFinesByPriority);
     }, [fines, statusFilter, search]);
 
     const totalActive = React.useMemo(() => {
@@ -491,7 +551,7 @@ export default function StudentFinesPage() {
                             <div className="rounded-lg border border-white/10 bg-slate-900/40 px-3 py-2 text-xs text-white/65">
                                 Showing {filtered.length} {filtered.length === 1 ? "fine" : "fines"}. Active fines
                                 must be paid <span className="font-semibold">over the counter</span> at the library.
-                                <span className="opacity-80"> Days = overdue days for borrow-based fines; damage fines show “Damage”.</span>
+                                <span className="opacity-80"> Overdue unpaid fines are listed first, while paid and cancelled fines are pushed lower. Days = overdue days for borrow-based fines; damage fines show “Damage”.</span>
                             </div>
 
                             <Accordion type="single" collapsible className="space-y-3">
