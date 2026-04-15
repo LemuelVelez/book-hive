@@ -63,6 +63,18 @@ import {
   sendLoginCredentialsById,
 } from "@/lib/authentication";
 import { ROUTES } from "@/api/auth/route";
+import {
+  type BorrowRecordDTO,
+  fetchBorrowRecords,
+} from "@/lib/borrows";
+import {
+  type DamageReportDTO,
+  fetchDamageReports,
+} from "@/lib/damageReports";
+import {
+  type FineDTO,
+  fetchFines,
+} from "@/lib/fines";
 
 type VisibleRole =
   | "student"
@@ -165,6 +177,127 @@ const ACCOUNT_TYPE_OPTIONS: VisibleRole[] = [
   "librarian",
   "admin",
 ];
+
+
+
+const ACCOUNTABILITY_UNAVAILABLE_REASON =
+  "Accountability status could not be verified yet.";
+
+type UserAccountabilitySummary = {
+  activeBorrowCount: number;
+  activeFineCount: number;
+  unpaidDamageCount: number;
+  hasUnsettledAccountabilities: boolean;
+  deleteBlockedReason: string | null;
+};
+
+function pluralizeAccountability(
+  value: number,
+  singular: string,
+  plural = `${singular}s`
+) {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function describeOutstandingAccountabilities(
+  summary: Pick<
+    UserAccountabilitySummary,
+    "activeBorrowCount" | "activeFineCount" | "unpaidDamageCount"
+  >
+) {
+  const parts: string[] = [];
+  if (summary.activeBorrowCount > 0) {
+    parts.push(pluralizeAccountability(summary.activeBorrowCount, "active borrow"));
+  }
+  if (summary.activeFineCount > 0) {
+    parts.push(pluralizeAccountability(summary.activeFineCount, "active fine"));
+  }
+  if (summary.unpaidDamageCount > 0) {
+    parts.push(
+      pluralizeAccountability(
+        summary.unpaidDamageCount,
+        "unpaid damage report"
+      )
+    );
+  }
+  return parts;
+}
+
+function createAccountabilitySummary(
+  reason: string | null = null
+): UserAccountabilitySummary {
+  return {
+    activeBorrowCount: 0,
+    activeFineCount: 0,
+    unpaidDamageCount: 0,
+    hasUnsettledAccountabilities: Boolean(reason),
+    deleteBlockedReason: reason,
+  };
+}
+
+function finalizeAccountabilitySummary(
+  summary: UserAccountabilitySummary
+): UserAccountabilitySummary {
+  if (
+    summary.deleteBlockedReason &&
+    summary.activeBorrowCount === 0 &&
+    summary.activeFineCount === 0 &&
+    summary.unpaidDamageCount === 0
+  ) {
+    summary.hasUnsettledAccountabilities = true;
+    return summary;
+  }
+
+  const parts = describeOutstandingAccountabilities(summary);
+  summary.hasUnsettledAccountabilities = parts.length > 0;
+  summary.deleteBlockedReason =
+    parts.length > 0
+      ? `Cannot delete while the user has ${parts.join(", ")}.`
+      : null;
+
+  return summary;
+}
+
+function buildAccountabilityMap(
+  users: UserRowDTO[],
+  borrowRecords: BorrowRecordDTO[],
+  fines: FineDTO[],
+  damageReports: DamageReportDTO[],
+  fallbackReason: string | null = null
+): Record<string, UserAccountabilitySummary> {
+  const summaries = Object.fromEntries(
+    users.map((user) => [user.id, createAccountabilitySummary(fallbackReason)])
+  ) as Record<string, UserAccountabilitySummary>;
+
+  if (fallbackReason) return summaries;
+
+  for (const record of borrowRecords) {
+    const userId = String(record.userId ?? "").trim();
+    if (!userId || !summaries[userId]) continue;
+    if (String(record.status ?? "").trim().toLowerCase() === "returned") continue;
+    summaries[userId].activeBorrowCount += 1;
+  }
+
+  for (const fine of fines) {
+    const userId = String(fine.userId ?? "").trim();
+    if (!userId || !summaries[userId]) continue;
+    if (String(fine.status ?? "").trim().toLowerCase() !== "active") continue;
+    summaries[userId].activeFineCount += 1;
+  }
+
+  for (const report of damageReports) {
+    const targetUserId = String(report.liableUserId ?? report.userId ?? "").trim();
+    if (!targetUserId || !summaries[targetUserId]) continue;
+    if (String(report.status ?? "").trim().toLowerCase() === "paid") continue;
+    summaries[targetUserId].unpaidDamageCount += 1;
+  }
+
+  for (const userId of Object.keys(summaries)) {
+    summaries[userId] = finalizeAccountabilitySummary(summaries[userId]);
+  }
+
+  return summaries;
+}
 
 type BusyState =
   | { id: string; action: "approve" | "disapprove" | "delete" | "role" | "credentials" }
@@ -401,6 +534,12 @@ export default function AdminUsersPage() {
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
+  const [accountabilityByUserId, setAccountabilityByUserId] = React.useState<
+    Record<string, UserAccountabilitySummary>
+  >({});
+  const [accountabilityWarning, setAccountabilityWarning] = React.useState<string | null>(
+    null
+  );
 
   const [busy, setBusy] = React.useState<BusyState>(null);
 
@@ -490,16 +629,57 @@ export default function AdminUsersPage() {
   const loadUsers = React.useCallback(async () => {
     setError(null);
     setLoading(true);
+    setAccountabilityWarning(null);
+
     try {
-      const list = await listUsersWithRole();
+      const [usersResult, borrowsResult, finesResult, damageReportsResult] =
+        await Promise.allSettled([
+          listUsersWithRole(),
+          fetchBorrowRecords(),
+          fetchFines(),
+          fetchDamageReports(),
+        ]);
+
+      if (usersResult.status !== "fulfilled") {
+        throw usersResult.reason;
+      }
+
+      const list = usersResult.value;
       setUsers(list);
       setRoleDraft((prev) => {
         const next: Record<string, VisibleRole> = { ...prev };
         for (const u of list) next[u.id] = next[u.id] ?? u.role;
         return next;
       });
+
+      const fallbackReason =
+        borrowsResult.status === "rejected" ||
+        finesResult.status === "rejected" ||
+        damageReportsResult.status === "rejected"
+          ? ACCOUNTABILITY_UNAVAILABLE_REASON
+          : null;
+
+      setAccountabilityByUserId(
+        buildAccountabilityMap(
+          list,
+          borrowsResult.status === "fulfilled" ? borrowsResult.value : [],
+          finesResult.status === "fulfilled" ? finesResult.value : [],
+          damageReportsResult.status === "fulfilled"
+            ? damageReportsResult.value
+            : [],
+          fallbackReason
+        )
+      );
+
+      if (fallbackReason) {
+        setAccountabilityWarning(
+          "Delete actions are temporarily blocked until accountability records can be verified."
+        );
+      }
     } catch (err: any) {
-      const msg = err?.message || "Failed to load users. Ensure the backend has GET /api/users.";
+      setAccountabilityByUserId({});
+      const msg =
+        err?.message || "Failed to load users. Ensure the backend has GET /api/users.";
       setError(msg);
       toast.error("Failed to load users", { description: msg });
     } finally {
@@ -592,6 +772,21 @@ export default function AdminUsersPage() {
   };
 
   const onDelete = async (id: string) => {
+    const accountabilitySummary =
+      accountabilityByUserId[id] ??
+      createAccountabilitySummary(
+        accountabilityWarning || ACCOUNTABILITY_UNAVAILABLE_REASON
+      );
+
+    if (accountabilitySummary.hasUnsettledAccountabilities) {
+      toast.error("Delete blocked", {
+        description:
+          accountabilitySummary.deleteBlockedReason ||
+          "This user still has unsettled accountabilities.",
+      });
+      return;
+    }
+
     setBusy({ id, action: "delete" });
     try {
       await deleteUserById(id);
@@ -777,6 +972,19 @@ export default function AdminUsersPage() {
     const roleChanged = draft !== currentRole;
 
     const isSelf = !!selfId && u.id === selfId;
+    const accountabilitySummary =
+      accountabilityByUserId[u.id] ??
+      createAccountabilitySummary(
+        accountabilityWarning || ACCOUNTABILITY_UNAVAILABLE_REASON
+      );
+    const canDelete =
+      !isSelf && !accountabilitySummary.hasUnsettledAccountabilities;
+    const deleteTitle = isSelf
+      ? "You can’t delete yourself"
+      : canDelete
+        ? "Delete user"
+        : accountabilitySummary.deleteBlockedReason ||
+          "Delete is blocked while accountabilities are unsettled.";
 
     return (
       <AccordionItem
@@ -867,6 +1075,48 @@ export default function AdminUsersPage() {
                     label="Status"
                     value={u.isApproved ? "Active access" : "Needs review"}
                   />
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-white/55">
+                      Accountabilities
+                    </div>
+                    <p className="mt-1 text-xs text-white/50">
+                      Deletion stays blocked until all active borrows, active fines, and
+                      unpaid damage reports are settled.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    <StatPill
+                      icon={<Clock3 className="h-3.5 w-3.5" />}
+                      label="Active borrows"
+                      value={accountabilitySummary.activeBorrowCount}
+                    />
+                    <StatPill
+                      icon={<BadgeCheck className="h-3.5 w-3.5" />}
+                      label="Active fines"
+                      value={accountabilitySummary.activeFineCount}
+                    />
+                    <StatPill
+                      icon={<ShieldAlert className="h-3.5 w-3.5" />}
+                      label="Unpaid damages"
+                      value={accountabilitySummary.unpaidDamageCount}
+                    />
+                  </div>
+
+                  <p
+                    className={
+                      accountabilitySummary.hasUnsettledAccountabilities
+                        ? "text-xs text-amber-200"
+                        : "text-xs text-emerald-200"
+                    }
+                  >
+                    {accountabilitySummary.hasUnsettledAccountabilities
+                      ? accountabilitySummary.deleteBlockedReason
+                      : "No unsettled accountabilities blocking deletion."}
+                  </p>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
@@ -965,8 +1215,8 @@ export default function AdminUsersPage() {
                     variant="destructive"
                     className="w-full justify-start hover:opacity-95"
                     onClick={() => setConfirm({ type: "delete", id: u.id })}
-                    disabled={anyBusyForRow || isSelf}
-                    title={isSelf ? "You can’t delete yourself" : "Delete user"}
+                    disabled={anyBusyForRow || !canDelete}
+                    title={deleteTitle}
                   >
                     {isBusyDelete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                     Delete
@@ -990,6 +1240,10 @@ export default function AdminUsersPage() {
             <p className="text-xs text-white/70">
               Add users, change roles, approve or disapprove accounts, resend credentials, and remove users.
               Pending: <span className="font-semibold text-orange-200">{pendingCount}</span>
+            </p>
+            <p className={`mt-1 text-[11px] ${accountabilityWarning ? "text-amber-200" : "text-white/55"}`}>
+              {accountabilityWarning ||
+                "Deletion is blocked for users with active borrows, active fines, or unpaid damage reports."}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
               <span className="inline-flex items-center gap-1">
