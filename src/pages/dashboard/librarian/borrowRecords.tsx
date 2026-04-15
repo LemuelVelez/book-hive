@@ -1326,7 +1326,7 @@ export default function LibrarianBorrowRecordsPage() {
         </Dialog>
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Card className="border-amber-400/20 bg-amber-500/10">
           <CardContent className="p-4">
             <div className="text-[11px] uppercase tracking-wide text-amber-100/70">
@@ -1365,6 +1365,20 @@ export default function LibrarianBorrowRecordsPage() {
             </div>
             <div className="mt-1 text-xs text-sky-50/70">
               Borrow requests waiting to be released.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-red-400/20 bg-red-500/10">
+          <CardContent className="p-4">
+            <div className="text-[11px] uppercase tracking-wide text-red-100/70">
+              Overdue
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-red-100">
+              {dashboardMetrics.overdueCount}
+            </div>
+            <div className="mt-1 text-xs text-red-50/70">
+              Active borrow records already past the due date.
             </div>
           </CardContent>
         </Card>
