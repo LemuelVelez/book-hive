@@ -1570,7 +1570,7 @@ export default function LibrarianBorrowRecordsPage() {
                                 .trim();
                               const extensionPending = reqStatus === "pending";
 
-                              const canEditDueDate = true;
+                              const canEditDueDate = canManageExtensions;
 
                               const hasReturnRequest =
                                 !isReturned && Boolean(rec.returnRequestedAt);
