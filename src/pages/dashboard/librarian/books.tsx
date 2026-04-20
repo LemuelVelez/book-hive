@@ -6,6 +6,7 @@ import DashboardLayout from "@/components/dashboard-layout";
 import {
     BookFormDialog,
     getDefaultBookFormValues,
+    type BookFormMode,
     type BookFormValues,
     type InventorySnapshot,
 } from "@/components/librarian-books/book-form-dialog";
@@ -32,42 +33,61 @@ import {
     tokenizeSearch,
 } from "@/components/librarian-books/books-constants";
 import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
     addBookCopy,
     createBook,
     deleteBook,
+    deleteBookCopy,
     fetchBooks,
     updateBook,
+    updateBookCopy,
     type BookDTO,
     type LibraryArea,
 } from "@/lib/books";
 
-type AddCopyFormValues = {
-    count: string;
-};
+function getCopyRecords(book: BookDTO): BookDTO[] {
+    if (Array.isArray(book.copies) && book.copies.length > 0) {
+        return [...book.copies].sort((a, b) => {
+            const aCopy =
+                typeof a.copyNumber === "number" ? a.copyNumber : Number.MAX_SAFE_INTEGER;
+            const bCopy =
+                typeof b.copyNumber === "number" ? b.copyNumber : Number.MAX_SAFE_INTEGER;
+            if (aCopy !== bCopy) return aCopy - bCopy;
+            return String(a.accessionNumber || "").localeCompare(
+                String(b.accessionNumber || ""),
+                undefined,
+                {
+                    numeric: true,
+                    sensitivity: "base",
+                }
+            );
+        });
+    }
 
-function getDefaultAddCopyFormValues(): AddCopyFormValues {
-    return {
-        count: "1",
-    };
+    return [{ ...book, copies: undefined }];
+}
+
+function getAdditionalCopyRecords(book: BookDTO): BookDTO[] {
+    return getCopyRecords(book).filter((copy) => copy.id !== book.id);
 }
 
 function buildCreatePayloadPagesValue(raw: string): number | string | null {
@@ -132,8 +152,7 @@ function buildEditFormValues(book: BookDTO): {
             libraryAreaOther:
                 currentArea && !isKnownLibraryArea(currentArea) ? currentArea : "",
             borrowDuration:
-                typeof book.borrowDurationDays === "number" &&
-                book.borrowDurationDays > 0
+                typeof book.borrowDurationDays === "number" && book.borrowDurationDays > 0
                     ? String(book.borrowDurationDays)
                     : "7",
             available: book.available,
@@ -160,9 +179,26 @@ function getSubjectsValue(book: BookDTO) {
     return formatDetailValue(book.subjects || book.genre || book.category || "");
 }
 
+function getGroupLibraryAreas(book: BookDTO) {
+    const values = new Set<string>();
+
+    getCopyRecords(book).forEach((item) => {
+        const area = item.libraryArea ? String(item.libraryArea).trim() : "";
+        if (area) values.add(area);
+    });
+
+    if (values.size === 0) {
+        const fallback = book.libraryArea ? String(book.libraryArea).trim() : "";
+        if (fallback) values.add(fallback);
+    }
+
+    return Array.from(values);
+}
+
 function getLibraryAreaValue(book: BookDTO) {
-    const value = String(book.libraryArea || "").trim();
-    return value ? formatLibraryAreaLabel(value) : "—";
+    const values = getGroupLibraryAreas(book);
+    if (values.length === 0) return "—";
+    return values.map((value) => formatLibraryAreaLabel(value)).join(", ");
 }
 
 function getInventoryValue(book: BookDTO) {
@@ -207,9 +243,21 @@ function getStatusMeta(book: BookDTO): { label: string; classes: string } {
     };
 }
 
-function buildAddCopyFormValues(_source: BookDTO): AddCopyFormValues {
+function buildAddCopyFormValues(source: BookDTO): BookFormValues {
+    const { values } = buildEditFormValues(source);
+    const copyRecords = getCopyRecords(source);
+    const nextCopyNumber =
+        copyRecords.reduce((max, item) => {
+            const current = typeof item.copyNumber === "number" ? item.copyNumber : 0;
+            return Math.max(max, current);
+        }, 0) + 1;
+
     return {
-        count: "1",
+        ...values,
+        accessionNumber: "",
+        barcode: "",
+        copyNumber: nextCopyNumber > 0 ? String(nextCopyNumber) : "",
+        available: true,
     };
 }
 
@@ -227,7 +275,9 @@ function CatalogDetail({
     return (
         <div className={`rounded-xl border border-white/10 bg-black/20 p-3 ${className}`.trim()}>
             <div className="text-[11px] uppercase tracking-wide text-white/55">{label}</div>
-            <div className="mt-1 wrap-break-word text-sm text-white/90">{children ?? value ?? "—"}</div>
+            <div className="mt-1 wrap-break-word text-sm text-white/90">
+                {children ?? value ?? "—"}
+            </div>
         </div>
     );
 }
@@ -241,10 +291,12 @@ function BookCatalogDetails({
 }: {
     book: BookDTO;
     status: ReturnType<typeof getStatusMeta>;
-    onEdit: () => void;
-    onDelete: () => void;
-    onAddCopy: () => void;
+    onEdit?: () => void;
+    onDelete?: () => void;
+    onAddCopy?: () => void;
 }) {
+    const hasActions = Boolean(onEdit || onDelete || onAddCopy);
+
     return (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             <CatalogDetail label="Call no." value={formatDetailValue(book.callNumber)} />
@@ -262,146 +314,315 @@ function BookCatalogDetails({
             <CatalogDetail label="ISBN" value={formatDetailValue(book.isbn)} />
             <CatalogDetail label="Loan days" value={getLoanDaysValue(book)} />
             <CatalogDetail label="Status">
-                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.classes}`}>
+                <span
+                    className={`inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border px-2.5 py-1 text-center text-xs font-medium ${status.classes}`}
+                >
                     {status.label}
                 </span>
             </CatalogDetail>
-            <CatalogDetail label="Actions">
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="border-white/20 text-white/90 hover:bg-white/10"
-                        onClick={onAddCopy}
-                    >
-                        Add copy
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="border-white/20 text-white/90 hover:bg-white/10"
-                        onClick={onEdit}
-                    >
-                        Edit
-                    </Button>
-                    <Button type="button" variant="destructive" onClick={onDelete}>
-                        Delete
-                    </Button>
+
+            {hasActions ? (
+                <CatalogDetail label="Actions">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        {onAddCopy ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="border-white/20 text-white/90 hover:bg-white/10"
+                                onClick={onAddCopy}
+                            >
+                                Add copy
+                            </Button>
+                        ) : null}
+
+                        {onEdit ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="border-white/20 text-white/90 hover:bg-white/10"
+                                onClick={onEdit}
+                            >
+                                Edit
+                            </Button>
+                        ) : null}
+
+                        {onDelete ? (
+                            <Button type="button" variant="destructive" onClick={onDelete}>
+                                Delete
+                            </Button>
+                        ) : null}
+                    </div>
+                </CatalogDetail>
+            ) : null}
+        </div>
+    );
+}
+
+function BookRecordDetailsDialog({
+    open,
+    onOpenChange,
+    book,
+    kind,
+    onEdit,
+    onDelete,
+    onAddCopy,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    book: BookDTO | null;
+    kind: "book" | "copy";
+    onEdit: (() => void) | undefined;
+    onDelete: (() => void) | undefined;
+    onAddCopy: (() => void) | undefined;
+}) {
+    if (!book) return null;
+
+    const status = getStatusMeta(book);
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent
+                className="w-[92vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-5xl
+                [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+                [&::-webkit-scrollbar]:w-1.5
+                [&::-webkit-scrollbar-track]:bg-slate-900/70
+                [&::-webkit-scrollbar-thumb]:rounded-full
+                [&::-webkit-scrollbar-thumb]:bg-slate-700
+                [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+            >
+                <DialogHeader>
+                    <DialogTitle>
+                        {kind === "copy" ? "Copy details" : "Book details"}
+                    </DialogTitle>
+                    <DialogDescription className="text-white/70">
+                        {kind === "copy"
+                            ? "Review, edit, or delete this saved copy."
+                            : "Review the original book record, then edit it or add more copies."}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <BookCatalogDetails
+                    book={book}
+                    status={status}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onAddCopy={kind === "book" ? onAddCopy : undefined}
+                />
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function BookCopyRecords({
+    book,
+    onOpenDetails,
+    onEdit,
+    onDelete,
+}: {
+    book: BookDTO;
+    onOpenDetails: (book: BookDTO) => void;
+    onEdit: (book: BookDTO) => void;
+    onDelete: (book: BookDTO) => void;
+}) {
+    const copies = getAdditionalCopyRecords(book);
+
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <BookCopy className="h-4 w-4" />
+                    Saved copies
                 </div>
-            </CatalogDetail>
+                <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-center text-[11px] text-white/70">
+                    {copies.length} cop{copies.length === 1 ? "y" : "ies"}
+                </span>
+            </div>
+
+            {copies.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-sm text-white/60">
+                    No added copies yet.
+                </div>
+            ) : (
+                <div className="grid gap-3 xl:grid-cols-2">
+                    {copies.map((copy, index) => {
+                        const copyStatus = getStatusMeta(copy);
+
+                        return (
+                            <div
+                                key={copy.id || `${book.id}-copy-${index}`}
+                                className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                            >
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
+                                        Copy {formatDetailValue(copy.copyNumber, String(index + 2))}
+                                    </span>
+                                    <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
+                                        {formatDetailValue(copy.accessionNumber)}
+                                    </span>
+                                    <span
+                                        className={`inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border px-2 py-0.5 text-center text-[11px] font-medium ${copyStatus.classes}`}
+                                    >
+                                        {copyStatus.label}
+                                    </span>
+                                </div>
+
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <CatalogDetail
+                                        label="Call no."
+                                        value={formatDetailValue(copy.callNumber)}
+                                    />
+                                    <CatalogDetail
+                                        label="Title"
+                                        value={formatDetailValue(copy.title)}
+                                    />
+                                    <CatalogDetail
+                                        label="Barcode"
+                                        value={formatDetailValue(copy.barcode)}
+                                    />
+                                    <CatalogDetail
+                                        label="Library area"
+                                        value={getLibraryAreaValue(copy)}
+                                    />
+                                </div>
+
+                                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                        onClick={() => onOpenDetails(copy)}
+                                    >
+                                        Details
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                        onClick={() => onEdit(copy)}
+                                    >
+                                        Edit
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="destructive"
+                                        onClick={() => onDelete(copy)}
+                                    >
+                                        Delete
+                                    </Button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }
 
 function BookCatalogCard({
     book,
+    isOpen,
+    onToggle,
+    onOpenDetails,
     onEdit,
     onDelete,
     onAddCopy,
+    onOpenCopyDetails,
+    onEditCopy,
+    onDeleteCopy,
 }: {
     book: BookDTO;
+    isOpen: boolean;
+    onToggle: (bookId: string) => void;
+    onOpenDetails: (book: BookDTO) => void;
     onEdit: (book: BookDTO) => void;
     onDelete: (book: BookDTO) => void;
     onAddCopy: (book: BookDTO) => void;
+    onOpenCopyDetails: (book: BookDTO) => void;
+    onEditCopy: (book: BookDTO) => void;
+    onDeleteCopy: (book: BookDTO) => void;
 }) {
     const status = getStatusMeta(book);
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-
-    const handleEdit = React.useCallback(() => {
-        setDetailsOpen(false);
-        onEdit(book);
-    }, [book, onEdit]);
-
-    const handleAddCopy = React.useCallback(() => {
-        setDetailsOpen(false);
-        onAddCopy(book);
-    }, [book, onAddCopy]);
-
-    const handleDeleteRequest = React.useCallback(() => {
-        if (
-            typeof window !== "undefined" &&
-            !window.confirm(
-                `Delete "${formatDetailValue(book.title, "this book")}" from the catalog?`
-            )
-        ) {
-            return;
-        }
-
-        setDetailsOpen(false);
-        onDelete(book);
-    }, [book, onDelete]);
 
     return (
-        <>
-            <AccordionItem
-                value={book.id}
-                className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
-            >
-                <AccordionTrigger className="gap-3 px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg]:self-center">
-                    <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-left">
-                        <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                            {formatDetailValue(book.callNumber)}
-                        </span>
-                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
-                            {status.label}
-                        </span>
-                        <span className="min-w-0 truncate text-sm font-semibold text-white">
-                            {formatDetailValue(book.title)} • {formatDetailValue(book.author)}
-                        </span>
-                    </div>
-                </AccordionTrigger>
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20">
+            <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
+                <button
+                    type="button"
+                    onClick={() => onToggle(book.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    aria-expanded={isOpen}
+                >
+                    <span className="shrink-0 inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
+                        {formatDetailValue(book.callNumber)}
+                    </span>
+                    <span
+                        className={`shrink-0 inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border px-2 py-0.5 text-center text-[11px] font-medium ${status.classes}`}
+                    >
+                        {status.label}
+                    </span>
+                    <span className="min-w-0 truncate text-sm font-semibold text-white">
+                        {formatDetailValue(book.title)}
+                    </span>
+                </button>
 
-                <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                {!isOpen ? (
                     <Button
                         type="button"
                         variant="outline"
-                        className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
-                        onClick={() => setDetailsOpen(true)}
+                        className="shrink-0 border-white/20 text-white/90 hover:bg-white/10"
+                        onClick={() => onOpenDetails(book)}
                     >
                         Details
                     </Button>
-                </AccordionContent>
-            </AccordionItem>
+                ) : null}
+            </div>
 
-            <Dialog modal open={detailsOpen} onOpenChange={setDetailsOpen}>
-                <DialogContent
-                    className="w-[92vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-4xl
-        [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
-        [&::-webkit-scrollbar]:w-1.5
-        [&::-webkit-scrollbar-track]:bg-slate-900/70
-        [&::-webkit-scrollbar-thumb]:rounded-full
-        [&::-webkit-scrollbar-thumb]:bg-slate-700
-        [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
-                >
-                    <DialogHeader>
-                        <DialogTitle className="pr-6">{formatDetailValue(book.title)}</DialogTitle>
-                        <DialogDescription className="text-white/70">
-                            Review the complete catalog details, inventory status, and available
-                            actions for this book record.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                                {formatDetailValue(book.callNumber)}
-                            </span>
-                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
-                                {status.label}
-                            </span>
-                        </div>
-
-                        <BookCatalogDetails
-                            book={book}
-                            status={status}
-                            onEdit={handleEdit}
-                            onDelete={handleDeleteRequest}
-                            onAddCopy={handleAddCopy}
-                        />
+            {isOpen ? (
+                <div className="space-y-4 border-t border-white/10 px-4 pb-4 pt-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            onClick={() => onOpenDetails(book)}
+                        >
+                            Details
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            onClick={() => onAddCopy(book)}
+                        >
+                            Add copy
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="border-white/20 text-white/90 hover:bg-white/10"
+                            onClick={() => onEdit(book)}
+                        >
+                            Edit original
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => onDelete(book)}
+                        >
+                            Delete original
+                        </Button>
                     </div>
-                </DialogContent>
-            </Dialog>
-        </>
+
+                    <BookCopyRecords
+                        book={book}
+                        onOpenDetails={onOpenCopyDetails}
+                        onEdit={onEditCopy}
+                        onDelete={onDeleteCopy}
+                    />
+                </div>
+            ) : null}
+        </div>
     );
 }
 
@@ -417,6 +638,7 @@ export default function LibrarianBooksPage() {
     const [libraryAreaFilter, setLibraryAreaFilter] = React.useState("all");
     const [sortOption, setSortOption] =
         React.useState<CatalogSortOption>("catalog");
+    const [openBookIds, setOpenBookIds] = React.useState<string[]>([]);
 
     const [addOpen, setAddOpen] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
@@ -426,6 +648,7 @@ export default function LibrarianBooksPage() {
     );
 
     const [editOpen, setEditOpen] = React.useState(false);
+    const [editMode, setEditMode] = React.useState<BookFormMode>("edit");
     const [editing, setEditing] = React.useState(false);
     const [editBookId, setEditBookId] = React.useState<string | null>(null);
     const [editError, setEditError] = React.useState("");
@@ -440,9 +663,19 @@ export default function LibrarianBooksPage() {
     const [copying, setCopying] = React.useState(false);
     const [copyError, setCopyError] = React.useState("");
     const [copySourceBook, setCopySourceBook] = React.useState<BookDTO | null>(null);
-    const [copyForm, setCopyForm] = React.useState<AddCopyFormValues>(() =>
-        getDefaultAddCopyFormValues()
+    const [copyForm, setCopyForm] = React.useState<BookFormValues>(() =>
+        getDefaultBookFormValues()
     );
+
+    const [detailOpen, setDetailOpen] = React.useState(false);
+    const [detailBook, setDetailBook] = React.useState<BookDTO | null>(null);
+    const [detailKind, setDetailKind] = React.useState<"book" | "copy">("book");
+
+    const [deleteTarget, setDeleteTarget] = React.useState<{
+        book: BookDTO;
+        kind: "book" | "copy";
+    } | null>(null);
+    const [deleting, setDeleting] = React.useState(false);
 
     const patchCreateForm = React.useCallback((patch: Partial<BookFormValues>) => {
         setCreateForm((prev) => ({ ...prev, ...patch }));
@@ -452,7 +685,7 @@ export default function LibrarianBooksPage() {
         setEditForm((prev) => ({ ...prev, ...patch }));
     }, []);
 
-    const patchCopyForm = React.useCallback((patch: Partial<AddCopyFormValues>) => {
+    const patchCopyForm = React.useCallback((patch: Partial<BookFormValues>) => {
         setCopyForm((prev) => ({ ...prev, ...patch }));
     }, []);
 
@@ -463,6 +696,7 @@ export default function LibrarianBooksPage() {
 
     const resetEditForm = React.useCallback(() => {
         setEditBookId(null);
+        setEditMode("edit");
         setEditForm(getDefaultBookFormValues());
         setEditInventory(null);
         setEditError("");
@@ -470,9 +704,30 @@ export default function LibrarianBooksPage() {
 
     const resetCopyForm = React.useCallback(() => {
         setCopySourceBook(null);
-        setCopyForm(getDefaultAddCopyFormValues());
+        setCopyForm(getDefaultBookFormValues());
         setCopyError("");
     }, []);
+
+    const openDetailDialog = React.useCallback((book: BookDTO, kind: "book" | "copy") => {
+        setDetailBook(book);
+        setDetailKind(kind);
+        setDetailOpen(true);
+    }, []);
+
+    const closeDetailDialog = React.useCallback(() => {
+        setDetailOpen(false);
+        setDetailBook(null);
+        setDetailKind("book");
+    }, []);
+
+    const requestDelete = React.useCallback((book: BookDTO, kind: "book" | "copy") => {
+        setDeleteTarget({ book, kind });
+    }, []);
+
+    const clearDeleteTarget = React.useCallback(() => {
+        if (deleting) return;
+        setDeleteTarget(null);
+    }, [deleting]);
 
     const loadBooks = React.useCallback(async () => {
         setError(null);
@@ -482,7 +737,8 @@ export default function LibrarianBooksPage() {
             const data = await fetchBooks();
             setBooks(data);
         } catch (err: unknown) {
-            const message = getErrorMessage(err) || "Failed to load books. Please try again later.";
+            const message =
+                getErrorMessage(err) || "Failed to load books. Please try again later.";
             setError(message);
             toast.error("Failed to load books", { description: message });
         } finally {
@@ -502,6 +758,14 @@ export default function LibrarianBooksPage() {
             setRefreshing(false);
         }
     };
+
+    const toggleBookOpen = React.useCallback((bookId: string) => {
+        setOpenBookIds((prev) =>
+            prev.includes(bookId)
+                ? prev.filter((value) => value !== bookId)
+                : [...prev, bookId]
+        );
+    }, []);
 
     const resolveLibraryArea = React.useCallback(
         (
@@ -529,148 +793,142 @@ export default function LibrarianBooksPage() {
         []
     );
 
+    const buildBookPayload = React.useCallback(
+        (
+            form: BookFormValues
+        ):
+            | { ok: true; payload: Record<string, unknown> }
+            | { ok: false; message: string } => {
+            const resolvedCallNo = form.callNumber.trim();
+            const resolvedAccNo = form.accessionNumber.trim();
+            const resolvedTitle = form.title.trim();
+            const resolvedSubtitle = form.subtitle.trim();
+            const resolvedAuthor = form.author.trim();
+            const resolvedSubjects = form.subjects.trim();
+
+            if (!resolvedCallNo) {
+                return { ok: false, message: "Call number is required." };
+            }
+
+            if (!resolvedAccNo) {
+                return { ok: false, message: "Accession number is required." };
+            }
+
+            if (!resolvedTitle) {
+                return { ok: false, message: "Title is required." };
+            }
+
+            const pubYearNum = parseYearOrNull(form.pubYear);
+            if (pubYearNum === null) {
+                return {
+                    ok: false,
+                    message: "Publication year is required and must be a valid 4-digit year.",
+                };
+            }
+
+            if (!resolvedAuthor) {
+                return { ok: false, message: "Author is required." };
+            }
+
+            const resolvedPubPlace = form.placeOfPublication.trim();
+            if (!resolvedPubPlace) {
+                return { ok: false, message: "Place of publication is required." };
+            }
+
+            const resolvedPublisher = form.publisher.trim();
+            if (!resolvedPublisher) {
+                return { ok: false, message: "Publisher is required." };
+            }
+
+            const pagesValue = buildCreatePayloadPagesValue(form.pages);
+            if (typeof pagesValue === "string") {
+                return { ok: false, message: "Pages must be a positive number when provided." };
+            }
+
+            const resolvedBarcode = form.barcode.trim();
+            if (!resolvedBarcode) {
+                return { ok: false, message: "Barcode is required." };
+            }
+
+            const area = resolveLibraryArea(form.libraryAreaOption, form.libraryAreaOther);
+            if (!area.ok) {
+                return { ok: false, message: area.message };
+            }
+
+            if (!form.borrowDuration.trim()) {
+                return { ok: false, message: "Borrow duration (days) is required." };
+            }
+
+            const borrowDaysNum = Number(form.borrowDuration);
+            if (!Number.isFinite(borrowDaysNum) || borrowDaysNum <= 0) {
+                return {
+                    ok: false,
+                    message: "Borrow duration must be a positive number of days.",
+                };
+            }
+            const borrowDaysInt = Math.floor(borrowDaysNum);
+
+            const copyNumberInput = form.copyNumber.trim();
+            const copyNum = parsePositiveIntOrNull(copyNumberInput);
+            if (!copyNumberInput || copyNum === null) {
+                return {
+                    ok: false,
+                    message: "Copy number is required and must be a positive number.",
+                };
+            }
+
+            return {
+                ok: true,
+                payload: {
+                    callNumber: resolvedCallNo,
+                    accessionNumber: resolvedAccNo,
+                    title: resolvedTitle,
+                    subtitle: resolvedSubtitle,
+                    publicationYear: pubYearNum,
+                    author: resolvedAuthor,
+                    placeOfPublication: resolvedPubPlace,
+                    publisher: resolvedPublisher,
+                    isbn: form.isbn.trim(),
+                    issn: form.issn.trim(),
+                    subjects: resolvedSubjects || undefined,
+                    genre: resolvedSubjects || undefined,
+                    category: resolvedSubjects || undefined,
+                    edition: form.edition.trim(),
+                    pages: pagesValue,
+                    otherDetails: form.otherDetails.trim(),
+                    dimensions: form.dimensions.trim(),
+                    notes: form.notes.trim(),
+                    series: form.series.trim(),
+                    addedEntries: form.addedEntries.trim(),
+                    barcode: resolvedBarcode,
+                    copyNumber: copyNum,
+                    volumeNumber: form.volumeNumber.trim(),
+                    libraryArea: area.value as LibraryArea,
+                    numberOfCopies: 1,
+                    available: form.available,
+                    isLibraryUseOnly: form.isLibraryUseOnly,
+                    canBorrow: !form.isLibraryUseOnly,
+                    borrowDurationDays: borrowDaysInt,
+                },
+            };
+        },
+        [resolveLibraryArea]
+    );
+
     const handleCreateBook = async () => {
         setFormError("");
 
-        const resolvedCallNo = createForm.callNumber.trim();
-        const resolvedAccNo = createForm.accessionNumber.trim();
-        const resolvedTitle = createForm.title.trim();
-        const resolvedSubtitle = createForm.subtitle.trim();
-        const resolvedAuthor = createForm.author.trim();
-        const resolvedSubjects = createForm.subjects.trim();
-
-        if (!resolvedCallNo) {
-            const message = "Call number is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!resolvedAccNo) {
-            const message = "Accession number is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!resolvedTitle) {
-            const message = "Title is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const pubYearNum = parseYearOrNull(createForm.pubYear);
-        if (pubYearNum === null) {
-            const message =
-                "Publication year is required and must be a valid 4-digit year.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!resolvedAuthor) {
-            const message = "Author is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const resolvedPubPlace = createForm.placeOfPublication.trim();
-        if (!resolvedPubPlace) {
-            const message = "Place of publication is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const resolvedPublisher = createForm.publisher.trim();
-        if (!resolvedPublisher) {
-            const message = "Publisher is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const pagesValue = buildCreatePayloadPagesValue(createForm.pages);
-
-        const resolvedBarcode = createForm.barcode.trim();
-        if (!resolvedBarcode) {
-            const message = "Barcode is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const area = resolveLibraryArea(
-            createForm.libraryAreaOption,
-            createForm.libraryAreaOther
-        );
-        if (!area.ok) {
-            setFormError(area.message);
-            toast.error("Validation error", { description: area.message });
-            return;
-        }
-
-        if (!createForm.borrowDuration.trim()) {
-            const message = "Borrow duration (days) is required.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const borrowDaysNum = Number(createForm.borrowDuration);
-        if (!Number.isFinite(borrowDaysNum) || borrowDaysNum <= 0) {
-            const message = "Borrow duration must be a positive number of days.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-        const borrowDaysInt = Math.floor(borrowDaysNum);
-
-        const copyNumberInput = createForm.copyNumber.trim();
-        const copyNum = parsePositiveIntOrNull(copyNumberInput);
-        if (!copyNumberInput || copyNum === null) {
-            const message = "Copy number is required and must be a positive number.";
-            setFormError(message);
-            toast.error("Validation error", { description: message });
+        const result = buildBookPayload(createForm);
+        if (!result.ok) {
+            setFormError(result.message);
+            toast.error("Validation error", { description: result.message });
             return;
         }
 
         setSaving(true);
         try {
-            const created = await createBook({
-                callNumber: resolvedCallNo,
-                accessionNumber: resolvedAccNo,
-                title: resolvedTitle,
-                subtitle: resolvedSubtitle,
-                publicationYear: pubYearNum,
-                author: resolvedAuthor,
-                placeOfPublication: resolvedPubPlace,
-                publisher: resolvedPublisher,
-                isbn: createForm.isbn.trim(),
-                issn: createForm.issn.trim(),
-                subjects: resolvedSubjects || undefined,
-                category: resolvedSubjects || undefined,
-                edition: createForm.edition.trim(),
-                pages: pagesValue as any,
-                otherDetails: createForm.otherDetails.trim(),
-                dimensions: createForm.dimensions.trim(),
-                notes: createForm.notes.trim(),
-                series: createForm.series.trim(),
-                addedEntries: createForm.addedEntries.trim(),
-                barcode: resolvedBarcode,
-                copyNumber: copyNum,
-                volumeNumber: createForm.volumeNumber.trim(),
-                libraryArea: area.value as LibraryArea,
-                numberOfCopies: 1,
-                available: createForm.available,
-                isLibraryUseOnly: createForm.isLibraryUseOnly,
-                canBorrow: !createForm.isLibraryUseOnly,
-                borrowDurationDays: borrowDaysInt,
-            });
-
-            setBooks((prev) => [created, ...prev]);
+            const created = await createBook(result.payload as Parameters<typeof createBook>[0]);
+            await loadBooks();
             toast.success("Book added", {
                 description: `"${created.title}" has been added to the catalog as a single copy record.`,
             });
@@ -678,7 +936,8 @@ export default function LibrarianBooksPage() {
             resetCreateForm();
             setAddOpen(false);
         } catch (err: unknown) {
-            const message = getErrorMessage(err) || "Failed to create book. Please try again later.";
+            const message =
+                getErrorMessage(err) || "Failed to create book. Please try again later.";
             setFormError(message);
             toast.error("Failed to create book", { description: message });
         } finally {
@@ -686,9 +945,11 @@ export default function LibrarianBooksPage() {
         }
     };
 
-    const openEditDialog = React.useCallback((book: BookDTO) => {
+    const openEditDialog = React.useCallback((book: BookDTO, kind: "book" | "copy") => {
         const { values, inventory } = buildEditFormValues(book);
+        setDetailOpen(false);
         setEditBookId(book.id);
+        setEditMode(kind === "copy" ? "edit_copy" : "edit");
         setEditForm(values);
         setEditInventory(inventory);
         setEditError("");
@@ -696,6 +957,7 @@ export default function LibrarianBooksPage() {
     }, []);
 
     const openAddCopyDialog = React.useCallback((book: BookDTO) => {
+        setDetailOpen(false);
         setCopySourceBook(book);
         setCopyForm(buildAddCopyFormValues(book));
         setCopyError("");
@@ -707,155 +969,39 @@ export default function LibrarianBooksPage() {
 
         setEditError("");
 
-        const resolvedCallNo = editForm.callNumber.trim();
-        const resolvedAccNo = editForm.accessionNumber.trim();
-        const resolvedTitle = editForm.title.trim();
-        const resolvedSubtitle = editForm.subtitle.trim();
-        const resolvedAuthor = editForm.author.trim();
-        const resolvedSubjects = editForm.subjects.trim();
-
-        if (!resolvedCallNo) {
-            const message = "Call number is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!resolvedAccNo) {
-            const message = "Accession number is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!resolvedTitle) {
-            const message = "Title is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const pubYearNum = parseYearOrNull(editForm.pubYear);
-        if (pubYearNum === null) {
-            const message =
-                "Publication year is required and must be a valid 4-digit year.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        if (!resolvedAuthor) {
-            const message = "Author is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const resolvedPubPlace = editForm.placeOfPublication.trim();
-        if (!resolvedPubPlace) {
-            const message = "Place of publication is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const resolvedPublisher = editForm.publisher.trim();
-        if (!resolvedPublisher) {
-            const message = "Publisher is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const pagesValue = buildCreatePayloadPagesValue(editForm.pages);
-
-        const resolvedBarcode = editForm.barcode.trim();
-        if (!resolvedBarcode) {
-            const message = "Barcode is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const area = resolveLibraryArea(
-            editForm.libraryAreaOption,
-            editForm.libraryAreaOther
-        );
-        if (!area.ok) {
-            setEditError(area.message);
-            toast.error("Validation error", { description: area.message });
-            return;
-        }
-
-        if (!editForm.borrowDuration.trim()) {
-            const message = "Borrow duration (days) is required.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-
-        const borrowDaysNum = Number(editForm.borrowDuration);
-        if (!Number.isFinite(borrowDaysNum) || borrowDaysNum <= 0) {
-            const message = "Borrow duration must be a positive number of days.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
-            return;
-        }
-        const borrowDaysInt = Math.floor(borrowDaysNum);
-
-        const copyNumberInput = editForm.copyNumber.trim();
-        const copyNum = parsePositiveIntOrNull(copyNumberInput);
-        if (!copyNumberInput || copyNum === null) {
-            const message = "Copy number is required and must be a positive number.";
-            setEditError(message);
-            toast.error("Validation error", { description: message });
+        const result = buildBookPayload(editForm);
+        if (!result.ok) {
+            setEditError(result.message);
+            toast.error("Validation error", { description: result.message });
             return;
         }
 
         setEditing(true);
         try {
-            const updated = await updateBook(editBookId, {
-                callNumber: resolvedCallNo,
-                accessionNumber: resolvedAccNo,
-                title: resolvedTitle,
-                subtitle: resolvedSubtitle,
-                publicationYear: pubYearNum,
-                author: resolvedAuthor,
-                placeOfPublication: resolvedPubPlace,
-                publisher: resolvedPublisher,
-                isbn: editForm.isbn.trim(),
-                issn: editForm.issn.trim(),
-                subjects: resolvedSubjects || undefined,
-                category: resolvedSubjects || undefined,
-                edition: editForm.edition.trim(),
-                pages: pagesValue as any,
-                otherDetails: editForm.otherDetails.trim(),
-                dimensions: editForm.dimensions.trim(),
-                notes: editForm.notes.trim(),
-                series: editForm.series.trim(),
-                addedEntries: editForm.addedEntries.trim(),
-                barcode: resolvedBarcode,
-                copyNumber: copyNum,
-                volumeNumber: editForm.volumeNumber.trim(),
-                libraryArea: area.value as LibraryArea,
-                available: editForm.available,
-                isLibraryUseOnly: editForm.isLibraryUseOnly,
-                canBorrow: !editForm.isLibraryUseOnly,
-                borrowDurationDays: borrowDaysInt,
-            });
+            const updated =
+                editMode === "edit_copy"
+                    ? await updateBookCopy(
+                          editBookId,
+                          result.payload as Parameters<typeof updateBookCopy>[1]
+                      )
+                    : await updateBook(
+                          editBookId,
+                          result.payload as Parameters<typeof updateBook>[1]
+                      );
 
-            setBooks((prev) => prev.map((book) => (book.id === updated.id ? updated : book)));
+            await loadBooks();
 
-            toast.success("Book updated", {
+            toast.success(editMode === "edit_copy" ? "Copy updated" : "Book updated", {
                 description: `"${updated.title}" has been updated.`,
             });
 
             setEditOpen(false);
             resetEditForm();
         } catch (err: unknown) {
-            const message = getErrorMessage(err) || "Failed to update book. Please try again later.";
+            const message =
+                getErrorMessage(err) || "Failed to update the record. Please try again later.";
             setEditError(message);
-            toast.error("Failed to update book", { description: message });
+            toast.error("Failed to update", { description: message });
         } finally {
             setEditing(false);
         }
@@ -866,35 +1012,29 @@ export default function LibrarianBooksPage() {
 
         setCopyError("");
 
-        const count = parsePositiveIntOrNull(copyForm.count);
-        if (count === null) {
-            const message = "Please enter a valid positive number of copies to add.";
-            setCopyError(message);
-            toast.error("Validation error", { description: message });
+        const result = buildBookPayload(copyForm);
+        if (!result.ok) {
+            setCopyError(result.message);
+            toast.error("Validation error", { description: result.message });
             return;
         }
 
         setCopying(true);
         try {
-            const updated = await addBookCopy(copySourceBook.id, {
-                count,
-            });
+            const updated = await addBookCopy(
+                copySourceBook.id,
+                result.payload as Parameters<typeof addBookCopy>[1]
+            );
+            await loadBooks();
+            setCopyOpen(false);
+            resetCopyForm();
 
-            setBooks((prev) => {
-                const exists = prev.some((book) => book.id === updated.id);
-                if (!exists) {
-                    return [updated, ...prev];
-                }
-
-                return prev.map((book) => (book.id === updated.id ? updated : book));
-            });
-            setCopyForm(buildAddCopyFormValues(copySourceBook));
-
-            toast.success("Copy count updated", {
-                description: `${count} cop${count === 1 ? "y has" : "ies have"} been added to "${copySourceBook.title}".`,
+            toast.success("Copy added", {
+                description: `A new editable copy has been added to "${updated.title}".`,
             });
         } catch (err: unknown) {
-            const message = getErrorMessage(err) || "Failed to add the copy. Please try again later.";
+            const message =
+                getErrorMessage(err) || "Failed to add the copy. Please try again later.";
             setCopyError(message);
             toast.error("Failed to add copy", { description: message });
         } finally {
@@ -902,19 +1042,39 @@ export default function LibrarianBooksPage() {
         }
     };
 
-    const handleDelete = async (book: BookDTO) => {
-        const previous = books;
-        setBooks((prev) => prev.filter((item) => item.id !== book.id));
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
 
+        const { book, kind } = deleteTarget;
+        const isOriginal = kind === "book";
+        const previous = books;
+
+        if (isOriginal) {
+            setBooks((prev) => prev.filter((item) => item.id !== book.id));
+        }
+
+        setDeleting(true);
         try {
-            await deleteBook(book.id);
-            toast.success("Book deleted", {
+            if (isOriginal) {
+                await deleteBook(book.id);
+            } else {
+                await deleteBookCopy(book.id);
+            }
+
+            await loadBooks();
+            closeDetailDialog();
+            setDeleteTarget(null);
+
+            toast.success(isOriginal ? "Book deleted" : "Copy deleted", {
                 description: `"${book.title}" has been removed from the catalog.`,
             });
         } catch (err: unknown) {
             setBooks(previous);
-            const message = getErrorMessage(err) || "Failed to delete book. Please try again later.";
+            const message =
+                getErrorMessage(err) || "Failed to delete the record. Please try again later.";
             toast.error("Delete failed", { description: message });
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -922,8 +1082,9 @@ export default function LibrarianBooksPage() {
         const values = new Set<string>();
 
         books.forEach((book) => {
-            const area = book.libraryArea ? String(book.libraryArea).trim() : "";
-            if (area) values.add(area);
+            getGroupLibraryAreas(book).forEach((area) => {
+                if (area) values.add(area);
+            });
         });
 
         return Array.from(values).sort((a, b) =>
@@ -958,13 +1119,16 @@ export default function LibrarianBooksPage() {
         const base = books.filter((book) => {
             const inventory = getInventory(book);
             const tracking = getBorrowTracking(book);
-            const area = book.libraryArea ? String(book.libraryArea).trim() : "";
-            const areaLabel = area ? formatLibraryAreaLabel(area) : "";
+            const copies = getCopyRecords(book);
+            const areaValues = getGroupLibraryAreas(book);
+            const areaLabel = areaValues
+                .map((value) => formatLibraryAreaLabel(value))
+                .join(" ");
             const rawPages = (book as { pages?: unknown }).pages;
             const borrowable = isBorrowableByCopies(book);
             const libraryUseOnly = isLibraryUseOnlyBook(book);
 
-            if (libraryAreaFilter !== "all" && area !== libraryAreaFilter) {
+            if (libraryAreaFilter !== "all" && !areaValues.includes(libraryAreaFilter)) {
                 return false;
             }
 
@@ -983,6 +1147,16 @@ export default function LibrarianBooksPage() {
             if (tokens.length === 0) {
                 return true;
             }
+
+            const copyHay = copies.flatMap((copy) => [
+                copy.accessionNumber || "",
+                copy.callNumber || "",
+                copy.barcode || "",
+                String(typeof copy.copyNumber === "number" ? copy.copyNumber : ""),
+                copy.volumeNumber || "",
+                copy.libraryArea || "",
+                copy.borrowDurationDays ?? "",
+            ]);
 
             const hay = [
                 book.title,
@@ -1007,7 +1181,7 @@ export default function LibrarianBooksPage() {
                 book.otherDetails || "",
                 String(typeof book.publicationYear === "number" ? book.publicationYear : ""),
                 String(typeof book.copyrightYear === "number" ? book.copyrightYear : ""),
-                area,
+                ...areaValues,
                 areaLabel,
                 String(
                     typeof book.borrowDurationDays === "number"
@@ -1019,6 +1193,7 @@ export default function LibrarianBooksPage() {
                 String(inventory.borrowed ?? ""),
                 String(tracking.active ?? ""),
                 String(tracking.total ?? ""),
+                ...copyHay,
                 book.available ? "available" : "unavailable",
                 libraryUseOnly ? "library use only" : "",
                 libraryUseOnly ? "cannot borrow" : "borrowable",
@@ -1147,9 +1322,9 @@ export default function LibrarianBooksPage() {
                     <div className="min-w-0">
                         <h2 className="text-lg font-semibold leading-tight">Catalog &amp; inventory</h2>
                         <p className="text-xs text-white/70">
-                            Add the first copy of a title, then use <span className="font-semibold text-white">Add copy</span>{" "}
-                            to increase the inventory count for the same catalog entry without
-                            creating repeated duplicate rows for saved copies.
+                            Add the first copy of a title, then use{" "}
+                            <span className="font-semibold text-white">Add copy</span> to save
+                            additional editable copy records under the same catalog entry.
                         </p>
                     </div>
                 </div>
@@ -1200,8 +1375,76 @@ export default function LibrarianBooksPage() {
                 </div>
             </div>
 
+            <BookRecordDetailsDialog
+                open={detailOpen}
+                onOpenChange={(open) => {
+                    if (!open) closeDetailDialog();
+                    else setDetailOpen(true);
+                }}
+                book={detailBook}
+                kind={detailKind}
+                onEdit={
+                    detailBook
+                        ? () => openEditDialog(detailBook, detailKind)
+                        : undefined
+                }
+                onDelete={
+                    detailBook
+                        ? () => requestDelete(detailBook, detailKind)
+                        : undefined
+                }
+                onAddCopy={
+                    detailKind === "book" && detailBook
+                        ? () => openAddCopyDialog(detailBook)
+                        : undefined
+                }
+            />
+
+
+            <AlertDialog
+                open={Boolean(deleteTarget)}
+                onOpenChange={(open) => {
+                    if (!open) clearDeleteTarget();
+                }}
+            >
+                <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {deleteTarget?.kind === "copy" ? "Delete copy" : "Delete book"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-white/70">
+                            {deleteTarget
+                                ? deleteTarget.kind === "copy"
+                                    ? `This will permanently remove copy ${formatDetailValue(deleteTarget.book.copyNumber)} of "${formatDetailValue(deleteTarget.book.title, "this book")}" from the catalog.`
+                                    : getCopyRecords(deleteTarget.book).length > 1
+                                      ? `This will permanently remove "${formatDetailValue(deleteTarget.book.title, "this book")}" and all ${getCopyRecords(deleteTarget.book).length} saved copies from the catalog.`
+                                      : `This will permanently remove "${formatDetailValue(deleteTarget.book.title, "this book")}" from the catalog.`
+                                : ""}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel
+                            className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                            disabled={deleting}
+                        >
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                void confirmDelete();
+                            }}
+                            disabled={deleting}
+                        >
+                            {deleting ? "Deleting..." : "Delete"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <BookFormDialog
-                mode="edit"
+                mode={editMode}
                 open={editOpen}
                 onOpenChange={(open) => {
                     setEditOpen(open);
@@ -1219,108 +1462,23 @@ export default function LibrarianBooksPage() {
                 inventory={editInventory}
             />
 
-            <Dialog
-                modal
+            <BookFormDialog
+                mode="copy"
                 open={copyOpen}
                 onOpenChange={(open) => {
                     setCopyOpen(open);
                     if (!open) resetCopyForm();
                 }}
-            >
-                <DialogContent
-                    className="w-[92vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-lg
-        [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
-        [&::-webkit-scrollbar]:w-1.5
-        [&::-webkit-scrollbar-track]:bg-slate-900/70
-        [&::-webkit-scrollbar-thumb]:rounded-full
-        [&::-webkit-scrollbar-thumb]:bg-slate-700
-        [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
-                >
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <BookCopy className="h-4 w-4" />
-                            Add copy
-                        </DialogTitle>
-                        <DialogDescription className="text-white/70">
-                            Add more inventory to the selected catalog entry without creating a
-                            separate duplicate row for each saved copy.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-2">
-                        <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3 text-sm text-white/80">
-                            <div className="font-medium text-white">
-                                {copySourceBook ? formatDetailValue(copySourceBook.title) : "—"}
-                            </div>
-                            <div className="mt-1 text-xs text-white/60">
-                                {copySourceBook ? formatDetailValue(copySourceBook.author) : "—"}
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/75">
-                                    Call no. {copySourceBook ? formatDetailValue(copySourceBook.callNumber) : "—"}
-                                </span>
-                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/75">
-                                    {copySourceBook ? getLibraryAreaValue(copySourceBook) : "—"}
-                                </span>
-                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/75">
-                                    {copySourceBook ? getInventoryValue(copySourceBook) : "—"}
-                                </span>
-                            </div>
-                        </div>
-
-                        <Field>
-                            <FieldLabel className="text-white">Number of copies to add *</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    value={copyForm.count}
-                                    onChange={(e) => patchCopyForm({ count: e.target.value })}
-                                    placeholder="Required (positive number)"
-                                    className="border-white/20 bg-slate-900/70 text-white"
-                                    inputMode="numeric"
-                                    autoComplete="off"
-                                />
-                            </FieldContent>
-                            <p className="mt-1 text-[11px] text-white/60">
-                                This increases the inventory count for the same book entry instead of
-                                creating a repeated catalog record.
-                            </p>
-                        </Field>
-
-                        {copyError ? <FieldError>{copyError}</FieldError> : null}
-                    </div>
-
-                    <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full border-white/20 text-white hover:bg-black/10 hover:text-white sm:w-auto"
-                            onClick={() => {
-                                setCopyOpen(false);
-                                resetCopyForm();
-                            }}
-                            disabled={copying}
-                        >
-                            Cancel
-                        </Button>
-
-                        <Button
-                            type="button"
-                            className="w-full cursor-pointer bg-linear-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 sm:w-auto"
-                            onClick={handleAddCopy}
-                            disabled={copying}
-                        >
-                            {copying ? (
-                                <span className="inline-flex items-center gap-2">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Saving…
-                                </span>
-                            ) : (
-                                "Add copies"
-                            )}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                values={copyForm}
+                onChange={patchCopyForm}
+                onSubmit={handleAddCopy}
+                onCancel={() => {
+                    setCopyOpen(false);
+                    resetCopyForm();
+                }}
+                submitting={copying}
+                error={copyError}
+            />
 
             <Card className="border-white/10 bg-slate-800/60">
                 <BooksCatalogFilters
@@ -1358,17 +1516,25 @@ export default function LibrarianBooksPage() {
                             </span>
                         </div>
                     ) : (
-                        <Accordion type="multiple" className="space-y-3">
+                        <div className="space-y-3">
                             {filteredBooks.map((book) => (
                                 <BookCatalogCard
                                     key={book.id}
                                     book={book}
-                                    onEdit={openEditDialog}
-                                    onDelete={handleDelete}
+                                    isOpen={openBookIds.includes(book.id)}
+                                    onToggle={toggleBookOpen}
+                                    onOpenDetails={(record) => openDetailDialog(record, "book")}
+                                    onEdit={(record) => openEditDialog(record, "book")}
+                                    onDelete={(record) => requestDelete(record, "book")}
                                     onAddCopy={openAddCopyDialog}
+                                    onOpenCopyDetails={(record) =>
+                                        openDetailDialog(record, "copy")
+                                    }
+                                    onEditCopy={(record) => openEditDialog(record, "copy")}
+                                    onDeleteCopy={(record) => requestDelete(record, "copy")}
                                 />
                             ))}
-                        </Accordion>
+                        </div>
                     )}
                 </CardContent>
             </Card>

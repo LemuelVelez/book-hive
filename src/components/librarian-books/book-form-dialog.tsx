@@ -22,7 +22,7 @@ import {
     formatLibraryAreaLabel,
 } from "./books-constants";
 
-export type BookFormMode = "create" | "edit";
+export type BookFormMode = "create" | "edit" | "copy" | "edit_copy";
 
 export type BookFormValues = {
     title: string;
@@ -126,6 +126,24 @@ export function BookFormDialog({
     trigger,
 }: BookFormDialogProps) {
     const isEdit = mode === "edit";
+    const isCopy = mode === "copy";
+    const isEditCopy = mode === "edit_copy";
+
+    const title = isEdit
+        ? "Edit book"
+        : isEditCopy
+          ? "Edit copy"
+          : isCopy
+            ? "Add copy"
+            : "Add a new book";
+
+    const submitLabel = isEdit
+        ? "Update book"
+        : isEditCopy
+          ? "Update copy"
+          : isCopy
+            ? "Save copy"
+            : "Save book";
 
     return (
         <Dialog modal open={open} onOpenChange={onOpenChange}>
@@ -141,18 +159,30 @@ export function BookFormDialog({
         [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
             >
                 <DialogHeader>
-                    <DialogTitle>{isEdit ? "Edit book" : "Add a new book"}</DialogTitle>
+                    <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="text-white/70">
                         {isEdit ? (
                             <>
                                 Update the catalog and physical-copy details for this saved book
                                 record.
                             </>
+                        ) : isEditCopy ? (
+                            <>
+                                Update this saved copy. All copy details remain editable, including
+                                accession number, barcode, call number, copy number, and the rest
+                                of the catalog fields shown below.
+                            </>
+                        ) : isCopy ? (
+                            <>
+                                Save another copy record for this title. All fields are editable
+                                before saving so each copy can keep its own accession number,
+                                barcode, call number, copy number, and other details.
+                            </>
                         ) : (
                             <>
                                 Save the first physical copy for this title. Use the separate{" "}
-                                <span className="font-semibold text-white">Add copy</span> action
-                                later for additional copies with a different accession number,
+                                <span className="font-semibold text-white">Add copy</span>{" "}
+                                action later for additional copies with their own accession number,
                                 barcode, and copy number.
                             </>
                         )}
@@ -172,7 +202,7 @@ export function BookFormDialog({
                                     value={values.callNumber}
                                     onChange={(e) => onChange({ callNumber: e.target.value })}
                                     placeholder={
-                                        isEdit
+                                        isEdit || isEditCopy
                                             ? "Required"
                                             : "Required (e.g., QA76.73.J38 M37 2008)"
                                     }
@@ -256,7 +286,11 @@ export function BookFormDialog({
                                     onChange={(e) =>
                                         onChange({ placeOfPublication: e.target.value })
                                     }
-                                    placeholder={isEdit ? "Required" : "Required (e.g., Boston)"}
+                                    placeholder={
+                                        isEdit || isEditCopy
+                                            ? "Required"
+                                            : "Required (e.g., Boston)"
+                                    }
                                     className="border-white/20 bg-slate-900/70 text-white"
                                     autoComplete="off"
                                 />
@@ -269,7 +303,11 @@ export function BookFormDialog({
                                 <Input
                                     value={values.publisher}
                                     onChange={(e) => onChange({ publisher: e.target.value })}
-                                    placeholder={isEdit ? "Required" : "Required (e.g., Pearson)"}
+                                    placeholder={
+                                        isEdit || isEditCopy
+                                            ? "Required"
+                                            : "Required (e.g., Pearson)"
+                                    }
                                     className="border-white/20 bg-slate-900/70 text-white"
                                     autoComplete="off"
                                 />
@@ -282,13 +320,13 @@ export function BookFormDialog({
                                 <Input
                                     value={values.pages}
                                     onChange={(e) => onChange({ pages: e.target.value })}
-                                    placeholder='Optional (e.g., "xii, 200 p." / "Preliminary")'
+                                    placeholder='Optional (e.g., "200")'
                                     className="border-white/20 bg-slate-900/70 text-white"
                                     autoComplete="off"
                                 />
                             </FieldContent>
                             <p className="mt-1 text-[11px] text-white/60">
-                                Accepts text (not numbers only).
+                                Use a positive number when page count is available.
                             </p>
                         </Field>
 
@@ -344,7 +382,9 @@ export function BookFormDialog({
                                     value={values.isbn}
                                     onChange={(e) => onChange({ isbn: e.target.value })}
                                     placeholder={
-                                        isEdit ? "Optional" : "Optional (e.g., 9780132350884)"
+                                        isEdit || isEditCopy
+                                            ? "Optional"
+                                            : "Optional (e.g., 9780132350884)"
                                     }
                                     className="border-white/20 bg-slate-900/70 text-white"
                                     autoComplete="off"
@@ -436,7 +476,7 @@ export function BookFormDialog({
                             Copy & circulation
                         </div>
 
-                        {isEdit ? (
+                        {isEdit || isEditCopy ? (
                             <div className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 text-xs text-white/70">
                                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                                     <span>
@@ -484,10 +524,25 @@ export function BookFormDialog({
                         ) : null}
 
                         <div className="rounded-md border border-cyan-400/20 bg-cyan-500/10 px-3 py-3 text-[11px] leading-5 text-cyan-100/85">
-                            Each saved record represents one physical copy. Use the separate{" "}
-                            <span className="font-semibold text-cyan-100">Add copy</span> action
-                            from an existing record when you need another copy with a different
-                            accession number, barcode, and copy number.
+                            {isCopy ? (
+                                <>
+                                    This creates a separate saved copy record. Every visible field
+                                    here is editable before saving.
+                                </>
+                            ) : isEditCopy ? (
+                                <>
+                                    This updates a saved copy record. You can edit the copy number,
+                                    accession number, barcode, and the rest of the copy details
+                                    from this dialog.
+                                </>
+                            ) : (
+                                <>
+                                    Each saved record represents one physical copy. Use the
+                                    separate <span className="font-semibold text-cyan-100">Add copy</span>{" "}
+                                    action from an existing record when you need another copy with a
+                                    different accession number, barcode, and copy number.
+                                </>
+                            )}
                         </div>
 
                         <Field>
@@ -538,7 +593,7 @@ export function BookFormDialog({
                                 >
                                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                         {LIBRARY_AREA_OPTIONS.map((opt) => {
-                                            const id = `${isEdit ? "edit" : "add"}-lib-area-${opt}`;
+                                            const id = `${mode}-lib-area-${opt}`;
 
                                             return (
                                                 <div
@@ -559,10 +614,10 @@ export function BookFormDialog({
                                         <div className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2">
                                             <RadioGroupItem
                                                 value={LIBRARY_AREA_OTHER_VALUE}
-                                                id={`${isEdit ? "edit" : "add"}-lib-area-others`}
+                                                id={`${mode}-lib-area-others`}
                                             />
                                             <Label
-                                                htmlFor={`${isEdit ? "edit" : "add"}-lib-area-others`}
+                                                htmlFor={`${mode}-lib-area-others`}
                                                 className="cursor-pointer text-sm text-white/80"
                                             >
                                                 Others (please specify)
@@ -612,7 +667,7 @@ export function BookFormDialog({
                         <div className="rounded-md border border-amber-400/20 bg-amber-500/10 px-3 py-3">
                             <div className="flex items-start gap-2">
                                 <Checkbox
-                                    id={`${isEdit ? "edit" : "add"}-library-use-only`}
+                                    id={`${mode}-library-use-only`}
                                     checked={values.isLibraryUseOnly}
                                     onCheckedChange={(v) =>
                                         onChange({ isLibraryUseOnly: v === true })
@@ -620,7 +675,7 @@ export function BookFormDialog({
                                 />
                                 <div className="space-y-1">
                                     <Label
-                                        htmlFor={`${isEdit ? "edit" : "add"}-library-use-only`}
+                                        htmlFor={`${mode}-library-use-only`}
                                         className="cursor-pointer text-sm font-medium text-amber-100"
                                     >
                                         Library Use Only
@@ -635,12 +690,12 @@ export function BookFormDialog({
 
                         <div className="flex items-center gap-2 pt-2">
                             <Checkbox
-                                id={`${isEdit ? "edit" : "add"}-available`}
+                                id={`${mode}-available`}
                                 checked={values.available}
                                 onCheckedChange={(v) => onChange({ available: v === true })}
                             />
                             <Label
-                                htmlFor={`${isEdit ? "edit" : "add"}-available`}
+                                htmlFor={`${mode}-available`}
                                 className="text-sm text-white/80"
                             >
                                 Show as available in the catalog
@@ -681,10 +736,8 @@ export function BookFormDialog({
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 Saving…
                             </span>
-                        ) : isEdit ? (
-                            "Update book"
                         ) : (
-                            "Save book"
+                            submitLabel
                         )}
                     </Button>
                 </DialogFooter>

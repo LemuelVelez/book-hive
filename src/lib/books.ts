@@ -56,6 +56,7 @@ export type BookDTO = {
   copyNumber?: number | null;
   volumeNumber?: string;
   libraryArea?: LibraryArea | null;
+  parentBookId?: string | null;
 
   /**
    * numberOfCopies = REMAINING/AVAILABLE copies for this record.
@@ -89,6 +90,7 @@ export type BookDTO = {
    * Used by server when borrowing via /borrow-records/self.
    */
   borrowDurationDays?: number | null;
+  copies?: BookDTO[];
 };
 
 type JsonOk<T> = { ok: true } & T;
@@ -244,7 +246,7 @@ export type UpdateBookPayload = Partial<CreateBookPayload> & {
   copiesToAdd?: number;
 };
 
-export type AddBookCopyPayload = {
+export type AddBookCopyPayload = Partial<CreateBookPayload> & {
   count?: number;
   copiesToAdd?: number;
   numberOfCopies?: number;
@@ -286,6 +288,13 @@ export async function updateBook(
   return res.book;
 }
 
+export async function updateBookCopy(
+  id: string | number,
+  payload: UpdateBookPayload
+): Promise<BookDTO> {
+  return updateBook(id, payload);
+}
+
 export async function addBookCopy(
   id: string | number,
   payload: AddBookCopyPayload
@@ -315,4 +324,8 @@ export async function deleteBook(id: string | number): Promise<void> {
   await requestJSON<Resp>(BOOK_ROUTES.delete(id), {
     method: "DELETE",
   });
+}
+
+export async function deleteBookCopy(id: string | number): Promise<void> {
+  await deleteBook(id);
 }
