@@ -71,7 +71,9 @@ function getCopyRecords(book: BookDTO): BookDTO[] {
                 typeof a.copyNumber === "number" ? a.copyNumber : Number.MAX_SAFE_INTEGER;
             const bCopy =
                 typeof b.copyNumber === "number" ? b.copyNumber : Number.MAX_SAFE_INTEGER;
+
             if (aCopy !== bCopy) return aCopy - bCopy;
+
             return String(a.accessionNumber || "").localeCompare(
                 String(b.accessionNumber || ""),
                 undefined,
@@ -109,6 +111,9 @@ function buildEditFormValues(book: BookDTO): {
     const tracking = getBorrowTracking(book);
     const currentArea = (book.libraryArea || "").trim();
 
+    const currentTotalCopies =
+        typeof inventory.total === "number" && inventory.total > 0 ? inventory.total : 1;
+
     return {
         values: {
             ...getDefaultBookFormValues(),
@@ -141,7 +146,7 @@ function buildEditFormValues(book: BookDTO): {
             copyNumber:
                 typeof book.copyNumber === "number" ? String(book.copyNumber) : "",
             volumeNumber: book.volumeNumber || "",
-            numberOfCopies: "1",
+            numberOfCopies: String(currentTotalCopies),
             copiesMode: "set",
             copiesToAdd: "",
             libraryAreaOption: currentArea
@@ -152,10 +157,11 @@ function buildEditFormValues(book: BookDTO): {
             libraryAreaOther:
                 currentArea && !isKnownLibraryArea(currentArea) ? currentArea : "",
             borrowDuration:
-                typeof book.borrowDurationDays === "number" && book.borrowDurationDays > 0
+                typeof book.borrowDurationDays === "number" &&
+                book.borrowDurationDays > 0
                     ? String(book.borrowDurationDays)
                     : "7",
-            available: book.available,
+            available: Boolean(book.available),
             isLibraryUseOnly: Boolean(book.isLibraryUseOnly),
         },
         inventory: {
@@ -275,9 +281,7 @@ function CatalogDetail({
     return (
         <div className={`rounded-xl border border-white/10 bg-black/20 p-3 ${className}`.trim()}>
             <div className="text-[11px] uppercase tracking-wide text-white/55">{label}</div>
-            <div className="mt-1 wrap-break-word text-sm text-white/90">
-                {children ?? value ?? "—"}
-            </div>
+            <div className="mt-1 wrap-break-word text-sm text-white/90">{children ?? value ?? "—"}</div>
         </div>
     );
 }
@@ -452,7 +456,7 @@ function BookCopyRecords({
                                 key={copy.id || `${book.id}-copy-${index}`}
                                 className="rounded-2xl border border-white/10 bg-black/20 p-4"
                             >
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                     <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
                                         Copy {formatDetailValue(copy.copyNumber, String(index + 2))}
                                     </span>
@@ -467,22 +471,10 @@ function BookCopyRecords({
                                 </div>
 
                                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                    <CatalogDetail
-                                        label="Call no."
-                                        value={formatDetailValue(copy.callNumber)}
-                                    />
-                                    <CatalogDetail
-                                        label="Title"
-                                        value={formatDetailValue(copy.title)}
-                                    />
-                                    <CatalogDetail
-                                        label="Barcode"
-                                        value={formatDetailValue(copy.barcode)}
-                                    />
-                                    <CatalogDetail
-                                        label="Library area"
-                                        value={getLibraryAreaValue(copy)}
-                                    />
+                                    <CatalogDetail label="Barcode" value={formatDetailValue(copy.barcode)} />
+                                    <CatalogDetail label="Library area" value={getLibraryAreaValue(copy)} />
+                                    <CatalogDetail label="Volume" value={formatDetailValue(copy.volumeNumber)} />
+                                    <CatalogDetail label="Loan days" value={getLoanDaysValue(copy)} />
                                 </div>
 
                                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -543,27 +535,35 @@ function BookCatalogCard({
     onDeleteCopy: (book: BookDTO) => void;
 }) {
     const status = getStatusMeta(book);
+    const copyCount = getCopyRecords(book).length;
 
     return (
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20">
-            <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <button
                     type="button"
                     onClick={() => onToggle(book.id)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    aria-expanded={isOpen}
+                    className="flex min-w-0 flex-1 flex-col items-start gap-2 text-left"
                 >
-                    <span className="shrink-0 inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
-                        {formatDetailValue(book.callNumber)}
-                    </span>
-                    <span
-                        className={`shrink-0 inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border px-2 py-0.5 text-center text-[11px] font-medium ${status.classes}`}
-                    >
-                        {status.label}
-                    </span>
-                    <span className="min-w-0 truncate text-sm font-semibold text-white">
-                        {formatDetailValue(book.title)}
-                    </span>
+                    <div className="flex min-w-0 w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
+                                {formatDetailValue(book.callNumber)}
+                            </span>
+                            <span
+                                className={`inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border px-2 py-0.5 text-center text-[11px] font-medium ${status.classes}`}
+                            >
+                                {status.label}
+                            </span>
+                            <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/75">
+                                {copyCount} cop{copyCount === 1 ? "y" : "ies"}
+                            </span>
+                        </div>
+
+                        <span className="min-w-0 truncate text-sm font-semibold text-white">
+                            {formatDetailValue(book.title)}
+                        </span>
+                    </div>
                 </button>
 
                 {!isOpen ? (
@@ -661,21 +661,21 @@ export default function LibrarianBooksPage() {
 
     const [copyOpen, setCopyOpen] = React.useState(false);
     const [copying, setCopying] = React.useState(false);
-    const [copyError, setCopyError] = React.useState("");
     const [copySourceBook, setCopySourceBook] = React.useState<BookDTO | null>(null);
+    const [copyError, setCopyError] = React.useState("");
     const [copyForm, setCopyForm] = React.useState<BookFormValues>(() =>
         getDefaultBookFormValues()
     );
 
-    const [detailOpen, setDetailOpen] = React.useState(false);
-    const [detailBook, setDetailBook] = React.useState<BookDTO | null>(null);
-    const [detailKind, setDetailKind] = React.useState<"book" | "copy">("book");
-
+    const [deleting, setDeleting] = React.useState(false);
     const [deleteTarget, setDeleteTarget] = React.useState<{
         book: BookDTO;
         kind: "book" | "copy";
     } | null>(null);
-    const [deleting, setDeleting] = React.useState(false);
+
+    const [detailOpen, setDetailOpen] = React.useState(false);
+    const [detailBook, setDetailBook] = React.useState<BookDTO | null>(null);
+    const [detailKind, setDetailKind] = React.useState<"book" | "copy">("book");
 
     const patchCreateForm = React.useCallback((patch: Partial<BookFormValues>) => {
         setCreateForm((prev) => ({ ...prev, ...patch }));
@@ -797,25 +797,60 @@ export default function LibrarianBooksPage() {
         (
             form: BookFormValues
         ):
-            | { ok: true; payload: Record<string, unknown> }
+            | {
+                  ok: true;
+                  payload: {
+                      callNumber: string;
+                      accessionNumber: string;
+                      title: string;
+                      subtitle?: string;
+                      publicationYear: number;
+                      author: string;
+                      placeOfPublication: string;
+                      publisher: string;
+                      isbn?: string;
+                      issn?: string;
+                      subjects?: string;
+                      genre?: string;
+                      category?: string;
+                      edition?: string;
+                      pages?: number | string | null;
+                      otherDetails?: string;
+                      dimensions?: string;
+                      notes?: string;
+                      series?: string;
+                      addedEntries?: string;
+                      barcode: string;
+                      copyNumber: number;
+                      volumeNumber?: string;
+                      libraryArea: LibraryArea;
+                      numberOfCopies: number;
+                      available: boolean;
+                      isLibraryUseOnly: boolean;
+                      canBorrow: boolean;
+                      borrowDurationDays: number;
+                  };
+              }
             | { ok: false; message: string } => {
             const resolvedCallNo = form.callNumber.trim();
-            const resolvedAccNo = form.accessionNumber.trim();
-            const resolvedTitle = form.title.trim();
-            const resolvedSubtitle = form.subtitle.trim();
-            const resolvedAuthor = form.author.trim();
-            const resolvedSubjects = form.subjects.trim();
-
             if (!resolvedCallNo) {
                 return { ok: false, message: "Call number is required." };
             }
 
+            const resolvedAccNo = form.accessionNumber.trim();
             if (!resolvedAccNo) {
                 return { ok: false, message: "Accession number is required." };
             }
 
+            const resolvedTitle = form.title.trim();
             if (!resolvedTitle) {
                 return { ok: false, message: "Title is required." };
+            }
+
+            const resolvedSubtitle = form.subtitle.trim();
+            const resolvedAuthor = form.author.trim();
+            if (!resolvedAuthor) {
+                return { ok: false, message: "Author is required." };
             }
 
             const pubYearNum = parseYearOrNull(form.pubYear);
@@ -824,10 +859,6 @@ export default function LibrarianBooksPage() {
                     ok: false,
                     message: "Publication year is required and must be a valid 4-digit year.",
                 };
-            }
-
-            if (!resolvedAuthor) {
-                return { ok: false, message: "Author is required." };
             }
 
             const resolvedPubPlace = form.placeOfPublication.trim();
@@ -841,9 +872,6 @@ export default function LibrarianBooksPage() {
             }
 
             const pagesValue = buildCreatePayloadPagesValue(form.pages);
-            if (typeof pagesValue === "string") {
-                return { ok: false, message: "Pages must be a positive number when provided." };
-            }
 
             const resolvedBarcode = form.barcode.trim();
             if (!resolvedBarcode) {
@@ -877,32 +905,34 @@ export default function LibrarianBooksPage() {
                 };
             }
 
+            const resolvedSubjects = form.subjects.trim();
+
             return {
                 ok: true,
                 payload: {
                     callNumber: resolvedCallNo,
                     accessionNumber: resolvedAccNo,
                     title: resolvedTitle,
-                    subtitle: resolvedSubtitle,
+                    subtitle: resolvedSubtitle || undefined,
                     publicationYear: pubYearNum,
                     author: resolvedAuthor,
                     placeOfPublication: resolvedPubPlace,
                     publisher: resolvedPublisher,
-                    isbn: form.isbn.trim(),
-                    issn: form.issn.trim(),
+                    isbn: form.isbn.trim() || undefined,
+                    issn: form.issn.trim() || undefined,
                     subjects: resolvedSubjects || undefined,
                     genre: resolvedSubjects || undefined,
                     category: resolvedSubjects || undefined,
-                    edition: form.edition.trim(),
+                    edition: form.edition.trim() || undefined,
                     pages: pagesValue,
-                    otherDetails: form.otherDetails.trim(),
-                    dimensions: form.dimensions.trim(),
-                    notes: form.notes.trim(),
-                    series: form.series.trim(),
-                    addedEntries: form.addedEntries.trim(),
+                    otherDetails: form.otherDetails.trim() || undefined,
+                    dimensions: form.dimensions.trim() || undefined,
+                    notes: form.notes.trim() || undefined,
+                    series: form.series.trim() || undefined,
+                    addedEntries: form.addedEntries.trim() || undefined,
                     barcode: resolvedBarcode,
                     copyNumber: copyNum,
-                    volumeNumber: form.volumeNumber.trim(),
+                    volumeNumber: form.volumeNumber.trim() || undefined,
                     libraryArea: area.value as LibraryArea,
                     numberOfCopies: 1,
                     available: form.available,
@@ -929,6 +959,7 @@ export default function LibrarianBooksPage() {
         try {
             const created = await createBook(result.payload as Parameters<typeof createBook>[0]);
             await loadBooks();
+
             toast.success("Book added", {
                 description: `"${created.title}" has been added to the catalog as a single copy record.`,
             });
@@ -976,17 +1007,60 @@ export default function LibrarianBooksPage() {
             return;
         }
 
+        let payload: Record<string, unknown> = result.payload;
+
+        if (editMode !== "edit_copy") {
+            let copiesPayload: { numberOfCopies?: number; copiesToAdd?: number } = {};
+
+            if (editForm.copiesMode === "set") {
+                const total = parsePositiveIntOrNull(editForm.numberOfCopies);
+                if (total === null) {
+                    const message = "Total copies must be a positive number.";
+                    setEditError(message);
+                    toast.error("Validation error", { description: message });
+                    return;
+                }
+
+                if (
+                    typeof editInventory?.borrowed === "number" &&
+                    total < editInventory.borrowed
+                ) {
+                    const message = `Total copies cannot be less than currently borrowed copies (${editInventory.borrowed}).`;
+                    setEditError(message);
+                    toast.error("Validation error", { description: message });
+                    return;
+                }
+
+                copiesPayload = { numberOfCopies: total };
+            } else {
+                const increment = parsePositiveIntOrNull(editForm.copiesToAdd);
+                if (increment === null) {
+                    const message = "Copies to add must be a positive number.";
+                    setEditError(message);
+                    toast.error("Validation error", { description: message });
+                    return;
+                }
+
+                copiesPayload = { copiesToAdd: increment };
+            }
+
+            payload = {
+                ...result.payload,
+                ...copiesPayload,
+            };
+        }
+
         setEditing(true);
         try {
             const updated =
                 editMode === "edit_copy"
                     ? await updateBookCopy(
                           editBookId,
-                          result.payload as Parameters<typeof updateBookCopy>[1]
+                          payload as Parameters<typeof updateBookCopy>[1]
                       )
                     : await updateBook(
                           editBookId,
-                          result.payload as Parameters<typeof updateBook>[1]
+                          payload as Parameters<typeof updateBook>[1]
                       );
 
             await loadBooks();
@@ -1065,8 +1139,10 @@ export default function LibrarianBooksPage() {
             closeDetailDialog();
             setDeleteTarget(null);
 
-            toast.success(isOriginal ? "Book deleted" : "Copy deleted", {
-                description: `"${book.title}" has been removed from the catalog.`,
+            toast.success(isOriginal ? "Original record deleted" : "Copy deleted", {
+                description: isOriginal
+                    ? `"${book.title}" has been removed from the catalog.`
+                    : `Copy ${formatDetailValue(book.copyNumber)} has been removed from the catalog.`,
             });
         } catch (err: unknown) {
             setBooks(previous);
@@ -1116,202 +1192,140 @@ export default function LibrarianBooksPage() {
     const filteredBooks = React.useMemo(() => {
         const tokens = tokenizeSearch(search);
 
-        const base = books.filter((book) => {
-            const inventory = getInventory(book);
-            const tracking = getBorrowTracking(book);
-            const copies = getCopyRecords(book);
-            const areaValues = getGroupLibraryAreas(book);
-            const areaLabel = areaValues
-                .map((value) => formatLibraryAreaLabel(value))
-                .join(" ");
-            const rawPages = (book as { pages?: unknown }).pages;
-            const borrowable = isBorrowableByCopies(book);
-            const libraryUseOnly = isLibraryUseOnlyBook(book);
-
-            if (libraryAreaFilter !== "all" && !areaValues.includes(libraryAreaFilter)) {
-                return false;
-            }
-
-            if (availabilityFilter === "available" && !borrowable) {
-                return false;
-            }
-
-            if (availabilityFilter === "unavailable" && (borrowable || libraryUseOnly)) {
-                return false;
-            }
-
-            if (availabilityFilter === "library_use_only" && !libraryUseOnly) {
-                return false;
-            }
-
-            if (tokens.length === 0) {
-                return true;
-            }
-
-            const copyHay = copies.flatMap((copy) => [
-                copy.accessionNumber || "",
-                copy.callNumber || "",
-                copy.barcode || "",
-                String(typeof copy.copyNumber === "number" ? copy.copyNumber : ""),
-                copy.volumeNumber || "",
-                copy.libraryArea || "",
-                copy.borrowDurationDays ?? "",
-            ]);
-
-            const hay = [
-                book.title,
-                book.subtitle || "",
-                book.author,
-                book.accessionNumber || "",
-                book.callNumber || "",
-                book.isbn || "",
-                book.issn || "",
-                book.subjects || "",
-                book.genre || "",
-                book.category || "",
-                book.publisher || "",
-                book.placeOfPublication || "",
-                book.barcode || "",
-                String(typeof book.copyNumber === "number" ? book.copyNumber : ""),
-                book.volumeNumber || "",
-                String(rawPages ?? ""),
-                book.series || "",
-                book.addedEntries || "",
-                book.notes || "",
-                book.otherDetails || "",
-                String(typeof book.publicationYear === "number" ? book.publicationYear : ""),
-                String(typeof book.copyrightYear === "number" ? book.copyrightYear : ""),
-                ...areaValues,
-                areaLabel,
-                String(
-                    typeof book.borrowDurationDays === "number"
-                        ? book.borrowDurationDays
-                        : ""
-                ),
-                String(inventory.remaining ?? ""),
-                String(inventory.total ?? ""),
-                String(inventory.borrowed ?? ""),
-                String(tracking.active ?? ""),
-                String(tracking.total ?? ""),
-                ...copyHay,
-                book.available ? "available" : "unavailable",
-                libraryUseOnly ? "library use only" : "",
-                libraryUseOnly ? "cannot borrow" : "borrowable",
-                book.canBorrow === false ? "cannot borrow" : "can borrow",
-            ]
-                .map(normalizeSearchText)
-                .filter(Boolean)
-                .join(" ");
-
-            return matchesAllTokens(hay, tokens);
-        });
-
-        return [...base].sort((a, b) => {
-            const sectionRankA = isLibraryUseOnlyBook(a) ? 1 : 0;
-            const sectionRankB = isLibraryUseOnlyBook(b) ? 1 : 0;
-
-            if (sectionRankA !== sectionRankB) {
-                return sectionRankA - sectionRankB;
-            }
-
-            switch (sortOption) {
-                case "title_asc":
-                    return (
-                        compareText(a.title, b.title) ||
-                        compareText(a.author, b.author) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
-
-                case "title_desc":
-                    return (
-                        compareText(b.title, a.title) ||
-                        compareText(b.author, a.author) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
-
-                case "author_asc":
-                    return (
-                        compareText(a.author, b.author) ||
-                        compareText(a.title, b.title) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
-
-                case "author_desc":
-                    return (
-                        compareText(b.author, a.author) ||
-                        compareText(b.title, a.title) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
-
-                case "pub_year_desc":
-                    return (
-                        compareNullableNumber(a.publicationYear, b.publicationYear, "desc") ||
-                        compareText(a.title, b.title) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
-
-                case "pub_year_asc":
-                    return (
-                        compareNullableNumber(a.publicationYear, b.publicationYear, "asc") ||
-                        compareText(a.title, b.title) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
-
-                case "copies_desc": {
-                    const invA = getInventory(a);
-                    const invB = getInventory(b);
-
-                    return (
-                        compareNullableNumber(invA.total, invB.total, "desc") ||
-                        compareText(a.title, b.title) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
+        return [...books]
+            .filter((book) => {
+                if (availabilityFilter === "available" && !isBorrowableByCopies(book)) {
+                    return false;
                 }
 
-                case "copies_asc": {
-                    const invA = getInventory(a);
-                    const invB = getInventory(b);
-
-                    return (
-                        compareNullableNumber(invA.total, invB.total, "asc") ||
-                        compareText(a.title, b.title) ||
-                        compareNullableNumber(a.copyNumber, b.copyNumber, "asc") ||
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
-                            sensitivity: "base",
-                        })
-                    );
+                if (availabilityFilter === "unavailable" && isBorrowableByCopies(book)) {
+                    return false;
                 }
 
-                case "catalog":
-                default:
-                    return (
-                        buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                if (availabilityFilter === "library_use_only" && !isLibraryUseOnlyBook(book)) {
+                    return false;
+                }
+
+                if (
+                    libraryAreaFilter !== "all" &&
+                    !getGroupLibraryAreas(book).includes(libraryAreaFilter)
+                ) {
+                    return false;
+                }
+
+                if (tokens.length === 0) return true;
+
+                const searchable = normalizeSearchText(
+                    [
+                        book.title,
+                        book.subtitle,
+                        book.author,
+                        book.subjects,
+                        book.genre,
+                        book.category,
+                        book.accessionNumber,
+                        book.callNumber,
+                        book.barcode,
+                        book.isbn,
+                        book.issn,
+                        book.publisher,
+                        getLibraryAreaValue(book),
+                    ]
+                        .filter(Boolean)
+                        .join(" ")
+                );
+
+                return matchesAllTokens(searchable, tokens);
+            })
+            .sort((a, b) => {
+                switch (sortOption) {
+                    case "title_asc":
+                        return (
+                            compareText(a.title, b.title) ||
+                            compareText(a.author, b.author) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+
+                    case "title_desc":
+                        return (
+                            compareText(b.title, a.title) ||
+                            compareText(b.author, a.author) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+
+                    case "author_asc":
+                        return (
+                            compareText(a.author, b.author) ||
+                            compareText(a.title, b.title) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+
+                    case "author_desc":
+                        return (
+                            compareText(b.author, a.author) ||
+                            compareText(b.title, a.title) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+
+                    case "pub_year_desc":
+                        return (
+                            compareNullableNumber(a.publicationYear, b.publicationYear, "desc") ||
+                            compareText(a.title, b.title) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+
+                    case "pub_year_asc":
+                        return (
+                            compareNullableNumber(a.publicationYear, b.publicationYear, "asc") ||
+                            compareText(a.title, b.title) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+
+                    case "copies_desc": {
+                        const invA = getInventory(a);
+                        const invB = getInventory(b);
+
+                        return (
+                            compareNullableNumber(invA.total, invB.total, "desc") ||
+                            compareText(a.title, b.title) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+                    }
+
+                    case "copies_asc": {
+                        const invA = getInventory(a);
+                        const invB = getInventory(b);
+
+                        return (
+                            compareNullableNumber(invA.total, invB.total, "asc") ||
+                            compareText(a.title, b.title) ||
+                            buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
+                                sensitivity: "base",
+                            })
+                        );
+                    }
+
+                    case "catalog":
+                    default:
+                        return buildCatalogSortKey(a).localeCompare(buildCatalogSortKey(b), undefined, {
                             sensitivity: "base",
-                        }) || compareNullableNumber(a.copyNumber, b.copyNumber, "asc")
-                    );
-            }
-        });
+                        });
+                }
+            });
     }, [availabilityFilter, books, libraryAreaFilter, search, sortOption]);
 
     return (
@@ -1322,9 +1336,8 @@ export default function LibrarianBooksPage() {
                     <div className="min-w-0">
                         <h2 className="text-lg font-semibold leading-tight">Catalog &amp; inventory</h2>
                         <p className="text-xs text-white/70">
-                            Add the first copy of a title, then use{" "}
-                            <span className="font-semibold text-white">Add copy</span> to save
-                            additional editable copy records under the same catalog entry.
+                            Add new titles, save editable copy records, and monitor active/all-time
+                            borrow tracking.
                         </p>
                     </div>
                 </div>
@@ -1384,14 +1397,10 @@ export default function LibrarianBooksPage() {
                 book={detailBook}
                 kind={detailKind}
                 onEdit={
-                    detailBook
-                        ? () => openEditDialog(detailBook, detailKind)
-                        : undefined
+                    detailBook ? () => openEditDialog(detailBook, detailKind) : undefined
                 }
                 onDelete={
-                    detailBook
-                        ? () => requestDelete(detailBook, detailKind)
-                        : undefined
+                    detailBook ? () => requestDelete(detailBook, detailKind) : undefined
                 }
                 onAddCopy={
                     detailKind === "book" && detailBook
@@ -1399,7 +1408,6 @@ export default function LibrarianBooksPage() {
                         : undefined
                 }
             />
-
 
             <AlertDialog
                 open={Boolean(deleteTarget)}
@@ -1410,15 +1418,15 @@ export default function LibrarianBooksPage() {
                 <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
                     <AlertDialogHeader>
                         <AlertDialogTitle>
-                            {deleteTarget?.kind === "copy" ? "Delete copy" : "Delete book"}
+                            {deleteTarget?.kind === "copy"
+                                ? "Delete copy"
+                                : "Delete original record"}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-white/70">
                             {deleteTarget
                                 ? deleteTarget.kind === "copy"
                                     ? `This will permanently remove copy ${formatDetailValue(deleteTarget.book.copyNumber)} of "${formatDetailValue(deleteTarget.book.title, "this book")}" from the catalog.`
-                                    : getCopyRecords(deleteTarget.book).length > 1
-                                      ? `This will permanently remove "${formatDetailValue(deleteTarget.book.title, "this book")}" and all ${getCopyRecords(deleteTarget.book).length} saved copies from the catalog.`
-                                      : `This will permanently remove "${formatDetailValue(deleteTarget.book.title, "this book")}" from the catalog.`
+                                    : `This will permanently remove the original saved record for "${formatDetailValue(deleteTarget.book.title, "this book")}". Any additional saved copies will remain in the catalog.`
                                 : ""}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
