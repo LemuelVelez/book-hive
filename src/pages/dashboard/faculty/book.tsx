@@ -41,12 +41,6 @@ import {
 } from "@/components/faculty-books/utils"
 
 import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion"
-import {
     AlertDialog,
     AlertDialogCancel,
     AlertDialogContent,
@@ -436,7 +430,7 @@ function FacultyBookMobileCard({
     )
 }
 
-function FacultyBookAccordionCard({
+function FacultyBookDesktopCard({
     book,
     borrowBusyId,
     borrowDialogBookId,
@@ -466,69 +460,88 @@ function FacultyBookAccordionCard({
     const { dueCell } = getBookBorrowMeta(book)
 
     return (
-        <AccordionItem
-            value={String(book.id)}
-            className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
-        >
-            <AccordionTrigger className="px-4 py-4 text-white hover:no-underline [&>svg]:mt-0.5">
-                <div className="flex w-full min-w-0 items-center gap-2 text-left">
-                    <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                        {formatDetailValue(book.callNumber)}
-                    </span>
-                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
-                        {status.label}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/90">
-                        {formatDetailValue(book.title)} • {formatDetailValue(book.author)} • {remaining} available
-                    </span>
-                </div>
-            </AccordionTrigger>
-
-            <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full border-white/20 text-white/90 hover:bg-white/10"
-                        >
-                            Details
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-4xl">
-                        <DialogHeader>
-                            <DialogTitle className="pr-6 text-left">
-                                {formatDetailValue(book.title)}
-                            </DialogTitle>
-                            <DialogDescription className="text-left text-white/65">
-                                {formatDetailValue(book.author)} · Call no. {formatDetailValue(book.callNumber)}
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
-                            <FacultyBookDetailGrid
-                                book={book}
-                                dueCell={dueCell}
-                                activeBorrowingNow={activeBorrowingNow}
-                                totalBorrowedTimes={totalBorrowedTimes}
-                                remaining={remaining}
-                                borrowBusyId={borrowBusyId}
-                                borrowDialogBookId={borrowDialogBookId}
-                                borrowCopies={borrowCopies}
-                                onBorrowDialogBookChange={onBorrowDialogBookChange}
-                                onBorrowCopiesChange={onBorrowCopiesChange}
-                                onBorrow={onBorrow}
-                                facultyMaxActiveBorrows={facultyMaxActiveBorrows}
-                                defaultBorrowDurationDays={defaultBorrowDurationDays}
-                                remainingBorrowSlots={remainingBorrowSlots}
-                                showActions
-                                className="grid gap-3"
-                            />
+        <Dialog>
+            <div className="hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 p-4 shadow-sm transition-colors hover:border-white/20 sm:block">
+                <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                                {formatDetailValue(book.callNumber)}
+                            </span>
+                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.classes}`}>
+                                {status.label}
+                            </span>
                         </div>
-                    </DialogContent>
-                </Dialog>
-            </AccordionContent>
-        </AccordionItem>
+
+                        <div className="space-y-1">
+                            <h3 className="wrap-break-word text-sm font-semibold text-white/90">
+                                {formatDetailValue(book.title)}
+                            </h3>
+                            <p className="wrap-break-word text-xs text-white/60">
+                                {formatDetailValue(book.author)}
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/65">
+                            <span>Available: {remaining}</span>
+                            <span>Active borrows: {activeBorrowingNow}</span>
+                            <span>All-time: {totalBorrowedTimes}</span>
+                        </div>
+
+                        <div className="space-y-1 text-xs leading-relaxed text-white/75">
+                            <FacultyBookStatus book={book} />
+                            <div className="text-white/60">
+                                <FacultyBookActionState book={book} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-start">
+                        <DialogTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="border-white/20 text-white/90 hover:bg-white/10"
+                            >
+                                Details
+                            </Button>
+                        </DialogTrigger>
+                    </div>
+                </div>
+            </div>
+
+            <DialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-4xl">
+                <DialogHeader>
+                    <DialogTitle className="pr-6 text-left">
+                        {formatDetailValue(book.title)}
+                    </DialogTitle>
+                    <DialogDescription className="text-left text-white/65">
+                        {formatDetailValue(book.author)} · Call no. {formatDetailValue(book.callNumber)}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
+                    <FacultyBookDetailGrid
+                        book={book}
+                        dueCell={dueCell}
+                        activeBorrowingNow={activeBorrowingNow}
+                        totalBorrowedTimes={totalBorrowedTimes}
+                        remaining={remaining}
+                        borrowBusyId={borrowBusyId}
+                        borrowDialogBookId={borrowDialogBookId}
+                        borrowCopies={borrowCopies}
+                        onBorrowDialogBookChange={onBorrowDialogBookChange}
+                        onBorrowCopiesChange={onBorrowCopiesChange}
+                        onBorrow={onBorrow}
+                        facultyMaxActiveBorrows={facultyMaxActiveBorrows}
+                        defaultBorrowDurationDays={defaultBorrowDurationDays}
+                        remainingBorrowSlots={remainingBorrowSlots}
+                        showActions
+                        className="grid gap-3"
+                    />
+                </div>
+            </DialogContent>
+        </Dialog>
     )
 }
 
@@ -1043,9 +1056,9 @@ export default function FacultyBooksPage() {
                                             ))}
                                         </div>
 
-                                        <Accordion type="multiple" className="hidden space-y-3 sm:block">
+                                        <div className="hidden space-y-3 sm:block">
                                             {regularRows.map((book) => (
-                                                <FacultyBookAccordionCard
+                                                <FacultyBookDesktopCard
                                                     key={book.id}
                                                     book={book}
                                                     borrowBusyId={borrowBusyId}
@@ -1059,7 +1072,7 @@ export default function FacultyBooksPage() {
                                                     remainingBorrowSlots={remainingBorrowSlots}
                                                 />
                                             ))}
-                                        </Accordion>
+                                        </div>
                                     </section>
                                 )}
 
@@ -1102,9 +1115,9 @@ export default function FacultyBooksPage() {
                                             ))}
                                         </div>
 
-                                        <Accordion type="multiple" className="hidden space-y-3 sm:block">
+                                        <div className="hidden space-y-3 sm:block">
                                             {libraryUseOnlyRows.map((book) => (
-                                                <FacultyBookAccordionCard
+                                                <FacultyBookDesktopCard
                                                     key={book.id}
                                                     book={book}
                                                     borrowBusyId={borrowBusyId}
@@ -1118,7 +1131,7 @@ export default function FacultyBooksPage() {
                                                     remainingBorrowSlots={remainingBorrowSlots}
                                                 />
                                             ))}
-                                        </Accordion>
+                                        </div>
                                     </section>
                                 )}
                             </div>
