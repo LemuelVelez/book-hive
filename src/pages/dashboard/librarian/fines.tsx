@@ -881,7 +881,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
     function renderStatusBadge(status: FineStatus) {
         if (status === "active") {
             return (
-                <Badge className="bg-amber-500/80 text-white hover:bg-amber-500 border-amber-400/80">
+                <Badge className="w-full justify-start whitespace-normal wrap-break-word border-amber-400/80 bg-amber-500/80 text-left text-white hover:bg-amber-500 sm:w-auto">
                     <span className="inline-flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />
                         Active (unpaid)
@@ -892,7 +892,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
 
         if (status === "paid") {
             return (
-                <Badge className="bg-emerald-500/80 text-white hover:bg-emerald-500 border-emerald-400/80">
+                <Badge className="w-full justify-start whitespace-normal wrap-break-word border-emerald-400/80 bg-emerald-500/80 text-left text-white hover:bg-emerald-500 sm:w-auto">
                     <span className="inline-flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" />
                         Paid
@@ -902,7 +902,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
         }
 
         return (
-            <Badge className="bg-slate-500/80 text-white hover:bg-slate-500 border-slate-400/80">
+            <Badge className="w-full justify-start whitespace-normal wrap-break-word border-slate-400/80 bg-slate-500/80 text-left text-white hover:bg-slate-500 sm:w-auto">
                 <span className="inline-flex items-center gap-1">
                     <XCircle className="h-3 w-3" />
                     Cancelled
@@ -1088,25 +1088,65 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                             >
                                 {groupedByUser.map((group) => (
                                     <AccordionItem key={group.key} value={group.key} className="border-white/10">
-                                        <div className="rounded-md bg-white/5 px-3">
-                                            <AccordionTrigger className="items-start gap-3 py-3 text-white/90 hover:no-underline [&>svg]:ml-3 [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg]:self-start">
+                                        <div className="flex w-full items-start justify-between gap-2 rounded-md bg-white/5 px-3 py-3">
+                                            <AccordionTrigger className="min-w-0 flex-1 items-start py-0 pr-0 text-white/90 hover:no-underline [&>svg]:hidden">
                                                 <div className="flex min-w-0 flex-1 items-start gap-2 pr-2 text-left">
                                                     <span className="min-w-0 whitespace-normal wrap-break-word pr-2 text-sm font-semibold leading-5 text-white">
                                                         {group.label} • {group.activeCount} active • {group.paidCount} paid • {group.cancelledCount} cancelled • {group.rows.length} total ({peso(group.totalAmount)})
                                                     </span>
                                                 </div>
                                             </AccordionTrigger>
-                                        </div>
 
-                                        <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
                                             <Button
                                                 type="button"
+                                                size="sm"
                                                 variant="outline"
-                                                className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
+                                                className="ml-auto shrink-0 border-white/20 text-white/90 hover:bg-white/10"
                                                 onClick={() => setDetailGroupKey(group.key)}
                                             >
                                                 Details
                                             </Button>
+                                        </div>
+
+                                        <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+                                            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                                {group.email ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
+                                                    >
+                                                        Email: {group.email}
+                                                    </Badge>
+                                                ) : null}
+                                                {group.studentId ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
+                                                    >
+                                                        Student ID: {group.studentId}
+                                                    </Badge>
+                                                ) : null}
+                                                {group.userId ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
+                                                    >
+                                                        User ID: {group.userId}
+                                                    </Badge>
+                                                ) : null}
+                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-amber-500/15 text-left text-amber-100 hover:bg-amber-500/15 sm:w-auto">
+                                                    Active: {group.activeCount}
+                                                </Badge>
+                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-emerald-500/15 text-left text-emerald-100 hover:bg-emerald-500/15 sm:w-auto">
+                                                    Paid: {group.paidCount}
+                                                </Badge>
+                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-slate-500/20 text-left text-slate-100 hover:bg-slate-500/20 sm:w-auto">
+                                                    Cancelled: {group.cancelledCount}
+                                                </Badge>
+                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-sky-500/15 text-left text-sky-100 hover:bg-sky-500/15 sm:w-auto">
+                                                    Total: {peso(group.totalAmount)}
+                                                </Badge>
+                                            </div>
                                         </AccordionContent>
 
                                         <Dialog
@@ -1164,7 +1204,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                     </Card>
                                                 </div>
 
-                                                <div className="flex justify-end">
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                                                     <Button
                                                         type="button"
                                                         size="sm"
@@ -1219,13 +1259,13 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                             <CardHeader className="gap-3 pb-3">
                                                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                                                     <div className="space-y-2">
-                                                                        <div className="flex flex-wrap items-center gap-2">
-                                                                            <Badge variant="outline" className="border-white/15 text-white/80">
+                                                                        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                                                            <Badge variant="outline" className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto">
                                                                                 Fine ID: {fine.id}
                                                                             </Badge>
                                                                             {renderStatusBadge(fine.status)}
                                                                             {receiptLabel && (
-                                                                                <Badge className="border-emerald-400/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/10">
+                                                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word border-emerald-400/40 bg-emerald-500/10 text-left text-emerald-200 hover:bg-emerald-500/10 sm:w-auto">
                                                                                     {receiptLabel}
                                                                                 </Badge>
                                                                             )}
@@ -1235,7 +1275,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                                             <CardTitle className="text-base text-white whitespace-normal wrap-break-word">
                                                                                 {fine.bookTitle ? fine.bookTitle : fine.bookId ? `Book #${fine.bookId}` : "Untitled record"}
                                                                             </CardTitle>
-                                                                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/60">
+                                                                            <div className="mt-1 flex flex-col items-start gap-2 text-xs text-white/60 sm:flex-row sm:flex-wrap sm:items-center">
                                                                                 <span className="inline-flex items-center gap-1">
                                                                                     <UserRound className="h-3.5 w-3.5" />
                                                                                     {fineOwnerLabel(fine)}
@@ -1325,7 +1365,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                                     </div>
                                                                 </div>
 
-                                                                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-1">
+                                                                <div className="flex flex-col items-stretch gap-2 border-t border-white/10 pt-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                                                                     {!isDamageRow && (
                                                                         <AlertDialog
                                                                             onOpenChange={(open) => {
