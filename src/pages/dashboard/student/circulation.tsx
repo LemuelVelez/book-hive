@@ -186,6 +186,31 @@ function fmtDateTime(d?: string | null) {
   }
 }
 
+function getBorrowRecordCopyLabel(
+  record: Pick<BorrowRecordDTO, "copyNumber" | "accessionNumber">
+) {
+  const parts: string[] = [];
+
+  if (typeof record.copyNumber === "number" && Number.isFinite(record.copyNumber)) {
+    parts.push(`Copy ${record.copyNumber}`);
+  }
+
+  const accessionNumber = String(record.accessionNumber ?? "").trim();
+  if (accessionNumber) {
+    parts.push(`Accession ${accessionNumber}`);
+  }
+
+  return parts.join(" • ");
+}
+
+function getBorrowRecordDisplayTitle(
+  record: Pick<BorrowRecordDTO, "bookTitle" | "bookId" | "copyNumber" | "accessionNumber">
+) {
+  const baseTitle = record.bookTitle ?? `Book #${record.bookId}`;
+  const copyLabel = getBorrowRecordCopyLabel(record);
+  return copyLabel ? `${baseTitle} (${copyLabel})` : baseTitle;
+}
+
 function peso(n: number) {
   if (typeof n !== "number" || Number.isNaN(n)) return "₱0.00";
   try {
@@ -808,7 +833,7 @@ function CirculationDetailGrid({
       <CirculationDetail label="Borrow ID" value={record.id} />
       <CirculationDetail
         label="Book"
-        value={record.bookTitle ?? `Book #${record.bookId}`}
+        value={getBorrowRecordDisplayTitle(record)}
       />
       <CirculationDetail
         label="Borrower"
@@ -999,7 +1024,7 @@ function CirculationRequestButtons({
               <p>
                 <span className="text-white/60">Book:</span>{" "}
                 <span className="font-semibold text-white">
-                  {record.bookTitle ?? `Book #${record.bookId}`}
+                  {getBorrowRecordDisplayTitle(record)}
                 </span>
               </p>
               <p>
@@ -1271,7 +1296,7 @@ function CirculationDetailsDialog({
       <DialogContent className="max-h-[95svh] overflow-auto border-white/10 bg-slate-950 text-white sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="pr-6 text-left">
-            {record.bookTitle ?? `Book #${record.bookId}`}
+            {getBorrowRecordDisplayTitle(record)}
           </DialogTitle>
           <DialogDescription className="text-left text-white/65">
             Borrow ID {record.id} • {record.studentName ?? "You"} • Due{" "}
@@ -1340,7 +1365,7 @@ function CirculationDesktopCard({
             </div>
 
             <h3 className="wrap-break-word whitespace-normal text-base font-semibold leading-snug text-white">
-              {record.bookTitle ?? `Book #${record.bookId}`}
+              {getBorrowRecordDisplayTitle(record)}
             </h3>
           </div>
 
@@ -1403,7 +1428,7 @@ function CirculationMobileCard({
         </div>
 
         <h3 className="wrap-break-word whitespace-normal text-sm font-semibold leading-snug text-white">
-          {record.bookTitle ?? `Book #${record.bookId}`}
+          {getBorrowRecordDisplayTitle(record)}
         </h3>
 
         <CirculationDetailsDialog
@@ -1539,6 +1564,8 @@ export default function StudentCirculationPage({
     if (q) {
       rows = rows.filter((record) => {
         const haystack = [
+          getBorrowRecordDisplayTitle(record),
+          getBorrowRecordCopyLabel(record),
           record.bookTitle ?? "",
           record.bookId ?? "",
           record.studentName ?? "",

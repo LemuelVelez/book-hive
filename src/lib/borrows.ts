@@ -29,6 +29,8 @@ export type BorrowRecordDTO = {
     college?: string | null;
     bookId: string;
     bookTitle: string | null;
+    accessionNumber?: string | null;
+    copyNumber?: number | null;
     borrowDate: string; // ISO date (YYYY-MM-DD)
     dueDate: string; // ISO date
     returnDate: string | null; // ISO date or null

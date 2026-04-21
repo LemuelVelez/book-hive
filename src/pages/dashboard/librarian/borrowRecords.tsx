@@ -377,6 +377,31 @@ function toTitleCase(value: string): string {
   return value.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function getBorrowRecordCopyLabel(
+  record: Pick<BorrowRecordDTO, "copyNumber" | "accessionNumber">
+) {
+  const parts: string[] = [];
+
+  if (typeof record.copyNumber === "number" && Number.isFinite(record.copyNumber)) {
+    parts.push(`Copy ${record.copyNumber}`);
+  }
+
+  const accessionNumber = String(record.accessionNumber ?? "").trim();
+  if (accessionNumber) {
+    parts.push(`Accession ${accessionNumber}`);
+  }
+
+  return parts.join(" • ");
+}
+
+function getBorrowRecordDisplayTitle(
+  record: Pick<BorrowRecordDTO, "bookTitle" | "bookId" | "copyNumber" | "accessionNumber">
+) {
+  const baseTitle = record.bookTitle ?? `Book #${record.bookId}`;
+  const copyLabel = getBorrowRecordCopyLabel(record);
+  return copyLabel ? `${baseTitle} (${copyLabel})` : baseTitle;
+}
+
 function formatBorrowStatusLabel(status?: string | null): string {
   const normalized = (status ?? "").trim().replace(/_/g, " ");
   if (!normalized) return "—";
@@ -755,7 +780,7 @@ export default function LibrarianBorrowRecordsPage() {
         description:
           message ||
           `A return request was sent for “${
-            updated.bookTitle ?? `Book #${updated.bookId}`
+            getBorrowRecordDisplayTitle(updated)
           }”.`,
       });
 
@@ -930,7 +955,7 @@ export default function LibrarianBorrowRecordsPage() {
         return {
           id: String(rec.id),
           borrowerName: studentFullName(rec),
-          bookTitle: rec.bookTitle || `Book #${rec.bookId}`,
+          bookTitle: getBorrowRecordDisplayTitle(rec),
           statusLabel,
           dueDateLabel: fmtDate(rec.dueDate),
           overdueDays,
@@ -1003,7 +1028,7 @@ export default function LibrarianBorrowRecordsPage() {
         (r.studentEmail || "") +
         " " +
         (r.studentId || "");
-      const book = (r.bookTitle || "") + " " + r.bookId;
+      const book = `${getBorrowRecordDisplayTitle(r)} ${getBorrowRecordCopyLabel(r)} ${r.bookId}`;
       const returnRequestMeta =
         (r.returnRequestedByName || "") + " " + (r.returnRequestNote || "");
       return (
@@ -1092,7 +1117,7 @@ export default function LibrarianBorrowRecordsPage() {
         studentId: rec.studentId ?? null,
         studentName: rec.studentName ?? null,
         studentEmail: rec.studentEmail ?? null,
-        bookTitle: rec.bookTitle ?? null,
+        bookTitle: getBorrowRecordDisplayTitle(rec),
         bookId: rec.bookId ?? null,
         status: rec.status,
         borrowDate: rec.borrowDate ?? null,
@@ -1601,7 +1626,7 @@ export default function LibrarianBorrowRecordsPage() {
                             {group.rows.map((rec) => {
                               const studentLabel = studentFullName(rec);
                               const bookLabel =
-                                rec.bookTitle || `Book #${rec.bookId}`;
+                                getBorrowRecordDisplayTitle(rec);
 
                               const isReturned = isReturnedBorrowRecord(rec);
                               const isPendingPickup =
@@ -2044,8 +2069,7 @@ export default function LibrarianBorrowRecordsPage() {
                 that{" "}
                 <span className="font-semibold text-white">
                   “
-                  {requestReturnRecord.bookTitle ??
-                    `Book #${requestReturnRecord.bookId}`}
+                  {getBorrowRecordDisplayTitle(requestReturnRecord)}
                   ”
                 </span>{" "}
                 should be returned.
@@ -2128,8 +2152,7 @@ export default function LibrarianBorrowRecordsPage() {
                 You&apos;re about to mark{" "}
                 <span className="font-semibold text-white">
                   “
-                  {selectedRecord.bookTitle ??
-                    `Book #${selectedRecord.bookId}`}
+                  {getBorrowRecordDisplayTitle(selectedRecord)}
                   ”
                 </span>{" "}
                 as <span className="font-semibold">Returned</span> for{" "}
@@ -2270,7 +2293,7 @@ export default function LibrarianBorrowRecordsPage() {
               <AlertDialogDescription className="text-white/70">
                 You&apos;re updating the due date for{" "}
                 <span className="font-semibold text-white">
-                  “{dueRecord.bookTitle ?? `Book #${dueRecord.bookId}`}”
+                  “{getBorrowRecordDisplayTitle(dueRecord)}”
                 </span>{" "}
                 borrowed by{" "}
                 <span className="font-semibold">

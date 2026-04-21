@@ -80,6 +80,21 @@ function formatDetailValue(value: unknown, fallback = "—") {
     return fallback
 }
 
+function getBorrowRecordCopyLabel(record: Pick<BorrowRecordDTO, "copyNumber" | "accessionNumber">) {
+    const parts: string[] = []
+
+    if (typeof record.copyNumber === "number" && Number.isFinite(record.copyNumber)) {
+        parts.push(`Copy ${record.copyNumber}`)
+    }
+
+    const accessionNumber = String(record.accessionNumber ?? "").trim()
+    if (accessionNumber) {
+        parts.push(`Accession ${accessionNumber}`)
+    }
+
+    return parts.join(" • ")
+}
+
 function getStatusMeta(book: BookWithStatus): { label: string; classes: string } {
     if (isLibraryUseOnlyBook(book)) {
         return {
@@ -916,9 +931,16 @@ export default function FacultyBooksPage() {
                 created[0]?.dueDate
                     ? new Date(created[0].dueDate).toLocaleDateString("en-CA")
                     : "—"
+            const assignedCopies = created
+                .map((record) => getBorrowRecordCopyLabel(record))
+                .filter(Boolean)
+                .join(", ")
+            const assignedCopiesSuffix = assignedCopies
+                ? ` Assigned copy order: ${assignedCopies}.`
+                : ""
 
             toast.success("Borrow request submitted", {
-                description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"} now pending pickup. Earliest due date: ${due}. Faculty may keep up to ${facultyBorrowMaxBooks} active books for ${facultyBorrowDurationDays} days by default.`,
+                description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"} now pending pickup. Earliest due date: ${due}.${assignedCopiesSuffix} Faculty may keep up to ${facultyBorrowMaxBooks} active books for ${facultyBorrowDurationDays} days by default.`,
             })
 
             setMyRecords((prev) => [...created.slice().reverse(), ...prev])
