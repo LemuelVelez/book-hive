@@ -26,12 +26,6 @@ import {
 } from "@/components/ui/select";
 
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -1188,45 +1182,43 @@ export default function LibrarianBorrowRecordsPage() {
       </div>
 
       <div className="mb-4">
-        <Accordion type="multiple" className="space-y-3">
-          <AccordionItem className="overflow-hidden rounded-lg border border-emerald-400/20 bg-emerald-500/10" value="manual-email-updates">
-            <AccordionTrigger className="px-4 py-4 text-emerald-100 hover:bg-emerald-500/5 hover:no-underline">
-              <div className="inline-flex items-center gap-2 text-sm font-semibold">
+        <div className="space-y-3">
+          <div className="overflow-hidden rounded-lg border border-emerald-400/20 bg-emerald-500/10">
+            <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-100">
                 <Send className="h-4 w-4" />
                 Manual email updates
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="border-t border-emerald-300/15 px-4 pb-4 pt-4">
+
               <Button
                 type="button"
                 variant="outline"
-                className="border-emerald-300/30 text-emerald-50 hover:bg-emerald-500/15"
+                className="w-full border-emerald-300/30 text-emerald-50 hover:bg-emerald-500/15 sm:w-auto"
                 onClick={() => setManualEmailDialogOpen(true)}
               >
                 Details
               </Button>
-            </AccordionContent>
-          </AccordionItem>
+            </div>
+          </div>
 
-          <AccordionItem className="overflow-hidden rounded-lg border border-sky-400/20 bg-sky-500/10" value="automatic-email-updates">
-            <AccordionTrigger className="px-4 py-4 text-sky-100 hover:bg-sky-500/5 hover:no-underline">
-              <div className="inline-flex items-center gap-2 text-sm font-semibold">
+          <div className="overflow-hidden rounded-lg border border-sky-400/20 bg-sky-500/10">
+            <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-sky-100">
                 <BellRing className="h-4 w-4" />
                 Automatic email updates
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="border-t border-sky-300/15 px-4 pb-4 pt-4">
+
               <Button
                 type="button"
                 variant="outline"
-                className="border-sky-300/30 text-sky-50 hover:bg-sky-500/15"
+                className="w-full border-sky-300/30 text-sky-50 hover:bg-sky-500/15 sm:w-auto"
                 onClick={() => setAutomaticEmailDialogOpen(true)}
               >
                 Details
               </Button>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+            </div>
+          </div>
+        </div>
 
         <Dialog open={manualEmailDialogOpen} onOpenChange={setManualEmailDialogOpen}>
           <DialogContent
@@ -1239,7 +1231,7 @@ export default function LibrarianBorrowRecordsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex justify-start sm:justify-end">
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -1543,45 +1535,41 @@ export default function LibrarianBorrowRecordsPage() {
                 </span>
               </div>
 
-              <Accordion
-                type="multiple"
-                className="w-full space-y-3"
-                defaultValue={
-                  groupedByUser.length === 1 ? [groupedByUser[0].key] : []
-                }
-              >
+              <div className="w-full space-y-3">
                 {groupedByUser.map((group) => {
                   const primaryRecord = group.rows[0];
 
                   return (
-                    <AccordionItem
+                    <div
                       key={group.key}
-                      value={group.key}
                       className="overflow-hidden rounded-lg border border-white/10 bg-slate-900/35"
                     >
-                      <AccordionTrigger className="gap-3 px-4 py-4 text-white/90 hover:bg-white/5 hover:no-underline [&>svg]:shrink-0 [&>svg]:self-center">
-                        <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-left">
-                          {group.actionRequiredCount > 0 ? (
-                            <Badge className="shrink-0 border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15">
-                              {group.actionRequiredCount} Needs Action
-                            </Badge>
-                          ) : null}
-                          <span className="min-w-0 truncate text-sm font-semibold text-white">
+                      <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 flex-1 flex-col gap-2 text-left">
+                          <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            {group.actionRequiredCount > 0 ? (
+                              <Badge className="max-w-full wrap-break-word border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/15">
+                                {group.actionRequiredCount} Needs Action
+                              </Badge>
+                            ) : null}
+                          </div>
+
+                          <span className="min-w-0 wrap-break-word text-sm font-semibold text-white">
                             {group.name} • {group.activeCount} Active • {group.returnedOnTimeCount} Returned On Time • {group.returnedOverdueCount} Returned Overdue • {group.rows.length} Total
                           </span>
                         </div>
-                      </AccordionTrigger>
 
-                      <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
-                          onClick={() => setDetailGroupKey(group.key)}
-                        >
-                          Details
-                        </Button>
-                      </AccordionContent>
+                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
+                            onClick={() => setDetailGroupKey(group.key)}
+                          >
+                            Details
+                          </Button>
+                        </div>
+                      </div>
 
                       <Dialog
                         open={detailGroupKey === group.key}
@@ -1683,7 +1671,7 @@ export default function LibrarianBorrowRecordsPage() {
                                         </div>
                                       </div>
 
-                                      <div className="flex flex-wrap gap-2">
+                                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                         {isReturned ? (
                                           isReturnedOverdue ? (
                                             <Badge className="border-red-400/80 bg-red-500/80 text-white hover:bg-red-500">
@@ -2025,10 +2013,10 @@ export default function LibrarianBorrowRecordsPage() {
                           </div>
                         </DialogContent>
                       </Dialog>
-                    </AccordionItem>
+                    </div>
                   );
                 })}
-              </Accordion>
+              </div>
             </>
           )}
         </CardContent>
