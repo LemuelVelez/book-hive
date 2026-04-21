@@ -1219,7 +1219,7 @@ export default function AdminUsersPage() {
     return (
       <div
         key={u.id}
-        className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 p-3 shadow-sm transition-colors hover:border-white/20"
+        className="flex flex-col items-stretch gap-3 rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 p-3 shadow-sm transition-colors hover:border-white/20 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex min-w-0 items-center gap-3">
           <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
@@ -1234,7 +1234,7 @@ export default function AdminUsersPage() {
           type="button"
           variant="outline"
           size="sm"
-          className="shrink-0 border-white/20 text-white/90 hover:bg-white/10"
+          className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto sm:shrink-0"
           onClick={() => setSelectedUserId(u.id)}
         >
           Details
@@ -1661,7 +1661,7 @@ export default function AdminUsersPage() {
                     key={group.role}
                     className="self-start overflow-hidden rounded-2xl border border-white/10 bg-slate-900/35 p-4"
                   >
-                    <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex min-w-0 flex-1 flex-col items-start gap-2 pr-2 text-left">
                         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                           <Badge className={`${roleBadgeClasses(group.role)} wrap-anywhere`}>
@@ -1686,7 +1686,7 @@ export default function AdminUsersPage() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="shrink-0 border-white/20 text-white/90 hover:bg-white/10"
+                        className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto sm:shrink-0"
                         onClick={() => setDetailsRole(group.role)}
                       >
                         Details
