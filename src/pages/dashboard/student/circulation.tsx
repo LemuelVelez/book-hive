@@ -1,4 +1,3 @@
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -1328,8 +1327,8 @@ function CirculationDesktopCard({
   return (
     <Card className="hidden overflow-hidden rounded-2xl border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 shadow-sm sm:block">
       <CardContent className="space-y-4 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 space-y-2">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <RecordStatusBadge
                 isReturned={ui.isReturned}
@@ -1340,31 +1339,13 @@ function CirculationDesktopCard({
               <CirculationFineBadges ui={ui} />
             </div>
 
-            <div className="space-y-1">
-              <h3 className="wrap-break-word whitespace-normal text-base font-semibold leading-snug text-white">
-                {record.bookTitle ?? `Book #${record.bookId}`}
-              </h3>
-              <p className="text-xs text-white/60">
-                Borrow ID {record.id} • {record.studentName?.trim() || "You"}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/65">
-              <span>Borrowed: {fmtDate(record.borrowDate)}</span>
-              <span>Due: {fmtDate(record.dueDate)}</span>
-              <span>Fine: {peso(ui.finalFineAmount)}</span>
-              {ui.isOverdue ? (
-                <span className="text-red-300">
-                  {ui.overdueDays > 0
-                    ? `${ui.overdueDays} day${ui.overdueDays === 1 ? "" : "s"} overdue`
-                    : "Overdue fine recorded"}
-                </span>
-              ) : null}
-            </div>
+            <h3 className="wrap-break-word whitespace-normal text-base font-semibold leading-snug text-white">
+              {record.bookTitle ?? `Book #${record.bookId}`}
+            </h3>
           </div>
 
           <div className="w-full max-w-sm lg:w-auto">
-            <CirculationRequestButtons
+            <CirculationDetailsDialog
               record={record}
               ui={ui}
               returnBusyId={returnBusyId}
@@ -1374,50 +1355,13 @@ function CirculationDesktopCard({
               onRequestReturn={onRequestReturn}
               onRequestExtension={onRequestExtension}
               actionButtonBaseClasses={actionButtonBaseClasses}
-              includeDetailsTrigger
+              triggerClassName={
+                "border-white/20 text-white/90 hover:bg-white/10 " +
+                actionButtonBaseClasses
+              }
+              triggerLabel="Details"
             />
           </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <CirculationDetail label="Borrowed on" value={fmtDate(record.borrowDate)} />
-          <CirculationDetail label="Due date" value={fmtDate(record.dueDate)} />
-          <CirculationDetail label="Returned on" value={fmtDate(record.returnDate)} />
-          <CirculationDetail label="Fine total" value={peso(ui.finalFineAmount)} />
-        </div>
-
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <CirculationDetail label="Status summary">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <RecordStatusBadge
-                  isReturned={ui.isReturned}
-                  isAnyPending={ui.isAnyPending}
-                  hasLibrarianReturnRequest={ui.showLibrarianReturnRequest}
-                  isOverdue={ui.isOverdue}
-                />
-                <CirculationFineBadges ui={ui} />
-              </div>
-
-              {ui.extensionCount > 0 ? (
-                <div className="text-xs text-white/60">
-                  Approved extensions: {ui.extensionCount}× (+{ui.extensionTotalDays}d)
-                </div>
-              ) : null}
-
-              {ui.reqStatus === "pending" ? (
-                <div className="text-xs text-amber-200/90">
-                  Extension request pending
-                  {typeof ui.reqDays === "number" ? ` (+${ui.reqDays}d)` : ""}
-                  {ui.reqAt ? ` • ${fmtDateTime(ui.reqAt)}` : ""}
-                </div>
-              ) : null}
-            </div>
-          </CirculationDetail>
-
-          <CirculationDetail label="Latest note">
-            <CirculationRecordNotice record={record} ui={ui} />
-          </CirculationDetail>
         </div>
       </CardContent>
     </Card>
@@ -1458,27 +1402,11 @@ function CirculationMobileCard({
           <CirculationFineBadges ui={ui} />
         </div>
 
-        <div className="space-y-1">
-          <h3 className="wrap-break-word whitespace-normal text-sm font-semibold leading-snug text-white">
-            {record.bookTitle ?? `Book #${record.bookId}`}
-          </h3>
-          <p className="text-xs text-white/60">
-            Borrow ID {record.id} • {record.studentName?.trim() || "You"}
-          </p>
-        </div>
+        <h3 className="wrap-break-word whitespace-normal text-sm font-semibold leading-snug text-white">
+          {record.bookTitle ?? `Book #${record.bookId}`}
+        </h3>
 
-        <div className="grid grid-cols-2 gap-2">
-          <CirculationDetail label="Borrowed" value={fmtDate(record.borrowDate)} />
-          <CirculationDetail label="Due" value={fmtDate(record.dueDate)} />
-          <CirculationDetail label="Returned" value={fmtDate(record.returnDate)} />
-          <CirculationDetail label="Fine" value={peso(ui.finalFineAmount)} />
-        </div>
-
-        <CirculationDetail label="Latest note">
-          <CirculationRecordNotice record={record} ui={ui} />
-        </CirculationDetail>
-
-        <CirculationRequestButtons
+        <CirculationDetailsDialog
           record={record}
           ui={ui}
           returnBusyId={returnBusyId}
@@ -1488,7 +1416,11 @@ function CirculationMobileCard({
           onRequestReturn={onRequestReturn}
           onRequestExtension={onRequestExtension}
           actionButtonBaseClasses={actionButtonBaseClasses}
-          includeDetailsTrigger
+          triggerClassName={
+            "border-white/20 text-white/90 hover:bg-white/10 " +
+            actionButtonBaseClasses
+          }
+          triggerLabel="Details"
         />
       </div>
     </div>
