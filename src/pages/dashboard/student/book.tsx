@@ -106,20 +106,6 @@ function formatDetailValue(value: unknown, fallback = "—") {
     return fallback;
 }
 
-function getBorrowRecordCopyLabel(record: Pick<BorrowRecordDTO, "copyNumber" | "accessionNumber">) {
-    const parts: string[] = [];
-
-    if (typeof record.copyNumber === "number" && Number.isFinite(record.copyNumber)) {
-        parts.push(`Copy ${record.copyNumber}`);
-    }
-
-    const accessionNumber = String(record.accessionNumber ?? "").trim();
-    if (accessionNumber) {
-        parts.push(`Accession ${accessionNumber}`);
-    }
-
-    return parts.join(" • ");
-}
 
 function getEarliestReservationExpiryLabel(records: BorrowRecordDTO[]) {
     const earliest = records
@@ -1017,13 +1003,10 @@ export default function StudentBooksPage() {
             }
 
             const due = fmtDate(created[0]?.dueDate);
-            const assignedCopies = created
-                .map((record) => getBorrowRecordCopyLabel(record))
-                .filter(Boolean)
-                .join(", ");
-            const assignedCopiesSuffix = assignedCopies
-                ? ` Assigned copy order: ${assignedCopies}.`
-                : "";
+            const assignedCopiesSuffix =
+                created.length > 0
+                    ? " A library staff member will handle the physical copy assignment in catalog order."
+                    : "";
 
             if (created.length < requestedCopies) {
                 toast.warning("Partial borrow completed", {

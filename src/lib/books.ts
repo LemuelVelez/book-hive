@@ -3,7 +3,7 @@
 import { BOOK_ROUTES } from "@/api/books/route";
 import { API_BASE } from "@/api/auth/route";
 
-export type Role = "student" | "librarian" | "faculty" | "admin" | "other";
+export type Role = "student" | "assistant_librarian" | "librarian" | "faculty" | "admin" | "other";
 
 export type LibraryArea =
   | "filipiniana"
