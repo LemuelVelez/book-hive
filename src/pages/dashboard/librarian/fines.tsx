@@ -26,13 +26,6 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
 import {
     Dialog,
     DialogContent,
@@ -1076,78 +1069,68 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                     </span>
                                 )}
                                 <span className="ml-2">
-                                    Use the <span className="font-semibold text-sky-200">View</span> button to
-                                    open the PDF preview or download for the selected user.
+                                    Use the <span className="font-semibold text-sky-200">Details</span> button to
+                                    open the full record dialog for the selected user.
                                 </span>
                             </div>
 
-                            <Accordion
-                                type="multiple"
-                                className="w-full"
-                                defaultValue={groupedByUser.length === 1 ? [groupedByUser[0].key] : []}
-                            >
+                            <div className="grid gap-3">
                                 {groupedByUser.map((group) => (
-                                    <AccordionItem key={group.key} value={group.key} className="border-white/10">
-                                        <div className="flex w-full items-start justify-between gap-2 rounded-md bg-white/5 px-3 py-3">
-                                            <AccordionTrigger className="min-w-0 flex-1 items-start py-0 pr-0 text-white/90 hover:no-underline [&>svg]:hidden">
-                                                <div className="flex min-w-0 flex-1 items-start gap-2 pr-2 text-left">
-                                                    <span className="min-w-0 whitespace-normal wrap-break-word pr-2 text-sm font-semibold leading-5 text-white">
-                                                        {group.label} • {group.activeCount} active • {group.paidCount} paid • {group.cancelledCount} cancelled • {group.rows.length} total ({peso(group.totalAmount)})
-                                                    </span>
+                                    <React.Fragment key={group.key}>
+                                        <Card className="border-white/10 bg-white/5 transition-colors hover:bg-white/[0.07]">
+                                            <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+                                                <div className="min-w-0 space-y-2">
+                                                    <div className="flex min-w-0 items-start gap-2">
+                                                        <div className="rounded-full border border-white/10 bg-slate-900/70 p-2">
+                                                            <UserRound className="h-4 w-4 text-sky-200" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold leading-5 text-white whitespace-normal wrap-break-word">
+                                                                {group.label}
+                                                            </p>
+                                                            <p className="mt-1 text-xs text-white/60 whitespace-normal wrap-break-word">
+                                                                {group.rows.length} {group.rows.length === 1 ? "record" : "records"} • {peso(group.totalAmount)} total
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                                        <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-amber-500/15 text-left text-amber-100 hover:bg-amber-500/15 sm:w-auto">
+                                                            Active: {group.activeCount}
+                                                        </Badge>
+                                                        <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-emerald-500/15 text-left text-emerald-100 hover:bg-emerald-500/15 sm:w-auto">
+                                                            Paid: {group.paidCount}
+                                                        </Badge>
+                                                        <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-slate-500/20 text-left text-slate-100 hover:bg-slate-500/20 sm:w-auto">
+                                                            Cancelled: {group.cancelledCount}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
-                                            </AccordionTrigger>
 
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                className="ml-auto shrink-0 border-white/20 text-white/90 hover:bg-white/10"
-                                                onClick={() => setDetailGroupKey(group.key)}
-                                            >
-                                                Details
-                                            </Button>
-                                        </div>
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:shrink-0">
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="border-sky-300/40 text-sky-100 hover:bg-sky-500/10"
+                                                        onClick={() => openPreviewForRows(group.rows)}
+                                                    >
+                                                        <Eye className="mr-1 h-3.5 w-3.5" />
+                                                        View
+                                                    </Button>
 
-                                        <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-                                            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                                {group.email ? (
-                                                    <Badge
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
                                                         variant="outline"
-                                                        className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
+                                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                                        onClick={() => setDetailGroupKey(group.key)}
                                                     >
-                                                        Email: {group.email}
-                                                    </Badge>
-                                                ) : null}
-                                                {group.studentId ? (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
-                                                    >
-                                                        Student ID: {group.studentId}
-                                                    </Badge>
-                                                ) : null}
-                                                {group.userId ? (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
-                                                    >
-                                                        User ID: {group.userId}
-                                                    </Badge>
-                                                ) : null}
-                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-amber-500/15 text-left text-amber-100 hover:bg-amber-500/15 sm:w-auto">
-                                                    Active: {group.activeCount}
-                                                </Badge>
-                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-emerald-500/15 text-left text-emerald-100 hover:bg-emerald-500/15 sm:w-auto">
-                                                    Paid: {group.paidCount}
-                                                </Badge>
-                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-slate-500/20 text-left text-slate-100 hover:bg-slate-500/20 sm:w-auto">
-                                                    Cancelled: {group.cancelledCount}
-                                                </Badge>
-                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-sky-500/15 text-left text-sky-100 hover:bg-sky-500/15 sm:w-auto">
-                                                    Total: {peso(group.totalAmount)}
-                                                </Badge>
-                                            </div>
-                                        </AccordionContent>
+                                                        Details
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
 
                                         <Dialog
                                             open={detailGroupKey === group.key}
@@ -1167,353 +1150,335 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                     </DialogDescription>
                                                 </DialogHeader>
 
-                                            <div className="mb-3 space-y-3">
-                                                <div className="grid gap-3 md:grid-cols-3">
-                                                    <Card className="border-white/10 bg-slate-900/40">
-                                                        <CardContent className="flex items-center gap-3 p-4">
-                                                            <UserRound className="h-4 w-4 text-sky-200" />
-                                                            <div>
-                                                                <p className="text-xs text-white/50">Account summary</p>
-                                                                <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">
-                                                                    {group.rows.length} {group.rows.length === 1 ? "record" : "records"}
-                                                                </p>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
+                                                <div className="mb-3 space-y-3">
+                                                    <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                                        {group.email ? (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
+                                                            >
+                                                                Email: {group.email}
+                                                            </Badge>
+                                                        ) : null}
+                                                        {group.studentId ? (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
+                                                            >
+                                                                Student ID: {group.studentId}
+                                                            </Badge>
+                                                        ) : null}
+                                                        {group.userId ? (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto"
+                                                            >
+                                                                User ID: {group.userId}
+                                                            </Badge>
+                                                        ) : null}
+                                                        <Badge className="w-full justify-start whitespace-normal wrap-break-word bg-sky-500/15 text-left text-sky-100 hover:bg-sky-500/15 sm:w-auto">
+                                                            Total: {peso(group.totalAmount)}
+                                                        </Badge>
+                                                    </div>
 
-                                                    <Card className="border-white/10 bg-slate-900/40">
-                                                        <CardContent className="flex items-center gap-3 p-4">
-                                                            <CircleDollarSign className="h-4 w-4 text-emerald-200" />
-                                                            <div>
-                                                                <p className="text-xs text-white/50">Total amount</p>
-                                                                <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">{peso(group.totalAmount)}</p>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
+                                                    <div className="grid gap-3 md:grid-cols-3">
+                                                        <Card className="border-white/10 bg-slate-900/40">
+                                                            <CardContent className="flex items-center gap-3 p-4">
+                                                                <UserRound className="h-4 w-4 text-sky-200" />
+                                                                <div>
+                                                                    <p className="text-xs text-white/50">Account summary</p>
+                                                                    <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                                        {group.rows.length} {group.rows.length === 1 ? "record" : "records"}
+                                                                    </p>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
 
-                                                    <Card className="border-white/10 bg-slate-900/40">
-                                                        <CardContent className="flex items-center gap-3 p-4">
-                                                            <CalendarClock className="h-4 w-4 text-amber-200" />
-                                                            <div>
-                                                                <p className="text-xs text-white/50">Outstanding</p>
-                                                                <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">
-                                                                    {group.activeCount} active {group.activeCount === 1 ? "fine" : "fines"}
-                                                                </p>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
+                                                        <Card className="border-white/10 bg-slate-900/40">
+                                                            <CardContent className="flex items-center gap-3 p-4">
+                                                                <CircleDollarSign className="h-4 w-4 text-emerald-200" />
+                                                                <div>
+                                                                    <p className="text-xs text-white/50">Total amount</p>
+                                                                    <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">{peso(group.totalAmount)}</p>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+
+                                                        <Card className="border-white/10 bg-slate-900/40">
+                                                            <CardContent className="flex items-center gap-3 p-4">
+                                                                <CalendarClock className="h-4 w-4 text-amber-200" />
+                                                                <div>
+                                                                    <p className="text-xs text-white/50">Outstanding</p>
+                                                                    <p className="text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                                        {group.activeCount} active {group.activeCount === 1 ? "fine" : "fines"}
+                                                                    </p>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    </div>
+
                                                 </div>
 
-                                                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="border-sky-300/40 text-sky-100 hover:bg-sky-500/10"
-                                                        onClick={() => openPreviewForRows(group.rows)}
-                                                    >
-                                                        <Eye className="mr-1 h-3.5 w-3.5" />
-                                                        View
-                                                    </Button>
-                                                </div>
-                                            </div>
+                                                <div className="grid gap-3">
+                                                    {group.rows.map((fine) => {
+                                                        const amount = normalizeFine(fine.amount);
+                                                        const busy = updateBusyId === fine.id;
 
-                                            <div className="grid gap-3">
-                                                {group.rows.map((fine) => {
-                                                    const amount = normalizeFine(fine.amount);
-                                                    const busy = updateBusyId === fine.id;
+                                                        const anyFine = fine as any;
+                                                        const damageReportId: string | undefined =
+                                                            (fine.damageReportId as any) || anyFine.damageReportId || anyFine.damageId;
+                                                        const damageDescription: string | undefined =
+                                                            (fine.damageNotes as any) ||
+                                                            anyFine.damageDescription ||
+                                                            anyFine.damageDetails ||
+                                                            anyFine.damageType;
 
-                                                    const anyFine = fine as any;
-                                                    const damageReportId: string | undefined =
-                                                        (fine.damageReportId as any) || anyFine.damageReportId || anyFine.damageId;
-                                                    const damageDescription: string | undefined =
-                                                        (fine.damageNotes as any) ||
-                                                        anyFine.damageDescription ||
-                                                        anyFine.damageDetails ||
-                                                        anyFine.damageType;
+                                                        const damage = isDamageFine(fine);
+                                                        const isDamageRow = fine._source === "damage";
 
-                                                    const damage = isDamageFine(fine);
-                                                    const isDamageRow = fine._source === "damage";
+                                                        const endForDays =
+                                                            fine.borrowReturnDate ??
+                                                            (fine.status !== "active"
+                                                                ? fine.resolvedAt ?? fine.createdAt ?? null
+                                                                : new Date().toISOString());
 
-                                                    const endForDays =
-                                                        fine.borrowReturnDate ??
-                                                        (fine.status !== "active"
-                                                            ? fine.resolvedAt ?? fine.createdAt ?? null
-                                                            : new Date().toISOString());
+                                                        const overdueLabel = damage
+                                                            ? "Damage"
+                                                            : getFineOverdueLabel(fine, endForDays);
 
-                                                    const overdueLabel = damage
-                                                        ? "Damage"
-                                                        : getFineOverdueLabel(fine, endForDays);
+                                                        const receiptLabel = getOfficialReceiptLabel(fine.officialReceiptNumber);
+                                                        const fineRateLabel = !damage
+                                                            ? `Rate: ${peso(getFineRatePerHour(fine))}/hour`
+                                                            : null;
+                                                        const displayReason = sanitizeFineReason(fine.reason);
 
-                                                    const receiptLabel = getOfficialReceiptLabel(fine.officialReceiptNumber);
-                                                    const fineRateLabel = !damage
-                                                        ? `Rate: ${peso(getFineRatePerHour(fine))}/hour`
-                                                        : null;
-                                                    const displayReason = sanitizeFineReason(fine.reason);
-
-                                                    return (
-                                                        <Card
-                                                            key={fine.id}
-                                                            className="border-white/10 bg-slate-900/50 transition-colors hover:bg-white/5"
-                                                        >
-                                                            <CardHeader className="gap-3 pb-3">
-                                                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                                                    <div className="space-y-2">
-                                                                        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                                                            <Badge variant="outline" className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto">
-                                                                                Fine ID: {fine.id}
-                                                                            </Badge>
-                                                                            {renderStatusBadge(fine.status)}
-                                                                            {receiptLabel && (
-                                                                                <Badge className="w-full justify-start whitespace-normal wrap-break-word border-emerald-400/40 bg-emerald-500/10 text-left text-emerald-200 hover:bg-emerald-500/10 sm:w-auto">
-                                                                                    {receiptLabel}
+                                                        return (
+                                                            <Card
+                                                                key={fine.id}
+                                                                className="border-white/10 bg-slate-900/50 transition-colors hover:bg-white/5"
+                                                            >
+                                                                <CardHeader className="gap-3 pb-3">
+                                                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                                                        <div className="space-y-2">
+                                                                            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                                                                <Badge variant="outline" className="w-full justify-start whitespace-normal wrap-break-word border-white/15 text-left text-white/80 sm:w-auto">
+                                                                                    Fine ID: {fine.id}
                                                                                 </Badge>
-                                                                            )}
-                                                                        </div>
-
-                                                                        <div>
-                                                                            <CardTitle className="text-base text-white whitespace-normal wrap-break-word">
-                                                                                {fine.bookTitle ? fine.bookTitle : fine.bookId ? `Book #${fine.bookId}` : "Untitled record"}
-                                                                            </CardTitle>
-                                                                            <div className="mt-1 flex flex-col items-start gap-2 text-xs text-white/60 sm:flex-row sm:flex-wrap sm:items-center">
-                                                                                <span className="inline-flex items-center gap-1">
-                                                                                    <UserRound className="h-3.5 w-3.5" />
-                                                                                    {fineOwnerLabel(fine)}
-                                                                                </span>
-                                                                                {fine.borrowRecordId && (
-                                                                                    <span className="inline-flex items-center gap-1">
-                                                                                        <BookOpen className="h-3.5 w-3.5" />
-                                                                                        Borrow #{fine.borrowRecordId}
-                                                                                    </span>
+                                                                                {renderStatusBadge(fine.status)}
+                                                                                {receiptLabel && (
+                                                                                    <Badge className="w-full justify-start whitespace-normal wrap-break-word border-emerald-400/40 bg-emerald-500/10 text-left text-emerald-200 hover:bg-emerald-500/10 sm:w-auto">
+                                                                                        {receiptLabel}
+                                                                                    </Badge>
                                                                                 )}
                                                                             </div>
+
+                                                                            <div>
+                                                                                <CardTitle className="text-base text-white whitespace-normal wrap-break-word">
+                                                                                    {fine.bookTitle ? fine.bookTitle : fine.bookId ? `Book #${fine.bookId}` : "Untitled record"}
+                                                                                </CardTitle>
+                                                                                <div className="mt-1 flex flex-col items-start gap-2 text-xs text-white/60 sm:flex-row sm:flex-wrap sm:items-center">
+                                                                                    <span className="inline-flex items-center gap-1">
+                                                                                        <UserRound className="h-3.5 w-3.5" />
+                                                                                        {fineOwnerLabel(fine)}
+                                                                                    </span>
+                                                                                    {fine.borrowRecordId && (
+                                                                                        <span className="inline-flex items-center gap-1">
+                                                                                            <BookOpen className="h-3.5 w-3.5" />
+                                                                                            Borrow #{fine.borrowRecordId}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left lg:min-w-44">
+                                                                            <p className="text-xs text-white/50">Amount</p>
+                                                                            <p className="text-lg font-semibold text-white">{peso(amount)}</p>
+                                                                            {fineRateLabel && <p className="text-xs text-white/60">{fineRateLabel}</p>}
+                                                                        </div>
+                                                                    </div>
+                                                                </CardHeader>
+
+                                                                <CardContent className="space-y-4">
+                                                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                                                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                                                                            <p className="text-xs text-white/50">Duration</p>
+                                                                            <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                                                {damage || isDamageRow ? "Damage" : overdueLabel}
+                                                                            </p>
+                                                                        </div>
+
+                                                                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                                                                            <p className="text-xs text-white/50">Created</p>
+                                                                            <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                                                {fmtDate(fine.createdAt)}
+                                                                            </p>
+                                                                        </div>
+
+                                                                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                                                                            <p className="text-xs text-white/50">Date paid</p>
+                                                                            <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                                                {fmtDate(getFineDatePaid(fine))}
+                                                                            </p>
+                                                                        </div>
+
+                                                                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                                                                            <p className="text-xs text-white/50">Source</p>
+                                                                            <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
+                                                                                {isDamageRow ? "Damage report" : "Fine record"}
+                                                                            </p>
                                                                         </div>
                                                                     </div>
 
-                                                                    <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left lg:min-w-44">
-                                                                        <p className="text-xs text-white/50">Amount</p>
-                                                                        <p className="text-lg font-semibold text-white">{peso(amount)}</p>
-                                                                        {fineRateLabel && <p className="text-xs text-white/60">{fineRateLabel}</p>}
-                                                                    </div>
-                                                                </div>
-                                                            </CardHeader>
-
-                                                            <CardContent className="space-y-4">
-                                                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                                                    <div className="rounded-md border border-white/10 bg-white/5 p-3">
-                                                                        <p className="text-xs text-white/50">Duration</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
-                                                                            {damage || isDamageRow ? "Damage" : overdueLabel}
-                                                                        </p>
-                                                                    </div>
-
-                                                                    <div className="rounded-md border border-white/10 bg-white/5 p-3">
-                                                                        <p className="text-xs text-white/50">Created</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
-                                                                            {fmtDate(fine.createdAt)}
-                                                                        </p>
-                                                                    </div>
-
-                                                                    <div className="rounded-md border border-white/10 bg-white/5 p-3">
-                                                                        <p className="text-xs text-white/50">Date paid</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
-                                                                            {fmtDate(getFineDatePaid(fine))}
-                                                                        </p>
-                                                                    </div>
-
-                                                                    <div className="rounded-md border border-white/10 bg-white/5 p-3">
-                                                                        <p className="text-xs text-white/50">Source</p>
-                                                                        <p className="mt-1 text-sm font-medium text-white whitespace-normal wrap-break-word">
-                                                                            {isDamageRow ? "Damage report" : "Fine record"}
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                                                                    <p className="text-xs font-medium text-white/70">Record details</p>
-                                                                    <div className="grid gap-2 md:grid-cols-2">
-                                                                        {fine.borrowDueDate && (
-                                                                            <p className="text-sm text-white/75 whitespace-normal wrap-break-word">
-                                                                                <span className="font-medium text-white">Due:</span>{" "}
-                                                                                {fmtDate(fine.borrowDueDate)}
-                                                                            </p>
-                                                                        )}
-                                                                        {fine.borrowReturnDate && (
-                                                                            <p className="text-sm text-white/75 whitespace-normal wrap-break-word">
-                                                                                <span className="font-medium text-white">Returned:</span>{" "}
-                                                                                {fmtDate(fine.borrowReturnDate)}
-                                                                            </p>
-                                                                        )}
-                                                                        {displayReason && (
-                                                                            <p className="text-sm text-white/75 md:col-span-2">
-                                                                                <span className="font-medium text-white">Reason:</span>{" "}
-                                                                                {displayReason}
-                                                                            </p>
-                                                                        )}
-                                                                        {(damageReportId || damageDescription || damage) && (
-                                                                            <div className="rounded-md border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100 md:col-span-2">
-                                                                                <div className="mb-1 flex items-center gap-2 font-medium">
-                                                                                    <AlertTriangle className="h-4 w-4" />
-                                                                                    Damage fine
-                                                                                </div>
-                                                                                <div className="space-y-1 text-rose-100/90">
-                                                                                    {damageReportId && <p>Report #{damageReportId}</p>}
-                                                                                    {damageDescription && <p>{damageDescription}</p>}
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="flex flex-col items-stretch gap-2 border-t border-white/10 pt-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                                                                    {!isDamageRow && (
-                                                                        <AlertDialog
-                                                                            onOpenChange={(open) => {
-                                                                                if (open) {
-                                                                                    setEditAmountFineId(fine.id);
-                                                                                    setEditAmountValue(normalizeFine(fine.amount).toFixed(2));
-                                                                                } else if (editAmountFineId === fine.id) {
-                                                                                    setEditAmountFineId(null);
-                                                                                    setEditAmountValue("0.00");
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <AlertDialogTrigger asChild>
-                                                                                <Button
-                                                                                    type="button"
-                                                                                    size="sm"
-                                                                                    variant="outline"
-                                                                                    className="border-white/20 text-white/90 hover:bg-white/10"
-                                                                                >
-                                                                                    <Edit className="mr-1 h-3.5 w-3.5" />
-                                                                                    Edit amount
-                                                                                </Button>
-                                                                            </AlertDialogTrigger>
-
-                                                                            <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
-                                                                                <AlertDialogHeader>
-                                                                                    <AlertDialogTitle>Edit fine amount</AlertDialogTitle>
-                                                                                    <AlertDialogDescription className="text-white/70">
-                                                                                        Adjust the amount for this fine (non-negative).
-                                                                                    </AlertDialogDescription>
-                                                                                </AlertDialogHeader>
-
-                                                                                <div className="mt-4 space-y-2">
-                                                                                    <label className="text-xs font-medium text-white/80">New amount</label>
-                                                                                    <div className="relative w-full">
-                                                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
-                                                                                            ₱
-                                                                                        </span>
-                                                                                        <Input
-                                                                                            type="number"
-                                                                                            min={0}
-                                                                                            step="0.01"
-                                                                                            value={
-                                                                                                editAmountFineId === fine.id
-                                                                                                    ? editAmountValue
-                                                                                                    : normalizeFine(fine.amount).toFixed(2)
-                                                                                            }
-                                                                                            onChange={(e) => setEditAmountValue(e.target.value)}
-                                                                                            className="border-white/20 bg-slate-900/70 pl-6 text-white"
-                                                                                        />
+                                                                    <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                                                                        <p className="text-xs font-medium text-white/70">Record details</p>
+                                                                        <div className="grid gap-2 md:grid-cols-2">
+                                                                            {fine.borrowDueDate && (
+                                                                                <p className="text-sm text-white/75 whitespace-normal wrap-break-word">
+                                                                                    <span className="font-medium text-white">Due:</span>{" "}
+                                                                                    {fmtDate(fine.borrowDueDate)}
+                                                                                </p>
+                                                                            )}
+                                                                            {fine.borrowReturnDate && (
+                                                                                <p className="text-sm text-white/75 whitespace-normal wrap-break-word">
+                                                                                    <span className="font-medium text-white">Returned:</span>{" "}
+                                                                                    {fmtDate(fine.borrowReturnDate)}
+                                                                                </p>
+                                                                            )}
+                                                                            {displayReason && (
+                                                                                <p className="text-sm text-white/75 whitespace-normal wrap-break-word md:col-span-2">
+                                                                                    <span className="font-medium text-white">Reason:</span>{" "}
+                                                                                    {displayReason}
+                                                                                </p>
+                                                                            )}
+                                                                            {(damageReportId || damageDescription || damage) && (
+                                                                                <div className="rounded-md border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100 md:col-span-2">
+                                                                                    <div className="mb-1 flex items-center gap-2 font-medium">
+                                                                                        <AlertTriangle className="h-4 w-4" />
+                                                                                        Damage fine
+                                                                                    </div>
+                                                                                    <div className="space-y-1 text-rose-100/90">
+                                                                                        {damageReportId && <p>Report #{damageReportId}</p>}
+                                                                                        {damageDescription && <p>{damageDescription}</p>}
                                                                                     </div>
                                                                                 </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
 
-                                                                                <AlertDialogFooter>
-                                                                                    <AlertDialogCancel
-                                                                                        className="border-white/20 text-white hover:bg-black/20"
-                                                                                        disabled={busy}
-                                                                                    >
-                                                                                        Cancel
-                                                                                    </AlertDialogCancel>
-                                                                                    <AlertDialogAction
-                                                                                        className="bg-emerald-600 text-white hover:bg-emerald-700"
-                                                                                        disabled={busy}
-                                                                                        onClick={() => void handleUpdateAmount(fine)}
-                                                                                    >
-                                                                                        {busy ? (
-                                                                                            <span className="inline-flex items-center gap-2">
-                                                                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                                                                Saving…
-                                                                                            </span>
-                                                                                        ) : (
-                                                                                            "Save amount"
-                                                                                        )}
-                                                                                    </AlertDialogAction>
-                                                                                </AlertDialogFooter>
-                                                                            </AlertDialogContent>
-                                                                        </AlertDialog>
-                                                                    )}
-
-                                                                    {!isDamageRow && fine.status === "active" && (
-                                                                        <>
-                                                                            <Button
-                                                                                type="button"
-                                                                                size="sm"
-                                                                                className="bg-emerald-600 text-white hover:bg-emerald-700"
-                                                                                disabled={busy}
-                                                                                onClick={() => {
-                                                                                    setPayDialogFine(fine);
-                                                                                    setPayOfficialReceiptNumber(
-                                                                                        fine.officialReceiptNumber?.trim() ?? ""
-                                                                                    );
-                                                                                    setPayDialogOpen(true);
+                                                                    <div className="flex flex-col items-stretch gap-2 border-t border-white/10 pt-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                                                                        {!isDamageRow && (
+                                                                            <AlertDialog
+                                                                                onOpenChange={(open) => {
+                                                                                    if (open) {
+                                                                                        setEditAmountFineId(fine.id);
+                                                                                        setEditAmountValue(normalizeFine(fine.amount).toFixed(2));
+                                                                                    } else if (editAmountFineId === fine.id) {
+                                                                                        setEditAmountFineId(null);
+                                                                                        setEditAmountValue("0.00");
+                                                                                    }
                                                                                 }}
                                                                             >
-                                                                                {busy ? (
-                                                                                    <span className="inline-flex items-center gap-2">
-                                                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                                                        Saving…
-                                                                                    </span>
-                                                                                ) : (
-                                                                                    "Mark as paid (OTC)"
-                                                                                )}
-                                                                            </Button>
-
-                                                                            <AlertDialog>
                                                                                 <AlertDialogTrigger asChild>
                                                                                     <Button
                                                                                         type="button"
                                                                                         size="sm"
                                                                                         variant="outline"
-                                                                                        className="border-slate-400/50 text-slate-100"
-                                                                                        disabled={busy}
+                                                                                        className="border-white/20 text-white/90 hover:bg-white/10"
                                                                                     >
-                                                                                        {busy ? (
-                                                                                            <span className="inline-flex items-center gap-2">
-                                                                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                                                                Saving…
-                                                                                            </span>
-                                                                                        ) : (
-                                                                                            "Cancel fine"
-                                                                                        )}
+                                                                                        <Edit className="mr-1 h-3.5 w-3.5" />
+                                                                                        Edit amount
                                                                                     </Button>
                                                                                 </AlertDialogTrigger>
 
                                                                                 <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
                                                                                     <AlertDialogHeader>
-                                                                                        <AlertDialogTitle>Cancel this fine?</AlertDialogTitle>
+                                                                                        <AlertDialogTitle>Edit fine amount</AlertDialogTitle>
                                                                                         <AlertDialogDescription className="text-white/70">
-                                                                                            This will mark the fine as <span className="font-semibold">Cancelled</span>.
+                                                                                            Adjust the amount for this fine (non-negative).
                                                                                         </AlertDialogDescription>
                                                                                     </AlertDialogHeader>
+
+                                                                                    <div className="mt-4 space-y-2">
+                                                                                        <label className="text-xs font-medium text-white/80">New amount</label>
+                                                                                        <div className="relative w-full">
+                                                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
+                                                                                                ₱
+                                                                                            </span>
+                                                                                            <Input
+                                                                                                type="number"
+                                                                                                min={0}
+                                                                                                step="0.01"
+                                                                                                value={
+                                                                                                    editAmountFineId === fine.id
+                                                                                                        ? editAmountValue
+                                                                                                        : normalizeFine(fine.amount).toFixed(2)
+                                                                                                }
+                                                                                                onChange={(e) => setEditAmountValue(e.target.value)}
+                                                                                                className="border-white/20 bg-slate-900/70 pl-6 text-white"
+                                                                                            />
+                                                                                        </div>
+                                                                                    </div>
 
                                                                                     <AlertDialogFooter>
                                                                                         <AlertDialogCancel
                                                                                             className="border-white/20 text-white hover:bg-black/20"
                                                                                             disabled={busy}
                                                                                         >
-                                                                                            Keep fine
+                                                                                            Cancel
                                                                                         </AlertDialogCancel>
                                                                                         <AlertDialogAction
-                                                                                            className="bg-slate-500 text-white hover:bg-slate-600"
+                                                                                            className="bg-emerald-600 text-white hover:bg-emerald-700"
                                                                                             disabled={busy}
-                                                                                            onClick={() =>
-                                                                                                void handleUpdateStatus(fine, "cancelled", {
-                                                                                                    successTitle: "Fine cancelled",
-                                                                                                    successDescription: "The fine has been cancelled.",
-                                                                                                })
-                                                                                            }
+                                                                                            onClick={() => void handleUpdateAmount(fine)}
+                                                                                        >
+                                                                                            {busy ? (
+                                                                                                <span className="inline-flex items-center gap-2">
+                                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                                    Saving…
+                                                                                                </span>
+                                                                                            ) : (
+                                                                                                "Save amount"
+                                                                                            )}
+                                                                                        </AlertDialogAction>
+                                                                                    </AlertDialogFooter>
+                                                                                </AlertDialogContent>
+                                                                            </AlertDialog>
+                                                                        )}
+
+                                                                        {!isDamageRow && fine.status === "active" && (
+                                                                            <>
+                                                                                <Button
+                                                                                    type="button"
+                                                                                    size="sm"
+                                                                                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                                                                    disabled={busy}
+                                                                                    onClick={() => {
+                                                                                        setPayDialogFine(fine);
+                                                                                        setPayOfficialReceiptNumber(
+                                                                                            fine.officialReceiptNumber?.trim() ?? ""
+                                                                                        );
+                                                                                        setPayDialogOpen(true);
+                                                                                    }}
+                                                                                >
+                                                                                    {busy ? (
+                                                                                        <span className="inline-flex items-center gap-2">
+                                                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                            Saving…
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        "Mark as paid (OTC)"
+                                                                                    )}
+                                                                                </Button>
+
+                                                                                <AlertDialog>
+                                                                                    <AlertDialogTrigger asChild>
+                                                                                        <Button
+                                                                                            type="button"
+                                                                                            size="sm"
+                                                                                            variant="outline"
+                                                                                            className="border-slate-400/50 text-slate-100"
+                                                                                            disabled={busy}
                                                                                         >
                                                                                             {busy ? (
                                                                                                 <span className="inline-flex items-center gap-2">
@@ -1523,28 +1488,63 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                                                             ) : (
                                                                                                 "Cancel fine"
                                                                                             )}
-                                                                                        </AlertDialogAction>
-                                                                                    </AlertDialogFooter>
-                                                                                </AlertDialogContent>
-                                                                            </AlertDialog>
-                                                                        </>
-                                                                    )}
+                                                                                        </Button>
+                                                                                    </AlertDialogTrigger>
 
-                                                                    {(isDamageRow || fine.status !== "active") && (
-                                                                        <span className="text-xs text-white/60">Status locked</span>
-                                                                    )}
-                                                                </div>
-                                                            </CardContent>
-                                                        </Card>
-                                                    );
-                                                })}
-                                            </div>
+                                                                                    <AlertDialogContent className="border-white/10 bg-slate-900 text-white">
+                                                                                        <AlertDialogHeader>
+                                                                                            <AlertDialogTitle>Cancel this fine?</AlertDialogTitle>
+                                                                                            <AlertDialogDescription className="text-white/70">
+                                                                                                This will mark the fine as <span className="font-semibold">Cancelled</span>.
+                                                                                            </AlertDialogDescription>
+                                                                                        </AlertDialogHeader>
 
+                                                                                        <AlertDialogFooter>
+                                                                                            <AlertDialogCancel
+                                                                                                className="border-white/20 text-white hover:bg-black/20"
+                                                                                                disabled={busy}
+                                                                                            >
+                                                                                                Keep fine
+                                                                                            </AlertDialogCancel>
+                                                                                            <AlertDialogAction
+                                                                                                className="bg-slate-500 text-white hover:bg-slate-600"
+                                                                                                disabled={busy}
+                                                                                                onClick={() =>
+                                                                                                    void handleUpdateStatus(fine, "cancelled", {
+                                                                                                        successTitle: "Fine cancelled",
+                                                                                                        successDescription: "The fine has been cancelled.",
+                                                                                                    })
+                                                                                                }
+                                                                                            >
+                                                                                                {busy ? (
+                                                                                                    <span className="inline-flex items-center gap-2">
+                                                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                                                        Saving…
+                                                                                                    </span>
+                                                                                                ) : (
+                                                                                                    "Cancel fine"
+                                                                                                )}
+                                                                                            </AlertDialogAction>
+                                                                                        </AlertDialogFooter>
+                                                                                    </AlertDialogContent>
+                                                                                </AlertDialog>
+                                                                            </>
+                                                                        )}
+
+                                                                        {(isDamageRow || fine.status !== "active") && (
+                                                                            <span className="text-xs text-white/60">Status locked</span>
+                                                                        )}
+                                                                    </div>
+                                                                </CardContent>
+                                                            </Card>
+                                                        );
+                                                    })}
+                                                </div>
                                             </DialogContent>
                                         </Dialog>
-                                    </AccordionItem>
+                                    </React.Fragment>
                                 ))}
-                            </Accordion>
+                            </div>
                         </>
                     )}
                 </CardContent>
