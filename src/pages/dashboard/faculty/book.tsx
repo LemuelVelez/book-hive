@@ -68,6 +68,7 @@ import {
     fetchMyBorrowRecords,
     getFacultyBorrowDurationDays,
     getFacultyBorrowMaxBooks,
+    isBorrowRecordCurrentlyActive,
     type BorrowRecordDTO,
 } from "@/lib/borrows"
 
@@ -630,13 +631,7 @@ export default function FacultyBooksPage() {
         sortOption !== "catalog"
 
     const activeBorrowCount = React.useMemo(() => {
-        return myRecords.filter(
-            (record) =>
-                record.status === "borrowed" ||
-                record.status === "pending" ||
-                record.status === "pending_pickup" ||
-                record.status === "pending_return"
-        ).length
+        return myRecords.filter((record) => isBorrowRecordCurrentlyActive(record)).length
     }, [myRecords])
 
     const remainingBorrowSlots = Math.max(0, facultyBorrowMaxBooks - activeBorrowCount)
@@ -664,12 +659,8 @@ export default function FacultyBooksPage() {
             const recordsForBook = myRecordsByBookId.get(String(book.id)) ?? []
             const sorted = sortRecordsNewestFirst(recordsForBook)
 
-            const activeRecords = sorted.filter(
-                (r) =>
-                    r.status === "borrowed" ||
-                    r.status === "pending" ||
-                    r.status === "pending_pickup" ||
-                    r.status === "pending_return"
+            const activeRecords = sorted.filter((record) =>
+                isBorrowRecordCurrentlyActive(record)
             )
 
             const returnedRecords = sorted.filter((r) => r.status === "returned")
@@ -940,7 +931,7 @@ export default function FacultyBooksPage() {
                 : ""
 
             toast.success("Borrow request submitted", {
-                description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"} now pending pickup. Earliest due date: ${due}.${assignedCopiesSuffix} Faculty may keep up to ${facultyBorrowMaxBooks} active books for ${facultyBorrowDurationDays} days by default.`,
+                description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"} now reserved for pickup for 24 hours. Earliest due date: ${due}.${assignedCopiesSuffix} Faculty may keep up to ${facultyBorrowMaxBooks} active books for ${facultyBorrowDurationDays} days by default.`,
             })
 
             setMyRecords((prev) => [...created.slice().reverse(), ...prev])

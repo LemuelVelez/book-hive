@@ -48,6 +48,8 @@ import { fetchBooks, type BookDTO } from "@/lib/books";
 import {
     fetchMyBorrowRecords,
     createSelfBorrowRecords,
+    getBorrowReservationExpiryDate,
+    isBorrowRecordCurrentlyActive,
     type BorrowRecordDTO,
 } from "@/lib/borrows";
 
@@ -117,6 +119,25 @@ function getBorrowRecordCopyLabel(record: Pick<BorrowRecordDTO, "copyNumber" | "
     }
 
     return parts.join(" • ");
+}
+
+function getEarliestReservationExpiryLabel(records: BorrowRecordDTO[]) {
+    const earliest = records
+        .map((record) => getBorrowReservationExpiryDate(record))
+        .filter((value): value is Date => value instanceof Date && !Number.isNaN(value.getTime()))
+        .sort((left, right) => left.getTime() - right.getTime())[0];
+
+    if (!earliest) {
+        return null;
+    }
+
+    return new Intl.DateTimeFormat("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    }).format(earliest);
 }
 
 function getStudentStatusMeta(book: BookWithStatus): { label: string; classes: string } {
@@ -192,9 +213,13 @@ function StudentBorrowStatus({ book }: { book: BookWithStatus }) {
                     <div className="inline-flex items-center gap-1 text-amber-200">
                         <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
                         <span>
-                            Pending pickup ×{pendingPickupRecords.length}
-                            {" · "}Earliest due:{" "}
-                            <span className="font-medium">{earliestDue}</span>
+                            Reserved ×{pendingPickupRecords.length}
+                            {" · "}
+                            <span className="font-medium">
+                                {getEarliestReservationExpiryLabel(pendingPickupRecords)
+                                    ? `Auto-release: ${getEarliestReservationExpiryLabel(pendingPickupRecords)}`
+                                    : `Earliest due: ${earliestDue}`}
+                            </span>
                         </span>
                     </div>
                 )}
@@ -691,12 +716,8 @@ export default function StudentBooksPage() {
             const recordsForBook = myRecords.filter((r) => r.bookId === book.id);
             const sorted = sortRecordsNewestFirst(recordsForBook);
 
-            const activeRecords = sorted.filter(
-                (r) =>
-                    r.status === "borrowed" ||
-                    r.status === "pending" ||
-                    r.status === "pending_pickup" ||
-                    r.status === "pending_return"
+            const activeRecords = sorted.filter((record) =>
+                isBorrowRecordCurrentlyActive(record)
             );
 
             const returnedRecords = sorted.filter((r) => r.status === "returned");
@@ -1014,7 +1035,7 @@ export default function StudentBooksPage() {
                         created.length === 1 ? "y" : "ies"
                     } of "${book.title}" ${
                         created.length === 1 ? "is" : "are"
-                    } now pending pickup. Earliest due date: ${due}.${assignedCopiesSuffix}`,
+                    } now reserved for pickup for 24 hours. Earliest due date: ${due}.${assignedCopiesSuffix}`,
                 });
             }
 
@@ -1243,14 +1264,15 @@ export default function StudentBooksPage() {
                         </div>
 
                         <p className="mt-2 text-[11px] text-white/60">
-                            When you borrow a book online, its status starts as{" "}
+                            When you borrow a book online, it becomes{" "}
                             <span className="font-semibold text-amber-200">
-                                Pending pickup
+                                Reserved for up to 24 hours
                             </span>{" "}
-                            until a librarian confirms pickup. After confirmation it will
-                            appear as{" "}
-                            <span className="font-semibold text-emerald-200">Borrowed</span>. Books
-                            marked{" "}
+                            while waiting for pickup confirmation. If a librarian confirms pickup
+                            within that window, it changes to{" "}
+                            <span className="font-semibold text-emerald-200">Borrowed</span>.
+                            Otherwise the reservation expires automatically and the book becomes
+                            available again. Books marked{" "}
                             <span className="font-semibold text-amber-200">
                                 Library use only
                             </span>{" "}

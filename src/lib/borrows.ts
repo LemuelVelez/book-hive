@@ -58,7 +58,79 @@ export type BorrowRecordDTO = {
     returnRequestedBy?: number | null;
     returnRequestedByName?: string | null;
     returnRequestNote?: string | null;
+
+    /**
+     * Reservation window metadata for online holds that are still awaiting pickup.
+     * The backend treats expired pending-pickup holds as inactive after this window.
+     */
+    reservationWindowHours?: number | null;
+    reservationExpiresAt?: string | null;
+    reservationExpired?: boolean;
 };
+
+function parseBorrowRecordDateTime(value: string | null | undefined): Date | null {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+    }
+
+    return null;
+}
+
+export function getBorrowReservationExpiryDate(
+    record: Pick<BorrowRecordDTO, "reservationExpiresAt" | "status">
+): Date | null {
+    if (record.status !== "pending_pickup") return null;
+    return parseBorrowRecordDateTime(record.reservationExpiresAt ?? null);
+}
+
+export function isBorrowReservationActive(
+    record: Pick<BorrowRecordDTO, "status" | "reservationExpired" | "reservationExpiresAt">,
+    now = Date.now()
+): boolean {
+    if (record.status !== "pending_pickup") return false;
+    if (record.reservationExpired === true) return false;
+
+    const expiryDate = getBorrowReservationExpiryDate(record);
+    if (!expiryDate) return true;
+
+    return expiryDate.getTime() > now;
+}
+
+export function isBorrowRecordCurrentlyActive(
+    record: Pick<BorrowRecordDTO, "status" | "reservationExpired" | "reservationExpiresAt">,
+    now = Date.now()
+): boolean {
+    if (record.status === "returned") return false;
+    if (record.status === "pending_pickup") {
+        return isBorrowReservationActive(record, now);
+    }
+
+    return (
+        record.status === "borrowed" ||
+        record.status === "pending" ||
+        record.status === "pending_return"
+    );
+}
+
+export function formatBorrowReservationExpiry(
+    record: Pick<BorrowRecordDTO, "reservationExpiresAt" | "status">,
+    locale = "en-PH"
+): string | null {
+    const expiryDate = getBorrowReservationExpiryDate(record);
+    if (!expiryDate) return null;
+
+    return new Intl.DateTimeFormat(locale, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    }).format(expiryDate);
+}
 
 
 export type BorrowNotificationSummaryDTO = {
