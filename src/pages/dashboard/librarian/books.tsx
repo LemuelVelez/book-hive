@@ -60,6 +60,7 @@ import {
     fetchBooks,
     updateBook,
     updateBookCopy,
+    type AddBookCopyPayload,
     type BookDTO,
     type LibraryArea,
 } from "@/lib/books";
@@ -1032,6 +1033,65 @@ export default function LibrarianBooksPage() {
         [resolveLibraryArea]
     );
 
+    const buildAddCopyPayload = React.useCallback(
+        (
+            form: BookFormValues
+        ):
+            | { ok: true; payload: AddBookCopyPayload }
+            | { ok: false; message: string } => {
+            const resolvedAccNo = form.accessionNumber.trim();
+            if (!resolvedAccNo) {
+                return { ok: false, message: "Accession number is required." };
+            }
+
+            const resolvedBarcode = form.barcode.trim();
+            if (!resolvedBarcode) {
+                return { ok: false, message: "Barcode is required." };
+            }
+
+            const area = resolveLibraryArea(form.libraryAreaOption, form.libraryAreaOther);
+            if (!area.ok) {
+                return { ok: false, message: area.message };
+            }
+
+            if (!form.borrowDuration.trim()) {
+                return { ok: false, message: "Borrow duration (days) is required." };
+            }
+
+            const borrowDaysNum = Number(form.borrowDuration);
+            if (!Number.isFinite(borrowDaysNum) || borrowDaysNum <= 0) {
+                return {
+                    ok: false,
+                    message: "Borrow duration must be a positive number of days.",
+                };
+            }
+
+            const copyNumberInput = form.copyNumber.trim();
+            const copyNum = parsePositiveIntOrNull(copyNumberInput);
+            if (!copyNumberInput || copyNum === null) {
+                return {
+                    ok: false,
+                    message: "Copy number is required and must be a positive number.",
+                };
+            }
+
+            return {
+                ok: true,
+                payload: {
+                    accessionNumber: resolvedAccNo,
+                    barcode: resolvedBarcode,
+                    copyNumber: copyNum,
+                    volumeNumber: form.volumeNumber.trim() || undefined,
+                    libraryArea: area.value as LibraryArea,
+                    available: form.available,
+                    isLibraryUseOnly: form.isLibraryUseOnly,
+                    borrowDurationDays: Math.floor(borrowDaysNum),
+                },
+            };
+        },
+        [resolveLibraryArea]
+    );
+
     const handleCreateBook = async () => {
         setFormError("");
 
@@ -1173,12 +1233,14 @@ export default function LibrarianBooksPage() {
 
         setCopyError("");
 
-        const result = buildBookPayload(copyForm);
+        const result = buildAddCopyPayload(copyForm);
         if (!result.ok) {
             setCopyError(result.message);
             toast.error("Validation error", { description: result.message });
             return;
         }
+
+        const copyGroupId = copySourceBook.parentBookId || copySourceBook.id;
 
         setCopying(true);
         try {
@@ -1187,6 +1249,9 @@ export default function LibrarianBooksPage() {
                 result.payload as Parameters<typeof addBookCopy>[1]
             );
             await loadBooks();
+            setOpenBookIds((prev) =>
+                prev.includes(copyGroupId) ? prev : [...prev, copyGroupId]
+            );
             setCopyOpen(false);
             resetCopyForm();
 

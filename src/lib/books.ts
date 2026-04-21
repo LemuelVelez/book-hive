@@ -246,14 +246,10 @@ export type UpdateBookPayload = Partial<CreateBookPayload> & {
   copiesToAdd?: number;
 };
 
-export type AddBookCopyPayload = Partial<CreateBookPayload> & {
-  count?: number;
-  copiesToAdd?: number;
-  numberOfCopies?: number;
-  accessionNumber?: string;
-  copyNumber?: number;
-  barcode?: string;
-  callNumber?: string;
+export type AddBookCopyPayload = {
+  accessionNumber: string;
+  barcode: string;
+  copyNumber: number;
   volumeNumber?: string;
   libraryArea?: LibraryArea | null;
   borrowDurationDays?: number;
@@ -261,10 +257,132 @@ export type AddBookCopyPayload = Partial<CreateBookPayload> & {
   isLibraryUseOnly?: boolean;
 };
 
+function getBookGroupKey(book: BookDTO): string {
+  const parentId = typeof book.parentBookId === "string" ? book.parentBookId.trim() : "";
+  return parentId || String(book.id);
+}
+
+function compareGroupedBookCopies(groupId: string, a: BookDTO, b: BookDTO): number {
+  const aIsOriginal = String(a.id) === groupId;
+  const bIsOriginal = String(b.id) === groupId;
+  if (aIsOriginal !== bIsOriginal) {
+    return aIsOriginal ? -1 : 1;
+  }
+
+  const aCopyNumber =
+    typeof a.copyNumber === "number" && Number.isFinite(a.copyNumber)
+      ? a.copyNumber
+      : Number.MAX_SAFE_INTEGER;
+  const bCopyNumber =
+    typeof b.copyNumber === "number" && Number.isFinite(b.copyNumber)
+      ? b.copyNumber
+      : Number.MAX_SAFE_INTEGER;
+  if (aCopyNumber !== bCopyNumber) return aCopyNumber - bCopyNumber;
+
+  return String(a.accessionNumber || "").localeCompare(String(b.accessionNumber || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function normalizeFetchedBooks(books: BookDTO[]): BookDTO[] {
+  const grouped = new Map<
+    string,
+    {
+      firstIndex: number;
+      items: BookDTO[];
+    }
+  >();
+
+  books.forEach((book, index) => {
+    const groupKey = getBookGroupKey(book);
+    const flattened = Array.isArray(book.copies) && book.copies.length > 0 ? book.copies : [book];
+
+    flattened.forEach((item) => {
+      const normalizedParentBookId: string | null =
+        item.id === groupKey
+          ? null
+          : typeof item.parentBookId === "string" && item.parentBookId.trim()
+            ? item.parentBookId.trim()
+            : groupKey;
+      const entry = grouped.get(groupKey) ?? { firstIndex: index, items: [] };
+      entry.items.push({
+        ...item,
+        copies: undefined,
+        parentBookId: normalizedParentBookId,
+      });
+      grouped.set(groupKey, entry);
+    });
+  });
+
+  const normalized: BookDTO[] = [];
+
+  Array.from(grouped.entries())
+    .sort((a, b) => a[1].firstIndex - b[1].firstIndex)
+    .forEach(([groupKey, entry]) => {
+      const uniqueCopies = Array.from(
+        entry.items.reduce((map, item) => {
+          map.set(String(item.id), item);
+          return map;
+        }, new Map<string, BookDTO>()).values()
+      ).sort((a, b) => compareGroupedBookCopies(groupKey, a, b));
+
+      const representative =
+        uniqueCopies.find((item) => String(item.id) === groupKey) ?? uniqueCopies[0];
+
+      if (!representative) {
+        return;
+      }
+
+      if (uniqueCopies.length <= 1) {
+        normalized.push({
+          ...representative,
+          copies: undefined,
+        });
+        return;
+      }
+
+      const borrowedCopies = uniqueCopies.reduce((count, item) => {
+        const rawBorrowed =
+          typeof item.activeBorrowCount === "number" && Number.isFinite(item.activeBorrowCount)
+            ? item.activeBorrowCount
+            : typeof item.borrowedCopies === "number" && Number.isFinite(item.borrowedCopies)
+              ? item.borrowedCopies
+              : 0;
+        return count + Math.min(1, Math.max(0, Math.floor(rawBorrowed)));
+      }, 0);
+
+      const totalBorrowCount = uniqueCopies.reduce((count, item) => {
+        const rawTotal =
+          typeof item.totalBorrowCount === "number" && Number.isFinite(item.totalBorrowCount)
+            ? item.totalBorrowCount
+            : 0;
+        return count + rawTotal;
+      }, 0);
+
+      const totalCopies = uniqueCopies.length;
+      const availableCopies = Math.max(0, totalCopies - borrowedCopies);
+
+      normalized.push({
+        ...representative,
+        parentBookId: null,
+        available: availableCopies > 0,
+        numberOfCopies: availableCopies,
+        totalCopies,
+        borrowedCopies,
+        activeBorrowCount: borrowedCopies,
+        totalBorrowCount,
+        copies: uniqueCopies,
+      });
+    });
+
+  return normalized;
+}
+
 export async function fetchBooks(): Promise<BookDTO[]> {
   type Resp = JsonOk<{ books: BookDTO[] }>;
   const res = await requestJSON<Resp>(BOOK_ROUTES.list, { method: "GET" });
-  return res.books;
+  return normalizeFetchedBooks(res.books);
 }
 
 export async function createBook(payload: CreateBookPayload): Promise<BookDTO> {
