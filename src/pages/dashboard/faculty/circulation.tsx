@@ -1,6 +1,9 @@
-import StudentCirculationPage from "@/pages/dashboard/student/circulation"
+import StudentCirculationPage from "@/pages/dashboard/student/circulation";
 
 export default function FacultyCirculationPage() {
-    // Faculty circulation uses the same "My Circulation" experience as borrowers
-    return <StudentCirculationPage />
+  return (
+    <StudentCirculationPage
+      dashboardTitle="My Borrowed Books"
+    />
+  );
 }
