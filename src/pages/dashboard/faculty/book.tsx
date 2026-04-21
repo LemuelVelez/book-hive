@@ -64,7 +64,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 import { fetchBooks, type BookDTO } from "@/lib/books"
 import {
-    createSelfBorrow,
+    createSelfBorrowRecords,
     fetchMyBorrowRecords,
     getFacultyBorrowDurationDays,
     getFacultyBorrowMaxBooks,
@@ -79,6 +79,32 @@ function formatDetailValue(value: unknown, fallback = "—") {
         return normalized || fallback
     }
     return fallback
+}
+
+function buildBorrowAssignmentSummary(
+    records: Array<Pick<BorrowRecordDTO, "copyNumber" | "accessionNumber">>
+) {
+    const labels = records
+        .map((record) => {
+            const parts: string[] = []
+
+            if (typeof record.copyNumber === "number" && Number.isFinite(record.copyNumber)) {
+                parts.push(`Copy ${record.copyNumber}`)
+            }
+
+            const accessionNumber = String(record.accessionNumber ?? "").trim()
+            if (accessionNumber) {
+                parts.push(`Accession ${accessionNumber}`)
+            }
+
+            return parts.join(" • ")
+        })
+        .filter(Boolean)
+
+    if (labels.length === 0) return ""
+    if (labels.length === 1) return ` Assigned copy: ${labels[0]}.`
+
+    return ` Assigned copies: ${labels.join(", ")}.`
 }
 
 
@@ -885,22 +911,7 @@ export default function FacultyBooksPage() {
         setBorrowBusyId(book.id)
 
         try {
-            const created: BorrowRecordDTO[] = []
-
-            for (let i = 0; i < requestedCopies; i++) {
-                try {
-                    const record = await createSelfBorrow(book.id, 1, "faculty")
-                    created.push(record)
-                } catch (err: any) {
-                    if (created.length === 0) throw err
-
-                    const msg = err?.message || "Some copies could not be borrowed."
-                    toast.warning("Partial borrow completed", {
-                        description: `Borrowed ${created.length} of ${requestedCopies} copies. ${msg}`,
-                    })
-                    break
-                }
-            }
+            const created = await createSelfBorrowRecords(book.id, requestedCopies, "faculty")
 
             if (created.length === 0) return
 
@@ -908,10 +919,7 @@ export default function FacultyBooksPage() {
                 created[0]?.dueDate
                     ? new Date(created[0].dueDate).toLocaleDateString("en-CA")
                     : "—"
-            const assignedCopiesSuffix =
-                created.length > 0
-                    ? " A library staff member will handle the physical copy assignment in catalog order."
-                    : ""
+            const assignedCopiesSuffix = buildBorrowAssignmentSummary(created)
 
             toast.success("Borrow request submitted", {
                 description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${book.title}" ${created.length === 1 ? "is" : "are"} now reserved for pickup for 24 hours. Earliest due date: ${due}.${assignedCopiesSuffix} Faculty may keep up to ${facultyBorrowMaxBooks} active books for ${facultyBorrowDurationDays} days by default.`,

@@ -106,6 +106,32 @@ function formatDetailValue(value: unknown, fallback = "—") {
     return fallback;
 }
 
+function buildBorrowAssignmentSummary(
+    records: Array<Pick<BorrowRecordDTO, "copyNumber" | "accessionNumber">>
+) {
+    const labels = records
+        .map((record) => {
+            const parts: string[] = [];
+
+            if (typeof record.copyNumber === "number" && Number.isFinite(record.copyNumber)) {
+                parts.push(`Copy ${record.copyNumber}`);
+            }
+
+            const accessionNumber = String(record.accessionNumber ?? "").trim();
+            if (accessionNumber) {
+                parts.push(`Accession ${accessionNumber}`);
+            }
+
+            return parts.join(" • ");
+        })
+        .filter(Boolean);
+
+    if (labels.length === 0) return "";
+    if (labels.length === 1) return ` Assigned copy: ${labels[0]}.`;
+
+    return ` Assigned copies: ${labels.join(", ")}.`;
+}
+
 
 function getEarliestReservationExpiryLabel(records: BorrowRecordDTO[]) {
     const earliest = records
@@ -1003,10 +1029,7 @@ export default function StudentBooksPage() {
             }
 
             const due = fmtDate(created[0]?.dueDate);
-            const assignedCopiesSuffix =
-                created.length > 0
-                    ? " A library staff member will handle the physical copy assignment in catalog order."
-                    : "";
+            const assignedCopiesSuffix = buildBorrowAssignmentSummary(created);
 
             if (created.length < requestedCopies) {
                 toast.warning("Partial borrow completed", {
