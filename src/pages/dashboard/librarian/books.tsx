@@ -67,6 +67,13 @@ import {
 function getCopyRecords(book: BookDTO): BookDTO[] {
     if (Array.isArray(book.copies) && book.copies.length > 0) {
         return [...book.copies].sort((a, b) => {
+            const aIsOriginal = a.id === book.id;
+            const bIsOriginal = b.id === book.id;
+
+            if (aIsOriginal !== bIsOriginal) {
+                return aIsOriginal ? -1 : 1;
+            }
+
             const aCopy =
                 typeof a.copyNumber === "number" ? a.copyNumber : Number.MAX_SAFE_INTEGER;
             const bCopy =
@@ -90,6 +97,45 @@ function getCopyRecords(book: BookDTO): BookDTO[] {
 
 function getAdditionalCopyRecords(book: BookDTO): BookDTO[] {
     return getCopyRecords(book).filter((copy) => copy.id !== book.id);
+}
+
+function isBorrowedCopy(book: BookDTO): boolean {
+    if (isLibraryUseOnlyBook(book)) {
+        return false;
+    }
+
+    const activeBorrowCount =
+        typeof book.activeBorrowCount === "number" && Number.isFinite(book.activeBorrowCount)
+            ? book.activeBorrowCount
+            : typeof book.borrowedCopies === "number" && Number.isFinite(book.borrowedCopies)
+              ? book.borrowedCopies
+              : 0;
+
+    return activeBorrowCount > 0 || Boolean(book.totalCopies && !book.available);
+}
+
+function getCopyDisplayLabel(groupBook: BookDTO, copy: BookDTO): string {
+    if (copy.id === groupBook.id) {
+        return "Original";
+    }
+
+    const additionalIndex = getAdditionalCopyRecords(groupBook).findIndex(
+        (item) => item.id === copy.id
+    );
+
+    if (additionalIndex >= 0) {
+        return `Copy ${additionalIndex + 1}`;
+    }
+
+    return `Copy ${formatDetailValue(copy.copyNumber, "—")}`;
+}
+
+function getStoredCopyNumberLabel(copy: BookDTO): string {
+    if (typeof copy.copyNumber === "number" && Number.isFinite(copy.copyNumber)) {
+        return String(copy.copyNumber);
+    }
+
+    return "—";
 }
 
 function buildCreatePayloadPagesValue(raw: string): number | string | null {
@@ -228,7 +274,10 @@ function getLoanDaysValue(book: BookDTO) {
         : "—";
 }
 
-function getStatusMeta(book: BookDTO): { label: string; classes: string } {
+function getStatusMeta(
+    book: BookDTO,
+    kind: "group" | "copy" = "group"
+): { label: string; classes: string } {
     if (isLibraryUseOnlyBook(book)) {
         return {
             label: "Library Use Only",
@@ -236,7 +285,46 @@ function getStatusMeta(book: BookDTO): { label: string; classes: string } {
         };
     }
 
-    if (isBorrowableByCopies(book)) {
+    if (kind === "copy") {
+        if (isBorrowedCopy(book)) {
+            return {
+                label: "Borrowed",
+                classes: "border-rose-400/30 bg-rose-500/15 text-rose-100",
+            };
+        }
+
+        if (isBorrowableByCopies(book)) {
+            return {
+                label: "Available",
+                classes: "border-emerald-400/30 bg-emerald-500/15 text-emerald-100",
+            };
+        }
+
+        return {
+            label: "Unavailable",
+            classes: "border-slate-400/30 bg-slate-500/15 text-slate-100",
+        };
+    }
+
+    const copyRecords = getCopyRecords(book);
+    const borrowedCopies = copyRecords.filter((copy) => isBorrowedCopy(copy)).length;
+    const availableCopies = copyRecords.filter((copy) => isBorrowableByCopies(copy)).length;
+
+    if (borrowedCopies > 0 && availableCopies > 0) {
+        return {
+            label: "Partially Borrowed",
+            classes: "border-sky-400/30 bg-sky-500/15 text-sky-100",
+        };
+    }
+
+    if (borrowedCopies > 0 && availableCopies === 0) {
+        return {
+            label: "Borrowed",
+            classes: "border-rose-400/30 bg-rose-500/15 text-rose-100",
+        };
+    }
+
+    if (availableCopies > 0) {
         return {
             label: "Available",
             classes: "border-emerald-400/30 bg-emerald-500/15 text-emerald-100",
@@ -245,7 +333,7 @@ function getStatusMeta(book: BookDTO): { label: string; classes: string } {
 
     return {
         label: "Unavailable",
-        classes: "border-rose-400/30 bg-rose-500/15 text-rose-100",
+        classes: "border-slate-400/30 bg-slate-500/15 text-slate-100",
     };
 }
 
@@ -381,7 +469,7 @@ function BookRecordDetailsDialog({
 }) {
     if (!book) return null;
 
-    const status = getStatusMeta(book);
+    const status = getStatusMeta(book, kind === "copy" ? "copy" : "group");
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -428,85 +516,84 @@ function BookCopyRecords({
     onEdit: (book: BookDTO) => void;
     onDelete: (book: BookDTO) => void;
 }) {
-    const copies = getAdditionalCopyRecords(book);
+    const copies = getCopyRecords(book);
 
     return (
         <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-sm font-semibold text-white">
                     <BookCopy className="h-4 w-4" />
-                    Saved copies
+                    Copy order &amp; status
                 </div>
                 <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-center text-[11px] text-white/70">
                     {copies.length} cop{copies.length === 1 ? "y" : "ies"}
                 </span>
             </div>
 
-            {copies.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-sm text-white/60">
-                    No added copies yet.
-                </div>
-            ) : (
-                <div className="grid gap-3 xl:grid-cols-2">
-                    {copies.map((copy, index) => {
-                        const copyStatus = getStatusMeta(copy);
+            <div className="grid gap-3 xl:grid-cols-2">
+                {copies.map((copy, index) => {
+                    const copyStatus = getStatusMeta(copy, "copy");
+                    const isOriginal = copy.id === book.id;
+                    const copyLabel = getCopyDisplayLabel(book, copy);
 
-                        return (
-                            <div
-                                key={copy.id || `${book.id}-copy-${index}`}
-                                className="rounded-2xl border border-white/10 bg-black/20 p-4"
-                            >
-                                <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                    <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
-                                        Copy {formatDetailValue(copy.copyNumber, String(index + 2))}
-                                    </span>
-                                    <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
-                                        {formatDetailValue(copy.accessionNumber)}
-                                    </span>
-                                    <span
-                                        className={`inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border px-2 py-0.5 text-center text-[11px] font-medium ${copyStatus.classes}`}
-                                    >
-                                        {copyStatus.label}
-                                    </span>
-                                </div>
-
-                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                    <CatalogDetail label="Barcode" value={formatDetailValue(copy.barcode)} />
-                                    <CatalogDetail label="Library area" value={getLibraryAreaValue(copy)} />
-                                    <CatalogDetail label="Volume" value={formatDetailValue(copy.volumeNumber)} />
-                                    <CatalogDetail label="Loan days" value={getLoanDaysValue(copy)} />
-                                </div>
-
-                                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="border-white/20 text-white/90 hover:bg-white/10"
-                                        onClick={() => onOpenDetails(copy)}
-                                    >
-                                        Details
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="border-white/20 text-white/90 hover:bg-white/10"
-                                        onClick={() => onEdit(copy)}
-                                    >
-                                        Edit
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="destructive"
-                                        onClick={() => onDelete(copy)}
-                                    >
-                                        Delete
-                                    </Button>
-                                </div>
+                    return (
+                        <div
+                            key={copy.id || `${book.id}-copy-${index}`}
+                            className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                        >
+                            <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
+                                    {copyLabel}
+                                </span>
+                                <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
+                                    Stored copy no. {getStoredCopyNumberLabel(copy)}
+                                </span>
+                                <span className="inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-center text-[11px] font-medium text-white/80">
+                                    {formatDetailValue(copy.accessionNumber)}
+                                </span>
+                                <span
+                                    className={`inline-flex max-w-full whitespace-normal wrap-anywhere rounded-full border px-2 py-0.5 text-center text-[11px] font-medium ${copyStatus.classes}`}
+                                >
+                                    {copyStatus.label}
+                                </span>
                             </div>
-                        );
-                    })}
-                </div>
-            )}
+
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <CatalogDetail label="Barcode" value={formatDetailValue(copy.barcode)} />
+                                <CatalogDetail label="Library area" value={getLibraryAreaValue(copy)} />
+                                <CatalogDetail label="Volume" value={formatDetailValue(copy.volumeNumber)} />
+                                <CatalogDetail label="Loan days" value={getLoanDaysValue(copy)} />
+                            </div>
+
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="border-white/20 text-white/90 hover:bg-white/10"
+                                    onClick={() => onOpenDetails(copy)}
+                                >
+                                    Details
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="border-white/20 text-white/90 hover:bg-white/10"
+                                    onClick={() => onEdit(copy)}
+                                >
+                                    {isOriginal ? "Edit original" : "Edit"}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() => onDelete(copy)}
+                                >
+                                    {isOriginal ? "Delete original" : "Delete"}
+                                </Button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }
