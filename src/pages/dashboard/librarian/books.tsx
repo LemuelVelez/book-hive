@@ -312,7 +312,7 @@ function getStatusMeta(
 
     if (borrowedCopies > 0 && availableCopies > 0) {
         return {
-            label: "Partially Borrowed",
+            label: "Borrowed",
             classes: "border-sky-400/30 bg-sky-500/15 text-sky-100",
         };
     }
