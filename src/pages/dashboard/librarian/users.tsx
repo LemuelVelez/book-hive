@@ -21,12 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { toast } from "sonner";
 import {
   Users2,
@@ -75,8 +69,6 @@ type UserRowDTO = {
   createdAt?: string | null;
   contactNumber?: string | null;
 };
-
-
 
 const ACCOUNTABILITY_UNAVAILABLE_REASON =
   "Accountability status could not be verified yet.";
@@ -466,7 +458,8 @@ export default function LibrarianUsersPage() {
   const [busy, setBusy] = React.useState<BusyState>(null);
   const [roleDraft, setRoleDraft] = React.useState<Record<string, Role>>({});
   const [confirm, setConfirm] = React.useState<ConfirmState>(null);
-  const [detailsUserId, setDetailsUserId] = React.useState<string | null>(null);
+  const [detailsRole, setDetailsRole] = React.useState<Role | null>(null);
+  const [selectedUserId, setSelectedUserId] = React.useState<string | null>(null);
 
   const loadUsers = React.useCallback(async () => {
     setError(null);
@@ -587,6 +580,16 @@ export default function LibrarianUsersPage() {
     });
   }, [filtered]);
 
+  const selectedRoleGroup = React.useMemo(
+    () => roleGroups.find((group) => group.role === detailsRole) ?? null,
+    [detailsRole, roleGroups]
+  );
+
+  const selectedUser = React.useMemo(
+    () => users.find((user) => user.id === selectedUserId) ?? null,
+    [selectedUserId, users]
+  );
+
   const onApprove = async (id: string) => {
     setBusy({ id, action: "approve" });
     try {
@@ -621,7 +624,13 @@ export default function LibrarianUsersPage() {
         accountabilityWarning || ACCOUNTABILITY_UNAVAILABLE_REASON
       );
 
-    if (!user || user.isApproved || user.role === "admin" || user.role === "librarian" || id === selfId) {
+    if (
+      !user ||
+      user.isApproved ||
+      user.role === "admin" ||
+      user.role === "librarian" ||
+      id === selfId
+    ) {
       toast.error("Delete blocked", {
         description:
           "Only pending non-librarian, non-admin users can be deleted.",
@@ -663,7 +672,7 @@ export default function LibrarianUsersPage() {
     }
   };
 
-  const renderUserAccordion = (u: UserRowDTO) => {
+  const renderUserDetailsContent = (u: UserRowDTO) => {
     const isBusyApprove = busy?.id === u.id && busy?.action === "approve";
     const isBusyDisapprove = busy?.id === u.id && busy?.action === "disapprove";
     const isBusyDelete = busy?.id === u.id && busy?.action === "delete";
@@ -715,247 +724,249 @@ export default function LibrarianUsersPage() {
             : "No unsaved role changes.";
 
     return (
-      <AccordionItem
-        key={u.id}
-        value={u.id}
-        className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 px-0 shadow-sm transition-colors hover:border-white/20"
-      >
-        <AccordionTrigger className="gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg]:self-center">
-          <div className="min-w-0 flex flex-1 items-center gap-3 pr-2 text-left">
-            <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-white">
-                {u.fullName || "Unnamed user"} • {u.email} • {roleLabel(u.role)}
-              </div>
+      <div className="space-y-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
+
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <h3 className="max-w-full wrap-break-word text-sm font-semibold text-white">
+                {u.fullName || "Unnamed user"}
+              </h3>
+              {isSelf ? (
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
+                  You
+                </span>
+              ) : null}
+              <Badge
+                variant="default"
+                className={`${approvalBadgeClasses(u.isApproved)} wrap-anywhere justify-center`}
+              >
+                {u.isApproved ? "approved" : "pending"}
+              </Badge>
+              <Badge
+                variant="default"
+                className={`${roleBadgeClasses(u.role)} wrap-anywhere justify-center`}
+              >
+                {roleBadgeLabel(u.role)}
+              </Badge>
+            </div>
+
+            <div className="text-sm text-white/80 wrap-break-word">{u.email}</div>
+            <div className="text-xs text-white/60 wrap-break-word">
+              Contact: {u.contactNumber || "—"}
+            </div>
+
+            <div className="flex flex-col gap-2 text-[11px] text-white/60 sm:flex-row sm:flex-wrap">
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono wrap-break-word">
+                ID: {u.id}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 wrap-break-word">
+                Account type: {roleLabel(u.accountType)}
+              </span>
             </div>
           </div>
-        </AccordionTrigger>
+        </div>
 
-        <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <StatPill
+            icon={<CalendarDays className="h-3.5 w-3.5" />}
+            label="Created"
+            value={formatDateTime(u.createdAt)}
+          />
+          <StatPill
+            icon={<BadgeCheck className="h-3.5 w-3.5" />}
+            label="Approved at"
+            value={formatDateTime(u.approvedAt)}
+          />
+          <StatPill
+            icon={<Clock3 className="h-3.5 w-3.5" />}
+            label="Status"
+            value={u.isApproved ? "Active access" : "Needs review"}
+          />
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/55">
+              Accountabilities
+            </div>
+            <p className="mt-1 text-xs text-white/50">
+              Deletion stays blocked until all active borrows, active fines, and
+              unpaid damage reports are settled.
+            </p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <StatPill
+              icon={<Clock3 className="h-3.5 w-3.5" />}
+              label="Active borrows"
+              value={accountabilitySummary.activeBorrowCount}
+            />
+            <StatPill
+              icon={<BadgeCheck className="h-3.5 w-3.5" />}
+              label="Active fines"
+              value={accountabilitySummary.activeFineCount}
+            />
+            <StatPill
+              icon={<ShieldAlert className="h-3.5 w-3.5" />}
+              label="Unpaid damages"
+              value={accountabilitySummary.unpaidDamageCount}
+            />
+          </div>
+
+          <p
+            className={
+              accountabilitySummary.hasUnsettledAccountabilities
+                ? "text-xs text-amber-200 wrap-break-word"
+                : "text-xs text-emerald-200 wrap-break-word"
+            }
+          >
+            {accountabilitySummary.hasUnsettledAccountabilities
+              ? accountabilitySummary.deleteBlockedReason
+              : "No unsettled accountabilities blocking deletion."}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+          <div className="space-y-1">
+            <div className="text-xs uppercase tracking-wide text-white/55">Change role</div>
+            <Select
+              value={draft}
+              onValueChange={(value) => setRoleDraft((prev) => ({ ...prev, [u.id]: value as Role }))}
+              disabled={disableRoleSelect}
+            >
+              <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 text-white border-white/10">
+                {selectableRoleOptions.map((role) => (
+                  <SelectItem
+                    key={role}
+                    value={role}
+                    disabled={!isAdminSession && (role === "librarian" || role === "admin")}
+                  >
+                    {roleLabel(role)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <p className="text-xs text-white/50 wrap-break-word">{roleHint}</p>
+        </div>
+
+        <div className="flex flex-col gap-2">
           <Button
             type="button"
             variant="outline"
-            className="w-full border-white/20 text-white/90 hover:bg-white/10 sm:w-auto"
-            onClick={() => setDetailsUserId(u.id)}
+            className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+            onClick={() => {
+              if (!canChangeRole) return;
+              setConfirm({
+                type: "role",
+                id: u.id,
+                name: u.fullName || u.email,
+                from: u.role,
+                to: draft,
+              });
+            }}
+            disabled={!roleChanged || !canChangeRole || anyBusyForRow}
+            title={
+              isSelf
+                ? "You cannot change your own role"
+                : !isAdminSession && targetIsProtected
+                  ? "Only admins can change assistant librarian, librarian, or admin accounts"
+                  : !isAdminSession && draftNeedsAdmin
+                    ? "Librarians cannot assign librarian or admin roles"
+                    : roleChanged
+                      ? "Save role"
+                      : "No role changes"
+            }
           >
-            Details
+            {isBusyRole ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save role
           </Button>
-        </AccordionContent>
 
-        <Dialog open={detailsUserId === u.id} onOpenChange={(open) => setDetailsUserId(open ? u.id : null)}>
-          <DialogContent className="w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-4xl
-        [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
-        [&::-webkit-scrollbar]:w-1.5
-        [&::-webkit-scrollbar-track]:bg-slate-900/70
-        [&::-webkit-scrollbar-thumb]:rounded-full
-        [&::-webkit-scrollbar-thumb]:bg-slate-700
-        [&::-webkit-scrollbar-thumb:hover]:bg-slate-600">
-            <DialogHeader>
-              <DialogTitle className="pr-6">{u.fullName || "Unnamed user"}</DialogTitle>
-              <DialogDescription className="text-white/70">
-                Review account details, approval status, role changes, and available user actions.
-              </DialogDescription>
-            </DialogHeader>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+            onClick={() => onApprove(u.id)}
+            disabled={!canApprove || anyBusyForRow}
+            title={canApprove ? "Approve user" : "Already approved"}
+          >
+            {isBusyApprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+            Approve
+          </Button>
 
-          <div className="space-y-4">
-            <div className="flex items-start gap-3 min-w-0">
-              <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={44} />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
+            onClick={() => onDisapprove(u.id)}
+            disabled={!canDisapprove || anyBusyForRow}
+            title={canDisapprove ? "Disapprove user" : "Cannot disapprove this user"}
+          >
+            {isBusyDisapprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+            Disapprove
+          </Button>
 
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="max-w-full truncate text-sm font-semibold text-white">
-                    {u.fullName || "Unnamed user"}
-                  </h3>
-                  {isSelf ? (
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
-                      You
-                    </span>
-                  ) : null}
-                  <Badge variant="default" className={approvalBadgeClasses(u.isApproved)}>
-                    {u.isApproved ? "approved" : "pending"}
-                  </Badge>
-                  <Badge variant="default" className={roleBadgeClasses(u.role)}>
-                    {roleBadgeLabel(u.role)}
-                  </Badge>
-                </div>
-
-                <div className="text-sm text-white/80 break-all">{u.email}</div>
-                <div className="text-xs text-white/60">Contact: {u.contactNumber || "—"}</div>
-
-                <div className="flex flex-wrap gap-2 text-[11px] text-white/60">
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono max-w-full truncate">
-                    ID: {u.id}
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
-                    Account type: {roleLabel(u.accountType)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              <StatPill
-                icon={<CalendarDays className="h-3.5 w-3.5" />}
-                label="Created"
-                value={formatDateTime(u.createdAt)}
-              />
-              <StatPill
-                icon={<BadgeCheck className="h-3.5 w-3.5" />}
-                label="Approved at"
-                value={formatDateTime(u.approvedAt)}
-              />
-              <StatPill
-                icon={<Clock3 className="h-3.5 w-3.5" />}
-                label="Status"
-                value={u.isApproved ? "Active access" : "Needs review"}
-              />
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-white/55">
-                  Accountabilities
-                </div>
-                <p className="mt-1 text-xs text-white/50">
-                  Deletion stays blocked until all active borrows, active fines, and
-                  unpaid damage reports are settled.
-                </p>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                <StatPill
-                  icon={<Clock3 className="h-3.5 w-3.5" />}
-                  label="Active borrows"
-                  value={accountabilitySummary.activeBorrowCount}
-                />
-                <StatPill
-                  icon={<BadgeCheck className="h-3.5 w-3.5" />}
-                  label="Active fines"
-                  value={accountabilitySummary.activeFineCount}
-                />
-                <StatPill
-                  icon={<ShieldAlert className="h-3.5 w-3.5" />}
-                  label="Unpaid damages"
-                  value={accountabilitySummary.unpaidDamageCount}
-                />
-              </div>
-
-              <p
-                className={
-                  accountabilitySummary.hasUnsettledAccountabilities
-                    ? "text-xs text-amber-200"
-                    : "text-xs text-emerald-200"
-                }
-              >
-                {accountabilitySummary.hasUnsettledAccountabilities
-                  ? accountabilitySummary.deleteBlockedReason
-                  : "No unsettled accountabilities blocking deletion."}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
-              <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-white/55">Change role</div>
-                <Select
-                  value={draft}
-                  onValueChange={(value) => setRoleDraft((prev) => ({ ...prev, [u.id]: value as Role }))}
-                  disabled={disableRoleSelect}
-                >
-                  <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white disabled:opacity-60">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 text-white border-white/10">
-                    {selectableRoleOptions.map((role) => (
-                      <SelectItem
-                        key={role}
-                        value={role}
-                        disabled={!isAdminSession && (role === "librarian" || role === "admin")}
-                      >
-                        {roleLabel(role)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <p className="text-xs text-white/50">{roleHint}</p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
-                onClick={() => {
-                  if (!canChangeRole) return;
-                  setConfirm({
-                    type: "role",
-                    id: u.id,
-                    name: u.fullName || u.email,
-                    from: u.role,
-                    to: draft,
-                  });
-                }}
-                disabled={!roleChanged || !canChangeRole || anyBusyForRow}
-                title={
-                  isSelf
-                    ? "You cannot change your own role"
-                    : !isAdminSession && targetIsProtected
-                      ? "Only admins can change assistant librarian, librarian, or admin accounts"
-                      : !isAdminSession && draftNeedsAdmin
-                        ? "Librarians cannot assign librarian or admin roles"
-                        : roleChanged
-                          ? "Save role"
-                          : "No role changes"
-                }
-              >
-                {isBusyRole ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Save role
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
-                onClick={() => onApprove(u.id)}
-                disabled={!canApprove || anyBusyForRow}
-                title={canApprove ? "Approve user" : "Already approved"}
-              >
-                {isBusyApprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                Approve
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start border-white/20 text-white/90 hover:bg-white/10"
-                onClick={() => onDisapprove(u.id)}
-                disabled={!canDisapprove || anyBusyForRow}
-                title={canDisapprove ? "Disapprove user" : "Cannot disapprove this user"}
-              >
-                {isBusyDisapprove ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
-                Disapprove
-              </Button>
-
-              <Button
-                type="button"
-                variant="destructive"
-                className="w-full justify-start hover:opacity-95"
-                onClick={() => setConfirm({ type: "delete", id: u.id, name: u.fullName || u.email })}
-                disabled={!canDelete || anyBusyForRow}
-                title={deleteTitle}
-              >
-                {isBusyDelete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                Delete
-              </Button>
-            </div>
-          </div>
-
-          </DialogContent>
-        </Dialog>
-      </AccordionItem>
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-full justify-start hover:opacity-95"
+            onClick={() => setConfirm({ type: "delete", id: u.id, name: u.fullName || u.email })}
+            disabled={!canDelete || anyBusyForRow}
+            title={deleteTitle}
+          >
+            {isBusyDelete ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+            Delete
+          </Button>
+        </div>
+      </div>
     );
   };
+
+  const renderUserCard = (u: UserRowDTO) => {
+    return (
+      <div
+        key={u.id}
+        className="overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 p-4 shadow-sm transition-colors hover:border-white/20"
+      >
+        {renderUserDetailsContent(u)}
+      </div>
+    );
+  };
+
+  const renderStudentUserRow = (u: UserRowDTO) => {
+    return (
+      <div
+        key={u.id}
+        className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-linear-to-br from-slate-900/80 to-slate-800/60 p-3 shadow-sm transition-colors hover:border-white/20"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <UserAvatar name={u.fullName} email={u.email} avatarUrl={u.avatarUrl} size={40} />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-white">
+              {u.fullName || "Unnamed user"}
+            </div>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 border-white/20 text-white/90 hover:bg-white/10"
+          onClick={() => setSelectedUserId(u.id)}
+        >
+          Details
+        </Button>
+      </div>
+    );
+  };
+
 
   return (
     <DashboardLayout title="Users">
@@ -972,27 +983,27 @@ export default function LibrarianUsersPage() {
               {accountabilityWarning ||
                 "Eligible pending accounts can only be deleted after all borrow, fine, and damage accountabilities are settled."}
             </p>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
+            <div className="mt-1 flex flex-col gap-2 text-[11px] text-white/70 sm:flex-row sm:flex-wrap sm:items-center">
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("student")}>{roleBadgeLabel("student")}</Badge>
+                <Badge className={`${roleBadgeClasses("student")} wrap-anywhere`}>{roleBadgeLabel("student")}</Badge>
                 <span className="opacity-80">{countsByRole.student}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("faculty")}>{roleBadgeLabel("faculty")}</Badge>
+                <Badge className={`${roleBadgeClasses("faculty")} wrap-anywhere`}>{roleBadgeLabel("faculty")}</Badge>
                 <span className="opacity-80">{countsByRole.faculty}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("assistant_librarian")}>
+                <Badge className={`${roleBadgeClasses("assistant_librarian")} wrap-anywhere`}>
                   {roleBadgeLabel("assistant_librarian")}
                 </Badge>
                 <span className="opacity-80">{countsByRole.assistant_librarian}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("librarian")}>{roleBadgeLabel("librarian")}</Badge>
+                <Badge className={`${roleBadgeClasses("librarian")} wrap-anywhere`}>{roleBadgeLabel("librarian")}</Badge>
                 <span className="opacity-80">{countsByRole.librarian}</span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <Badge className={roleBadgeClasses("admin")}>{roleBadgeLabel("admin")}</Badge>
+                <Badge className={`${roleBadgeClasses("admin")} wrap-anywhere`}>{roleBadgeLabel("admin")}</Badge>
                 <span className="opacity-80">{countsByRole.admin}</span>
               </span>
             </div>
@@ -1068,56 +1079,140 @@ export default function LibrarianUsersPage() {
                   <div className="text-xs uppercase tracking-wide text-white/60">Showing results</div>
                   <div className="mt-1 text-2xl font-semibold text-white">{filtered.length}</div>
                   <p className="mt-1 text-xs text-white/55">
-                    Role groups stay collapsed by default, and each user opens from their own accordion card.
+                    Each role group now opens from a single details button instead of an accordion.
                   </p>
                 </div>
               </div>
 
-              <Accordion
-                type="multiple"
-                className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
-              >
+              <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {roleGroups.map((group) => (
-                  <AccordionItem
+                  <div
                     key={group.role}
-                    value={group.role}
-                    className="self-start overflow-hidden rounded-2xl border border-white/10 bg-slate-900/35 px-0"
+                    className="self-start overflow-hidden rounded-2xl border border-white/10 bg-slate-900/35 p-4"
                   >
-                    <AccordionTrigger className="gap-3 px-4 py-3 text-white hover:no-underline [&>svg]:shrink-0 [&>svg]:self-center">
-                      <div className="flex min-w-0 flex-1 flex-col items-start gap-2 pr-2 text-left sm:flex-row sm:flex-wrap sm:items-center">
-                        <Badge className={roleBadgeClasses(group.role)}>{roleBadgeLabel(group.role)}</Badge>
-                        <span className="text-sm font-semibold text-white">
-                          {group.total} user{group.total === 1 ? "" : "s"}
-                        </span>
-                        <span className="text-xs text-white/55">{roleDescription(group.role)}</span>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/65">
-                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col items-start gap-2 pr-2 text-left">
+                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                          <Badge className={`${roleBadgeClasses(group.role)} wrap-anywhere`}>
+                            {roleBadgeLabel(group.role)}
+                          </Badge>
+                          <span className="text-sm font-semibold text-white">
+                            {group.total} user{group.total === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        <span className="text-xs text-white/55 wrap-break-word">{roleDescription(group.role)}</span>
+                        <div className="flex w-full flex-col gap-2 text-[11px] text-white/65 sm:flex-row sm:flex-wrap sm:items-center">
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 wrap-anywhere">
                             Approved: {group.approved}
                           </span>
-                          <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5">
+                          <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 wrap-anywhere">
                             Pending: {group.pending}
                           </span>
                         </div>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="border-t border-white/10 px-4 pb-4 pt-4">
-                      {group.total === 0 ? (
-                        <div className="rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-white/60">
-                          No {roleLabel(group.role)} users match the current search.
-                        </div>
-                      ) : (
-                        <Accordion type="multiple" className="space-y-3">
-                          {group.entries.map(renderUserAccordion)}
-                        </Accordion>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 border-white/20 text-white/90 hover:bg-white/10"
+                        onClick={() => setDetailsRole(group.role)}
+                      >
+                        Details
+                      </Button>
+                    </div>
+                  </div>
                 ))}
-              </Accordion>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!detailsRole}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailsRole(null);
+            setSelectedUserId(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-6xl
+          [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+          [&::-webkit-scrollbar]:w-1.5
+          [&::-webkit-scrollbar-track]:bg-slate-900/70
+          [&::-webkit-scrollbar-thumb]:rounded-full
+          [&::-webkit-scrollbar-thumb]:bg-slate-700
+          [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+        >
+          <DialogHeader>
+            <DialogTitle className="pr-6">
+              {selectedRoleGroup ? `${roleLabel(selectedRoleGroup.role)} users` : "Users"}
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
+              {selectedRoleGroup
+                ? `Showing all users inside the ${roleLabel(selectedRoleGroup.role)} group.`
+                : "Review grouped users, approval status, role changes, and available actions."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRoleGroup ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs uppercase tracking-wide text-white/60">Total users</div>
+                  <div className="mt-1 text-2xl font-semibold text-white">{selectedRoleGroup.total}</div>
+                </div>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+                  <div className="text-xs uppercase tracking-wide text-emerald-100/80">Approved</div>
+                  <div className="mt-1 text-2xl font-semibold text-emerald-100">{selectedRoleGroup.approved}</div>
+                </div>
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-3">
+                  <div className="text-xs uppercase tracking-wide text-orange-100/80">Pending</div>
+                  <div className="mt-1 text-2xl font-semibold text-orange-100">{selectedRoleGroup.pending}</div>
+                </div>
+              </div>
+
+              {selectedRoleGroup.total === 0 ? (
+                <div className="rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-white/60">
+                  No {roleLabel(selectedRoleGroup.role)} users match the current search.
+                </div>
+              ) : selectedRoleGroup.role === "student" ? (
+                <div className="space-y-3">
+                  {selectedRoleGroup.entries.map(renderStudentUserRow)}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedRoleGroup.entries.map(renderUserCard)}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedUserId} onOpenChange={(open) => (!open ? setSelectedUserId(null) : undefined)}>
+        <DialogContent
+          className="w-[96vw] max-h-[95svh] overflow-y-auto border-white/10 bg-slate-900 text-white sm:max-w-4xl
+          [scrollbar-width:thin] [scrollbar-color:#1f2937_transparent]
+          [&::-webkit-scrollbar]:w-1.5
+          [&::-webkit-scrollbar-track]:bg-slate-900/70
+          [&::-webkit-scrollbar-thumb]:rounded-full
+          [&::-webkit-scrollbar-thumb]:bg-slate-700
+          [&::-webkit-scrollbar-thumb:hover]:bg-slate-600"
+        >
+          <DialogHeader>
+            <DialogTitle className="pr-6">{selectedUser?.fullName || "User details"}</DialogTitle>
+            <DialogDescription className="text-white/70">
+              Review the selected student account details and available actions.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedUser ? renderUserDetailsContent(selectedUser) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!confirm} onOpenChange={(open) => (!open ? setConfirm(null) : undefined)}>
         <DialogContent className="bg-slate-900 text-white border-white/10">
