@@ -473,17 +473,17 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                 </Button>
                             </DialogTrigger>
 
-                            <DialogContent className="bg-slate-900 text-white border-white/10">
-                                <DialogHeaderUI>
-                                    <DialogTitle className="text-sm md:text-base">Quick reserve</DialogTitle>
-                                    <DialogDescription className="text-white/70 text-xs md:text-sm">
+                            <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md flex-col overflow-hidden border-white/10 bg-slate-900 p-0 text-white sm:max-w-lg md:max-w-xl">
+                                <DialogHeaderUI className="shrink-0 border-b border-white/10 px-4 py-4 sm:px-6">
+                                    <DialogTitle className="pr-8 text-sm md:text-base">Quick reserve</DialogTitle>
+                                    <DialogDescription className="text-xs text-white/70 md:text-sm">
                                         Choose a book to reserve/borrow. Borrowable books are listed first, while{" "}
                                         <span className="font-semibold text-amber-300">Library use only</span> books are
                                         shown in a separate section for reference.
                                     </DialogDescription>
                                 </DialogHeaderUI>
 
-                                <div className="mt-3 space-y-3 text-sm">
+                                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm sm:px-6">
                                     {reserveLoading ? (
                                         <p className="text-xs text-white/60">Loading books…</p>
                                     ) : !hasBookChoices ? (
@@ -507,7 +507,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                     <SelectTrigger className="h-9 w-full bg-slate-900/70 border-white/20 text-white">
                                                         <SelectValue placeholder="Choose a book" />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-slate-900 text-white border-white/10 max-h-72">
+                                                    <SelectContent className="max-h-64 w-[calc(100vw-2rem)] max-w-md border-white/10 bg-slate-900 text-white sm:max-h-72 sm:w-(--radix-select-trigger-width)">
                                                         {borrowableBooks.length > 0 && (
                                                             <SelectItem
                                                                 value="__borrowable_header"
@@ -548,13 +548,13 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                             </div>
 
                                             {selectedBook && (
-                                                <div className="rounded-lg border border-white/10 bg-slate-950/40 p-3 space-y-3">
+                                                <div className="space-y-3 rounded-lg border border-white/10 bg-slate-950/40 p-3">
                                                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                                         <div className="min-w-0">
-                                                            <p className="text-sm font-semibold text-white truncate">
+                                                            <p className="truncate text-sm font-semibold text-white">
                                                                 {selectedBook.title}
                                                             </p>
-                                                            <p className="text-xs text-white/60 truncate">
+                                                            <p className="truncate text-xs text-white/60">
                                                                 {selectedBook.author}
                                                             </p>
                                                         </div>
@@ -577,7 +577,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                         </span>
                                                     </div>
 
-                                                    <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                                                    <div className="grid grid-cols-1 gap-2 text-xs min-[360px]:grid-cols-2 md:grid-cols-4">
                                                         <div className="rounded-md border border-white/10 bg-slate-900/70 p-2">
                                                             <div className="text-white/50">Available copies</div>
                                                             <div className="mt-1 font-semibold text-white">
@@ -624,10 +624,10 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                             )}
 
                                             <div className="pt-1">
-                                                <div className="text-xs font-medium text-white/80 mb-1">
+                                                <div className="mb-1 text-xs font-medium text-white/80">
                                                     Copies to borrow
                                                 </div>
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex flex-wrap items-center gap-2">
                                                     <Button
                                                         type="button"
                                                         size="icon"
@@ -654,7 +654,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                             )
                                                         }
                                                         inputMode="numeric"
-                                                        className="w-16 h-9 text-center bg-slate-900/70 border-white/20 text-white"
+                                                        className="h-9 w-16 bg-slate-900/70 text-center text-white border-white/20"
                                                         aria-label="Copies to borrow"
                                                         disabled={
                                                             reserveSubmitting ||
@@ -688,16 +688,16 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                                 </div>
 
                                                 {selectedBookIsBorrowable ? (
-                                                    <p className="text-[11px] text-white/60 mt-1">
+                                                    <p className="mt-1 text-[11px] text-white/60">
                                                         Total physical copies in the library: {selectedBookTotalCopies}.
                                                     </p>
                                                 ) : selectedBook ? (
-                                                    <p className="text-[11px] text-amber-300 mt-1">
+                                                    <p className="mt-1 text-[11px] text-amber-300">
                                                         Copy quantity is disabled because this title cannot be borrowed from
                                                         the quick reserve dialog.
                                                     </p>
                                                 ) : (
-                                                    <p className="text-[11px] text-white/60 mt-1">
+                                                    <p className="mt-1 text-[11px] text-white/60">
                                                         Select a book first to choose how many copies to borrow.
                                                     </p>
                                                 )}
@@ -706,11 +706,11 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                     )}
                                 </div>
 
-                                <DialogFooter className="mt-4 flex flex-row justify-end gap-2">
+                                <DialogFooter className="shrink-0 flex-col-reverse gap-2 border-t border-white/10 px-4 py-3 sm:flex-row sm:justify-end sm:px-6">
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        className="border-white/20 text-white hover:bg-black/20"
+                                        className="w-full border-white/20 text-white hover:bg-black/20 sm:w-auto"
                                         onClick={() => handleReserveOpenChange(false)}
                                         disabled={reserveSubmitting}
                                     >
@@ -718,7 +718,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                     </Button>
                                     <Button
                                         type="button"
-                                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                                        className="w-full bg-purple-600 text-white hover:bg-purple-700 sm:w-auto"
                                         onClick={() => void handleReserveConfirm()}
                                         disabled={
                                             reserveSubmitting ||
