@@ -66,6 +66,7 @@ import { fetchBooks, type BookDTO } from "@/lib/books"
 import {
     createSelfBorrowRecords,
     fetchMyBorrowRecords,
+    getBorrowReservationExpiryDate,
     getFacultyBorrowDurationDays,
     getFacultyBorrowMaxBooks,
     isBorrowRecordCurrentlyActive,
@@ -105,6 +106,59 @@ function buildBorrowAssignmentSummary(
     if (labels.length === 1) return ` Assigned copy: ${labels[0]}.`
 
     return ` Assigned copies: ${labels.join(", ")}.`
+}
+
+function getEarliestReservationExpiryDate(records: BorrowRecordDTO[]) {
+    return records
+        .filter((record) => record.status === "pending_pickup")
+        .map((record) => getBorrowReservationExpiryDate(record))
+        .filter((value): value is Date => value instanceof Date && !Number.isNaN(value.getTime()))
+        .sort((left, right) => left.getTime() - right.getTime())[0] ?? null
+}
+
+function formatReservationCountdown(expiryDate: Date | null, nowMs: number) {
+    if (!expiryDate) return null
+
+    const remainingMs = expiryDate.getTime() - nowMs
+    if (remainingMs <= 0) return "Expired"
+
+    const totalSeconds = Math.ceil(remainingMs / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+}
+
+function ReservationCountdown({ records }: { records: BorrowRecordDTO[] }) {
+    const pendingPickupRecords = React.useMemo(
+        () => records.filter((record) => record.status === "pending_pickup"),
+        [records]
+    )
+    const earliestReservationExpiry = React.useMemo(
+        () => getEarliestReservationExpiryDate(pendingPickupRecords),
+        [pendingPickupRecords]
+    )
+    const [nowMs, setNowMs] = React.useState(() => Date.now())
+    const countdown = formatReservationCountdown(earliestReservationExpiry, nowMs)
+
+    React.useEffect(() => {
+        if (!earliestReservationExpiry) return
+
+        const timer = window.setInterval(() => {
+            setNowMs(Date.now())
+        }, 1000)
+
+        return () => window.clearInterval(timer)
+    }, [earliestReservationExpiry])
+
+    if (!countdown || pendingPickupRecords.length === 0) return null
+
+    return (
+        <div className="inline-flex w-fit items-center rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 font-mono text-[11px] text-amber-100">
+            24-hour pickup countdown: {countdown}
+        </div>
+    )
 }
 
 
@@ -302,6 +356,7 @@ function FacultyBookDetailGrid({
             <CatalogDetail label="My activity">
                 <div className="space-y-1 text-xs leading-relaxed text-white/75">
                     <FacultyBookStatus book={book} />
+                    <ReservationCountdown records={book.activeRecords} />
                     <div className="flex flex-col gap-1 text-white/60">
                         <FacultyBookActionState book={book} />
                     </div>
@@ -382,6 +437,7 @@ function FacultyBookMobileCard({
                 <CatalogDetail label="My status">
                     <div className="space-y-1 text-xs leading-relaxed text-white/85">
                         <FacultyBookStatus book={book} />
+                        <ReservationCountdown records={book.activeRecords} />
                         <div className="text-white/60">
                             <FacultyBookActionState book={book} />
                         </div>
@@ -588,6 +644,7 @@ export default function FacultyBooksPage() {
         React.useState<FacultySortOption>("catalog")
 
     const [borrowBusyId, setBorrowBusyId] = React.useState<string | null>(null)
+    const [nowMs, setNowMs] = React.useState(() => Date.now())
     const [borrowDialogBookId, setBorrowDialogBookId] = React.useState<string | null>(
         null
     )
@@ -620,6 +677,34 @@ export default function FacultyBooksPage() {
         void loadAll()
     }, [loadAll])
 
+    React.useEffect(() => {
+        const timer = window.setInterval(() => {
+            setNowMs(Date.now())
+        }, 1000)
+
+        return () => window.clearInterval(timer)
+    }, [])
+
+    const nextReservationExpiryMs = React.useMemo(() => {
+        const next = myRecords
+            .map((record) => getBorrowReservationExpiryDate(record)?.getTime() ?? null)
+            .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > Date.now())
+            .sort((left, right) => left - right)[0]
+
+        return next ?? null
+    }, [myRecords])
+
+    React.useEffect(() => {
+        if (!nextReservationExpiryMs) return
+
+        const delay = Math.max(1000, nextReservationExpiryMs - Date.now() + 1500)
+        const timer = window.setTimeout(() => {
+            void loadAll()
+        }, delay)
+
+        return () => window.clearTimeout(timer)
+    }, [loadAll, nextReservationExpiryMs])
+
     async function handleRefresh() {
         setRefreshing(true)
         try {
@@ -643,8 +728,8 @@ export default function FacultyBooksPage() {
         sortOption !== "catalog"
 
     const activeBorrowCount = React.useMemo(() => {
-        return myRecords.filter((record) => isBorrowRecordCurrentlyActive(record)).length
-    }, [myRecords])
+        return myRecords.filter((record) => isBorrowRecordCurrentlyActive(record, nowMs)).length
+    }, [myRecords, nowMs])
 
     const remainingBorrowSlots = Math.max(0, facultyBorrowMaxBooks - activeBorrowCount)
 
@@ -672,7 +757,7 @@ export default function FacultyBooksPage() {
             const sorted = sortRecordsNewestFirst(recordsForBook)
 
             const activeRecords = sorted.filter((record) =>
-                isBorrowRecordCurrentlyActive(record)
+                isBorrowRecordCurrentlyActive(record, nowMs)
             )
 
             const returnedRecords = sorted.filter((r) => r.status === "returned")
@@ -868,7 +953,7 @@ export default function FacultyBooksPage() {
                     })
             }
         })
-    }, [availabilityFilter, books, filterMode, myRecordsByBookId, search, sortOption])
+    }, [availabilityFilter, books, filterMode, myRecordsByBookId, search, sortOption, nowMs])
 
     const regularRows = React.useMemo(
         () => rows.filter((book) => !isLibraryUseOnlyBook(book)),

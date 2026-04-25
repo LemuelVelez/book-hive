@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/select"
 
 import { fetchBooks, type BookDTO } from "@/lib/books"
-import { createSelfBorrow } from "@/lib/borrows"
+import { createSelfBorrow, formatBorrowReservationExpiry } from "@/lib/borrows"
 
 type Role = "student" | "other" | "faculty" | "librarian" | "admin"
 
@@ -256,6 +256,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
     }, [selectedBook, selectedBookIsBorrowable])
 
     const reserveQty = clampInt(reserveCopies, 1, maxReserveCopies)
+    const reserveActorRole = rawRole === "faculty" ? "faculty" : rawRole === "other" ? "other" : "student"
 
     React.useEffect(() => {
         if (!reserveOpen) return
@@ -323,7 +324,7 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             // Borrow/reserve copies one-by-one (works even if API only supports 1 per call)
             for (let i = 0; i < requestedCopies; i++) {
                 try {
-                    const record = await createSelfBorrow(selectedBookId)
+                    const record = await createSelfBorrow(selectedBookId, 1, reserveActorRole)
                     created.push(record)
                 } catch (err: any) {
                     if (created.length === 0) throw err
@@ -339,14 +340,18 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
             if (created.length === 0) return
 
             const due = fmtDate(created[0]?.dueDate)
+            const reserveUntil = formatBorrowReservationExpiry(created[0])
+            const reserveWindowText = reserveUntil
+                ? ` Pickup must be confirmed before ${reserveUntil}.`
+                : " Pickup must be confirmed within 24 hours."
 
             if (created.length === requestedCopies) {
                 toast.success("Reserve submitted", {
-                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${chosen.title}" has been reserved/borrowed. Due on ${due}.`,
+                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${chosen.title}" has been reserved for pickup. Due on ${due}.${reserveWindowText}`,
                 })
             } else {
                 toast.warning("Reserve partially submitted", {
-                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${chosen.title}" has been reserved/borrowed. Due on ${due}.`,
+                    description: `${created.length} cop${created.length === 1 ? "y" : "ies"} of "${chosen.title}" has been reserved for pickup. Due on ${due}.${reserveWindowText}`,
                 })
             }
 
@@ -461,10 +466,10 @@ export function DashboardHeader({ title = "Dashboard" }: { title?: string }) {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    className="hidden md:inline-flex border-white/20 text-white/90 hover:bg-white/10"
+                                    className="inline-flex shrink-0 border-white/20 px-2 text-xs text-white/90 hover:bg-white/10 sm:px-3 md:text-sm"
                                 >
-                                    <Plus className="h-4 w-4 mr-1.5" />
-                                    Reserve
+                                    <Plus className="h-4 w-4 shrink-0 sm:mr-1.5" />
+                                    <span className="ml-1 sm:ml-0">Reserve</span>
                                 </Button>
                             </DialogTrigger>
 

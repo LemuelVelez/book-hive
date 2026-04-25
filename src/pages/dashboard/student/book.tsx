@@ -133,11 +133,15 @@ function buildBorrowAssignmentSummary(
 }
 
 
-function getEarliestReservationExpiryLabel(records: BorrowRecordDTO[]) {
-    const earliest = records
+function getEarliestReservationExpiryDate(records: BorrowRecordDTO[]) {
+    return records
         .map((record) => getBorrowReservationExpiryDate(record))
         .filter((value): value is Date => value instanceof Date && !Number.isNaN(value.getTime()))
-        .sort((left, right) => left.getTime() - right.getTime())[0];
+        .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
+}
+
+function getEarliestReservationExpiryLabel(records: BorrowRecordDTO[]) {
+    const earliest = getEarliestReservationExpiryDate(records);
 
     if (!earliest) {
         return null;
@@ -150,6 +154,20 @@ function getEarliestReservationExpiryLabel(records: BorrowRecordDTO[]) {
         hour: "numeric",
         minute: "2-digit",
     }).format(earliest);
+}
+
+function formatReservationCountdown(expiryDate: Date | null, nowMs: number) {
+    if (!expiryDate) return null;
+
+    const remainingMs = expiryDate.getTime() - nowMs;
+    if (remainingMs <= 0) return "Expired";
+
+    const totalSeconds = Math.ceil(remainingMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function getStudentStatusMeta(book: BookWithStatus): { label: string; classes: string } {
@@ -205,6 +223,22 @@ function StudentBorrowStatus({ book }: { book: BookWithStatus }) {
         overdueDaysMax,
         hasOverdue,
     } = getBookBorrowMeta(book);
+    const [nowMs, setNowMs] = React.useState(() => Date.now());
+    const earliestReservationExpiry = React.useMemo(
+        () => getEarliestReservationExpiryDate(pendingPickupRecords),
+        [pendingPickupRecords]
+    );
+    const reservationCountdown = formatReservationCountdown(earliestReservationExpiry, nowMs);
+
+    React.useEffect(() => {
+        if (!earliestReservationExpiry) return;
+
+        const timer = window.setInterval(() => {
+            setNowMs(Date.now());
+        }, 1000);
+
+        return () => window.clearInterval(timer);
+    }, [earliestReservationExpiry]);
 
     if (activeRecords.length === 0 && isLibraryUseOnly(book)) {
         return (
@@ -222,17 +256,24 @@ function StudentBorrowStatus({ book }: { book: BookWithStatus }) {
         return (
             <div className="space-y-1">
                 {pendingPickupRecords.length > 0 && (
-                    <div className="inline-flex items-center gap-1 text-amber-200">
-                        <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
-                        <span>
-                            Reserved ×{pendingPickupRecords.length}
-                            {" · "}
-                            <span className="font-medium">
-                                {getEarliestReservationExpiryLabel(pendingPickupRecords)
-                                    ? `Auto-release: ${getEarliestReservationExpiryLabel(pendingPickupRecords)}`
-                                    : `Earliest due: ${earliestDue}`}
+                    <div className="flex flex-col gap-1 text-amber-200">
+                        <div className="inline-flex items-center gap-1">
+                            <Clock3 className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            <span>
+                                Reserved ×{pendingPickupRecords.length}
+                                {" · "}
+                                <span className="font-medium">
+                                    {getEarliestReservationExpiryLabel(pendingPickupRecords)
+                                        ? `Auto-release: ${getEarliestReservationExpiryLabel(pendingPickupRecords)}`
+                                        : `Earliest due: ${earliestDue}`}
+                                </span>
                             </span>
-                        </span>
+                        </div>
+                        {reservationCountdown && (
+                            <div className="inline-flex w-fit items-center rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 font-mono text-[11px] text-amber-100">
+                                24-hour pickup countdown: {reservationCountdown}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -687,6 +728,7 @@ export default function StudentBooksPage() {
     const [libraryAreaFilter, setLibraryAreaFilter] = React.useState("all");
     const [sortOption, setSortOption] = React.useState<CatalogSortOption>("catalog");
     const [borrowBusyId, setBorrowBusyId] = React.useState<string | null>(null);
+    const [nowMs, setNowMs] = React.useState(() => Date.now());
 
     const loadAll = React.useCallback(async () => {
         setError(null);
@@ -714,6 +756,34 @@ export default function StudentBooksPage() {
         void loadAll();
     }, [loadAll]);
 
+    React.useEffect(() => {
+        const timer = window.setInterval(() => {
+            setNowMs(Date.now());
+        }, 1000);
+
+        return () => window.clearInterval(timer);
+    }, []);
+
+    const nextReservationExpiryMs = React.useMemo(() => {
+        const next = myRecords
+            .map((record) => getBorrowReservationExpiryDate(record)?.getTime() ?? null)
+            .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > Date.now())
+            .sort((left, right) => left - right)[0];
+
+        return next ?? null;
+    }, [myRecords]);
+
+    React.useEffect(() => {
+        if (!nextReservationExpiryMs) return;
+
+        const delay = Math.max(1000, nextReservationExpiryMs - Date.now() + 1500);
+        const timer = window.setTimeout(() => {
+            void loadAll();
+        }, delay);
+
+        return () => window.clearTimeout(timer);
+    }, [loadAll, nextReservationExpiryMs]);
+
     async function handleRefresh() {
         setRefreshing(true);
         try {
@@ -729,7 +799,7 @@ export default function StudentBooksPage() {
             const sorted = sortRecordsNewestFirst(recordsForBook);
 
             const activeRecords = sorted.filter((record) =>
-                isBorrowRecordCurrentlyActive(record)
+                isBorrowRecordCurrentlyActive(record, nowMs)
             );
 
             const returnedRecords = sorted.filter((r) => r.status === "returned");
@@ -918,7 +988,7 @@ export default function StudentBooksPage() {
                     });
             }
         });
-    }, [books, myRecords, filterMode, search, availabilityFilter, libraryAreaFilter, sortOption]);
+    }, [books, myRecords, filterMode, search, availabilityFilter, libraryAreaFilter, sortOption, nowMs]);
 
     const libraryAreaChoices = React.useMemo(() => {
         const values = new Set<string>();
