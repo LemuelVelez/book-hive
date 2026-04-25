@@ -147,6 +147,10 @@ function roleDescription(role: VisibleRole) {
   }
 }
 
+function needsExplicitAdminApproval(role: VisibleRole) {
+  return role === "librarian" || role === "assistant_librarian";
+}
+
 function approvalBadgeClasses(approved: boolean) {
   return approved
     ? "bg-emerald-600/80 hover:bg-emerald-600 text-white border-emerald-500/70"
@@ -577,6 +581,7 @@ export default function AdminUsersPage() {
   React.useEffect(() => {
     // keep accountType sensible by default when changing role
     setCAccountType(accountTypeFromRole(cRole));
+    setCApproveNow(!needsExplicitAdminApproval(cRole));
   }, [cRole]);
 
   React.useEffect(() => {
@@ -891,11 +896,14 @@ export default function AdminUsersPage() {
       }
 
       const creds = result.credentials;
+      const pendingExplicitApproval = needsExplicitAdminApproval(cRole) && !cApproveNow;
 
       if (creds?.requested) {
         if (creds.sent) {
           toast.success("User created & credentials emailed", {
-            description: "If the user didn’t receive it, use the key button in the user card to resend.",
+            description: pendingExplicitApproval
+              ? "The account remains pending until an admin approves librarian access."
+              : "If the user didn’t receive it, use the key button in the user card to resend.",
           });
         } else {
           toast.error("User created, but email sending failed", {
@@ -906,8 +914,9 @@ export default function AdminUsersPage() {
         }
       } else {
         toast.success("User created", {
-          description:
-            "Credentials were not emailed. Use the key button in the user card to send/reset credentials anytime.",
+          description: pendingExplicitApproval
+            ? "The account remains pending until an admin approves librarian access."
+            : "Credentials were not emailed. Use the key button in the user card to send/reset credentials anytime.",
         });
       }
 
@@ -1540,9 +1549,16 @@ export default function AdminUsersPage() {
                       checked={cApproveNow}
                       onCheckedChange={(value) => setCApproveNow(value === true)}
                     />
-                    <Label htmlFor="c-approve" className="text-sm text-white/80">
-                      Approve immediately
-                    </Label>
+                    <div className="grid gap-1">
+                      <Label htmlFor="c-approve" className="text-sm text-white/80">
+                        Approve immediately
+                      </Label>
+                      {needsExplicitAdminApproval(cRole) ? (
+                        <p className="text-xs text-white/55">
+                          Librarian accounts stay pending unless an admin explicitly approves them.
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>

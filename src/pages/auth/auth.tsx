@@ -141,6 +141,10 @@ function isValidContactNumber(value: string) {
     return /^[0-9()+\-.\s]{7,20}$/.test(s);
 }
 
+function needsAdminApprovalOnSignup(type: AccountType) {
+    return type === "librarian" || type === "assistant-librarian";
+}
+
 // -------------------------
 // Component
 // -------------------------
@@ -345,6 +349,22 @@ export default function AuthPage() {
                 return;
             }
 
+            const isPendingApproval =
+                /pending.*approval/i.test(rawMsg) ||
+                /approval.*pending/i.test(rawMsg) ||
+                /admin.*approve/i.test(rawMsg) ||
+                /wait.*approval/i.test(rawMsg);
+
+            if (isPendingApproval) {
+                const msg = rawMsg.includes("librarian")
+                    ? "Your librarian account is pending admin approval. Please wait for an admin to approve your account before logging in."
+                    : rawMsg;
+                setLoginError(msg);
+                toast.warning("Pending admin approval", { description: msg });
+                setIsLoggingIn(false);
+                return;
+            }
+
             const isUserNotFound =
                 /user not found/i.test(rawMsg) ||
                 /account not found/i.test(rawMsg) ||
@@ -481,8 +501,12 @@ export default function AuthPage() {
 
             await apiRegister(payload as any);
 
+            const pendingAdminApproval = needsAdminApprovalOnSignup(accountType);
+
             toast.success("Account created", {
-                description: "We sent a verification link to your email.",
+                description: pendingAdminApproval
+                    ? "We sent a verification link to your email. After verification, an admin must approve your librarian account before login."
+                    : "We sent a verification link to your email.",
             });
 
             navigate(
