@@ -130,6 +130,45 @@ function formatReservationCountdown(expiryDate: Date | null, nowMs: number) {
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
 }
 
+function getNextCountdownTickDelay(nowMs = Date.now()) {
+    const delayToNextSecond = 1000 - (nowMs % 1000)
+    return delayToNextSecond <= 0 ? 1000 : delayToNextSecond
+}
+
+function useLiveNowMs(active = true) {
+    const [nowMs, setNowMs] = React.useState(() => Date.now())
+
+    React.useEffect(() => {
+        if (!active) return
+
+        let timer: number | null = null
+
+        const tick = () => {
+            const currentNowMs = Date.now()
+            setNowMs(currentNowMs)
+            timer = window.setTimeout(tick, getNextCountdownTickDelay(currentNowMs))
+        }
+
+        const syncNow = () => {
+            setNowMs(Date.now())
+        }
+
+        tick()
+        window.addEventListener("focus", syncNow)
+        document.addEventListener("visibilitychange", syncNow)
+
+        return () => {
+            if (timer !== null) {
+                window.clearTimeout(timer)
+            }
+            window.removeEventListener("focus", syncNow)
+            document.removeEventListener("visibilitychange", syncNow)
+        }
+    }, [active])
+
+    return nowMs
+}
+
 function ReservationCountdown({ records }: { records: BorrowRecordDTO[] }) {
     const pendingPickupRecords = React.useMemo(
         () => records.filter((record) => record.status === "pending_pickup"),
@@ -139,18 +178,8 @@ function ReservationCountdown({ records }: { records: BorrowRecordDTO[] }) {
         () => getEarliestReservationExpiryDate(pendingPickupRecords),
         [pendingPickupRecords]
     )
-    const [nowMs, setNowMs] = React.useState(() => Date.now())
+    const nowMs = useLiveNowMs(Boolean(earliestReservationExpiry))
     const countdown = formatReservationCountdown(earliestReservationExpiry, nowMs)
-
-    React.useEffect(() => {
-        if (!earliestReservationExpiry) return
-
-        const timer = window.setInterval(() => {
-            setNowMs(Date.now())
-        }, 1000)
-
-        return () => window.clearInterval(timer)
-    }, [earliestReservationExpiry])
 
     if (!countdown || pendingPickupRecords.length === 0) return null
 
@@ -160,8 +189,6 @@ function ReservationCountdown({ records }: { records: BorrowRecordDTO[] }) {
         </div>
     )
 }
-
-
 function getStatusMeta(book: BookWithStatus): { label: string; classes: string } {
     if (isLibraryUseOnlyBook(book)) {
         return {
@@ -574,6 +601,7 @@ function FacultyBookDesktopCard({
 
                         <div className="space-y-1 text-xs leading-relaxed text-white/75">
                             <FacultyBookStatus book={book} />
+                            <ReservationCountdown records={book.activeRecords} />
                             <div className="text-white/60">
                                 <FacultyBookActionState book={book} />
                             </div>
@@ -644,7 +672,7 @@ export default function FacultyBooksPage() {
         React.useState<FacultySortOption>("catalog")
 
     const [borrowBusyId, setBorrowBusyId] = React.useState<string | null>(null)
-    const [nowMs, setNowMs] = React.useState(() => Date.now())
+    const nowMs = useLiveNowMs()
     const [borrowDialogBookId, setBorrowDialogBookId] = React.useState<string | null>(
         null
     )
@@ -676,14 +704,6 @@ export default function FacultyBooksPage() {
     React.useEffect(() => {
         void loadAll()
     }, [loadAll])
-
-    React.useEffect(() => {
-        const timer = window.setInterval(() => {
-            setNowMs(Date.now())
-        }, 1000)
-
-        return () => window.clearInterval(timer)
-    }, [])
 
     const nextReservationExpiryMs = React.useMemo(() => {
         const next = myRecords
