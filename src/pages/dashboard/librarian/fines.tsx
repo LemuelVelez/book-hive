@@ -59,13 +59,6 @@ import {
     type FineDTO,
     type FineStatus,
 } from "@/lib/fines";
-import { API_BASE } from "@/api/auth/route";
-import type {
-    DamageReportDTO,
-    DamageStatus,
-    DamageSeverity,
-} from "@/lib/damageReports";
-
 import ExportPreviewFines, {
     type PrintableFineRecord,
 } from "@/components/fines-preview/export-preview-fines";
@@ -75,19 +68,14 @@ type YearFilter = "all" | string;
 
 /* ----------------------- Extra types for merging ----------------------- */
 
-type Severity = DamageSeverity;
-
-type DamageReportRow = DamageReportDTO & {
-    photoUrl?: string | null;
-};
-
-type JsonOk<T> = { ok: true } & T;
+type DamageSeverityLabel = "minor" | "moderate" | "major" | string;
+type DamageStatusLabel = "reported" | "assessed" | "paid" | "resolved" | string;
 
 type FineRow = FineDTO & {
     _source?: "fine" | "damage";
     damageReportId?: string | number | null;
-    damageSeverity?: DamageSeverity | null;
-    damageStatus?: DamageStatus | null;
+    damageSeverity?: DamageSeverityLabel | null;
+    damageStatus?: DamageStatusLabel | null;
     damageFee?: number | null;
     damageNotes?: string | null;
 };
@@ -276,24 +264,6 @@ function statusWeight(status: FineStatus): number {
     }
 }
 
-/**
- * Simple suggested fine policy:
- * - minor: ₱50
- * - moderate: ₱150
- * - major: ₱300
- */
-function suggestedFineFromSeverity(severity?: Severity | null): number {
-    switch (severity) {
-        case "minor":
-            return 50;
-        case "moderate":
-            return 150;
-        case "major":
-            return 300;
-        default:
-            return 0;
-    }
-}
 
 function fineOwnerLabel(fine: FineRow): string {
     if (fine.studentName?.trim()) return fine.studentName.trim();
@@ -340,142 +310,7 @@ function toPrintableFineRecord(row: FineRow): PrintableFineRecord {
     };
 }
 
-/* ------------------------ Damage → Fine helpers ------------------------ */
-
-async function fetchDamageReportsForFines(): Promise<DamageReportRow[]> {
-    let resp: Response;
-    try {
-        resp = await fetch(`${API_BASE}/api/damage-reports`, {
-            method: "GET",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-        });
-    } catch (e: any) {
-        const details = e?.message ? ` Details: ${e.message}` : "";
-        throw new Error(
-            `Cannot reach the API (${API_BASE}). Is the server running and allowing this origin?${details}`
-        );
-    }
-
-    const ct = resp.headers.get("content-type")?.toLowerCase() || "";
-    const isJson = ct.includes("application/json");
-
-    if (!resp.ok) {
-        if (isJson) {
-            try {
-                const data = (await resp.json()) as any;
-                if (data && typeof data === "object" && typeof data.message === "string") {
-                    throw new Error(data.message);
-                }
-            } catch {
-                /* ignore */
-            }
-        } else {
-            try {
-                const text = await resp.text();
-                if (text) throw new Error(text);
-            } catch {
-                /* ignore */
-            }
-        }
-        throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const data = (isJson ? await resp.json() : null) as JsonOk<{
-        reports: DamageReportRow[];
-    }>;
-    return data.reports ?? [];
-}
-
-/**
- * Convert assessed/paid damage reports with a positive fee into
- * "virtual" fines that we can render in this page.
- */
-function buildDamageFineRows(
-    reports: DamageReportRow[],
-    existingFines: FineDTO[]
-): FineRow[] {
-    if (!reports?.length) return [];
-
-    const existingDamageIds = new Set(
-        existingFines
-            .map((f) => {
-                const anyFine = f as any;
-                const id =
-                    anyFine.damageReportId ?? anyFine.damageId ?? anyFine.damageReportID ?? null;
-                return id != null ? String(id) : "";
-            })
-            .filter(Boolean)
-    );
-
-    const rows: FineRow[] = [];
-
-    for (const r of reports) {
-        const idStr = String(r.id);
-
-        if (existingDamageIds.has(idStr)) continue;
-
-        const rawFee = (r as any).fee;
-        const feeNumRaw =
-            typeof rawFee === "number"
-                ? rawFee
-                : rawFee != null && rawFee !== ""
-                    ? Number(rawFee)
-                    : suggestedFineFromSeverity(r.severity);
-        const feeNum = Number.isFinite(feeNumRaw) ? Number(feeNumRaw) : 0;
-
-        if (feeNum <= 0) continue;
-        if (r.status !== "assessed" && r.status !== "paid") continue;
-
-        const anyReport = r as any;
-        const createdAt: string = anyReport.createdAt || r.reportedAt || new Date().toISOString();
-
-        const resolvedAt: string | null =
-            r.status === "paid"
-                ? anyReport.resolvedAt ||
-                  anyReport.paidAt ||
-                  anyReport.updatedAt ||
-                  r.reportedAt ||
-                  null
-                : null;
-
-        const reasonText = r.notes ? `Damage: ${r.damageType} – ${r.notes}` : `Damage: ${r.damageType}`;
-
-        const fineLike: Partial<FineDTO> = {
-            id: `D-${idStr}` as any,
-            amount: feeNum as any,
-            status: (r.status === "paid" ? "paid" : "active") as FineStatus,
-            createdAt: createdAt as any,
-            resolvedAt: (resolvedAt ?? null) as any,
-            officialReceiptNumber:
-                anyReport.officialReceiptNumber ??
-                anyReport.orNumber ??
-                anyReport.receiptNumber ??
-                null,
-            studentName: r.studentName,
-            studentEmail: r.studentEmail,
-            studentId: r.studentId,
-            userId: r.userId as any,
-            bookTitle: r.bookTitle,
-            bookId: r.bookId as any,
-            reason: reasonText,
-        };
-
-        const row: FineRow = {
-            ...(fineLike as FineDTO),
-            _source: "damage",
-            damageReportId: r.id,
-            damageSeverity: r.severity,
-            damageStatus: r.status,
-            damageFee: feeNum,
-            damageNotes: r.notes ?? null,
-        };
-
-        rows.push(row);
-    }
-
-    return rows;
-}
+/* ------------------------ Damage fine helpers ------------------------ */
 
 function isDamageFine(fine: FineRow): boolean {
     if (fine._source === "damage") return true;
@@ -484,8 +319,9 @@ function isDamageFine(fine: FineRow): boolean {
     const reason = (fine.reason || "").toLowerCase();
 
     return Boolean(
-        anyFine.damageReportId ||
+        fine.damageReportId ||
             anyFine.damageId ||
+            anyFine.damageReportID ||
             anyFine.damageType ||
             anyFine.damageDescription ||
             anyFine.damageDetails ||
@@ -531,47 +367,31 @@ export default function LibrarianFinesPage() {
         try {
             const fineData = await fetchFines();
 
-            let damageReports: DamageReportRow[] = [];
-            try {
-                damageReports = await fetchDamageReportsForFines();
-            } catch (err: any) {
-                console.error("Failed to load damage reports for fines page:", err);
-                toast.error("Failed to load damage-based fines", {
-                    description: err?.message || "Only overdue or borrow-related fines are shown for now.",
-                });
-            }
-
-            const damageMap = new Map<string, DamageReportRow>();
-            for (const r of damageReports) {
-                damageMap.set(String(r.id), r);
-            }
-
-            const fineRows: FineRow[] = (fineData.map((f) => {
-                const anyFine = f as any;
-                const drKey =
-                    anyFine.damageReportId ?? anyFine.damageId ?? anyFine.damageReportID ?? null;
-                const dr = drKey != null ? damageMap.get(String(drKey)) : undefined;
-
-                if (!dr) {
-                    return { ...(f as FineDTO), _source: "fine" as const } as FineRow;
-                }
+            const fineRows: FineRow[] = fineData.map((fine) => {
+                const anyFine = fine as any;
+                const damageReportId =
+                    fine.damageReportId ??
+                    anyFine.damageId ??
+                    anyFine.damageReportID ??
+                    null;
 
                 return {
-                    ...(f as FineDTO),
+                    ...(fine as FineDTO),
                     _source: "fine" as const,
-                    bookTitle: f.bookTitle ?? dr.bookTitle,
-                    bookId: (f.bookId ?? dr.bookId) as any,
-                    damageReportId: dr.id,
-                    damageSeverity: dr.severity,
-                    damageStatus: dr.status,
-                    damageFee: normalizeFine((dr as any).fee),
-                    damageNotes: dr.notes ?? null,
+                    damageReportId,
+                    damageSeverity: anyFine.damageSeverity ?? anyFine.severity ?? null,
+                    damageStatus: anyFine.damageStatus ?? null,
+                    damageFee: normalizeFine(anyFine.damageFee ?? anyFine.fee ?? fine.amount),
+                    damageNotes:
+                        anyFine.damageNotes ??
+                        anyFine.damageDescription ??
+                        anyFine.damageDetails ??
+                        anyFine.damageType ??
+                        null,
                 } as FineRow;
-            }) as unknown) as FineRow[];
+            });
 
-            const damageFineRows = buildDamageFineRows(damageReports, fineData);
-
-            setFines([...fineRows, ...damageFineRows]);
+            setFines(fineRows);
         } catch (err: any) {
             const msg = err?.message || "Failed to load fines.";
             setError(msg);
