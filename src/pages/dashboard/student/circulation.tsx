@@ -56,6 +56,7 @@ import { toast } from "sonner";
 
 import { BORROW_ROUTES } from "@/api/borrows/route";
 import {
+  getBorrowReservationExpiryDate,
   requestBorrowExtension,
   requestBorrowReturn,
   syncBorrowEmailNotifications,
@@ -116,6 +117,9 @@ type CirculationRecordUiState = {
   isBorrowerReturnRequest: boolean;
   showLibrarianReturnRequest: boolean;
   librarianRequesterName: string;
+  reservationExpiresAt: string | null;
+  reservationCountdown: string | null;
+  reservationExpired: boolean;
 };
 
 export type StudentCirculationPageProps = {
@@ -261,6 +265,69 @@ function computeOverdueDays(
   return rawDays > 0 ? rawDays : 0;
 }
 
+function formatReservationCountdown(expiryDate: Date | null, nowMs: number) {
+  if (!expiryDate) return null;
+
+  const remainingMs = expiryDate.getTime() - nowMs;
+  if (remainingMs <= 0) return "Expired";
+
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getNextCountdownTickDelay(nowMs = Date.now()) {
+  const delayToNextSecond = 1000 - (nowMs % 1000);
+  return delayToNextSecond <= 0 ? 1000 : delayToNextSecond;
+}
+
+function useLiveNowMs(active = true) {
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+
+  React.useEffect(() => {
+    if (!active) return;
+
+    let timer: number | null = null;
+
+    const tick = () => {
+      const currentNowMs = Date.now();
+      setNowMs(currentNowMs);
+      timer = window.setTimeout(tick, getNextCountdownTickDelay(currentNowMs));
+    };
+
+    const syncNow = () => {
+      setNowMs(Date.now());
+    };
+
+    tick();
+    window.addEventListener("focus", syncNow);
+    document.addEventListener("visibilitychange", syncNow);
+
+    return () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      window.removeEventListener("focus", syncNow);
+      document.removeEventListener("visibilitychange", syncNow);
+    };
+  }, [active]);
+
+  return nowMs;
+}
+
+function isExpiredPendingPickupRecord(record: BorrowRecordDTO, nowMs = Date.now()) {
+  if (record.status !== "pending_pickup") return false;
+  if (record.reservationExpired === true) return true;
+
+  const expiryDate = getBorrowReservationExpiryDate(record);
+  if (!expiryDate) return false;
+
+  return expiryDate.getTime() <= nowMs;
+}
+
 function getDateSortValue(value?: string | null): number {
   if (!value) return MAX_SORT_TIME;
 
@@ -381,12 +448,18 @@ async function fetchBorrowRecordsSnapshot(): Promise<{
 function getRecordUiState(
   record: BorrowRecordDTO,
   linkedFine: FineDTO | undefined,
-  serverNow: string | null
+  serverNow: string | null,
+  nowMs = Date.now()
 ): CirculationRecordUiState {
   const status = String(record.status ?? "").toLowerCase().trim();
+  const reservationExpiryDate = getBorrowReservationExpiryDate(record);
+  const reservationExpired =
+    status === "pending_pickup" &&
+    (record.reservationExpired === true ||
+      (reservationExpiryDate !== null && reservationExpiryDate.getTime() <= nowMs));
   const isReturned = status === "returned";
   const isBorrowed = status === "borrowed";
-  const isPendingPickup = status === "pending_pickup";
+  const isPendingPickup = status === "pending_pickup" && !reservationExpired;
   const isPendingReturn = status === "pending_return";
   const isLegacyPending = status === "pending";
   const isAnyPending = isPendingPickup || isPendingReturn || isLegacyPending;
@@ -475,6 +548,11 @@ function getRecordUiState(
     isBorrowerReturnRequest,
     showLibrarianReturnRequest,
     librarianRequesterName,
+    reservationExpiresAt: record.reservationExpiresAt ?? null,
+    reservationCountdown: isPendingPickup
+      ? formatReservationCountdown(reservationExpiryDate, nowMs)
+      : null,
+    reservationExpired,
   };
 }
 
@@ -744,6 +822,27 @@ function RecordStatusBadge({
   );
 }
 
+function PendingPickupCountdownBadge({
+  ui,
+  className = "",
+}: {
+  ui: CirculationRecordUiState;
+  className?: string;
+}) {
+  if (!ui.isPendingPickup) return null;
+
+  return (
+    <div
+      className={
+        "inline-flex w-fit items-center rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 font-mono text-[11px] text-amber-100 " +
+        className
+      }
+    >
+      24-hour pickup countdown: {ui.reservationCountdown ?? "Expired"}
+    </div>
+  );
+}
+
 function CirculationFineBadges({ ui }: { ui: CirculationRecordUiState }) {
   return (
     <>
@@ -802,6 +901,25 @@ function CirculationRecordNotice({
     );
   }
 
+  if (ui.isPendingPickup) {
+    return (
+      <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-[11px] text-amber-100">
+        <div className="inline-flex items-center gap-1 font-semibold">
+          <Clock3 className="h-3.5 w-3.5" />
+          Pending pickup
+        </div>
+        <div className="mt-2">
+          <PendingPickupCountdownBadge ui={ui} />
+        </div>
+        {ui.reservationExpiresAt ? (
+          <div className="mt-1 text-amber-100/80">
+            Auto-release: {fmtDateTime(ui.reservationExpiresAt)}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   if (ui.isPendingReturn || ui.isLegacyPending) {
     return (
       <BorrowerReturnRequestNotice requestedAt={record.returnRequestedAt} />
@@ -840,6 +958,18 @@ function CirculationDetailGrid({
         value={record.studentName?.trim() || "You"}
       />
       <CirculationDetail label="Borrowed on" value={fmtDate(record.borrowDate)} />
+      {ui.isPendingPickup ? (
+        <CirculationDetail label="Pickup countdown">
+          <div className="space-y-2">
+            <PendingPickupCountdownBadge ui={ui} />
+            {ui.reservationExpiresAt ? (
+              <div className="text-xs text-white/60">
+                Auto-release: {fmtDateTime(ui.reservationExpiresAt)}
+              </div>
+            ) : null}
+          </div>
+        </CirculationDetail>
+      ) : null}
       <CirculationDetail label="Due date">
         <div className="space-y-2">
           <div>{fmtDate(record.dueDate)}</div>
@@ -1367,6 +1497,7 @@ function CirculationDesktopCard({
             <h3 className="wrap-break-word whitespace-normal text-base font-semibold leading-snug text-white">
               {getBorrowRecordDisplayTitle(record)}
             </h3>
+            <PendingPickupCountdownBadge ui={ui} />
           </div>
 
           <div className="w-full max-w-sm lg:w-auto">
@@ -1430,6 +1561,8 @@ function CirculationMobileCard({
         <h3 className="wrap-break-word whitespace-normal text-sm font-semibold leading-snug text-white">
           {getBorrowRecordDisplayTitle(record)}
         </h3>
+
+        <PendingPickupCountdownBadge ui={ui} />
 
         <CirculationDetailsDialog
           record={record}
@@ -1526,6 +1659,53 @@ export default function StudentCirculationPage({
     void loadAll();
   }, [loadAll]);
 
+  const hasLivePendingPickupRecords = React.useMemo(
+    () =>
+      records.some(
+        (record) =>
+          record.status === "pending_pickup" &&
+          !isExpiredPendingPickupRecord(record) &&
+          getBorrowReservationExpiryDate(record) !== null
+      ),
+    [records]
+  );
+
+  const nowMs = useLiveNowMs(hasLivePendingPickupRecords);
+
+  const visibleRecords = React.useMemo(
+    () =>
+      records.filter((record) => !isExpiredPendingPickupRecord(record, nowMs)),
+    [records, nowMs]
+  );
+
+  React.useEffect(() => {
+    const pendingExpiryTimes = records
+      .map((record) => getBorrowReservationExpiryDate(record)?.getTime() ?? null)
+      .filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value) && value > Date.now()
+      )
+      .sort((left, right) => left - right);
+
+    const nextExpiryTime = pendingExpiryTimes[0];
+    if (!nextExpiryTime) return;
+
+    const delay = Math.min(
+      Math.max(500, nextExpiryTime - Date.now() + 250),
+      2_147_483_647
+    );
+
+    const timer = window.setTimeout(() => {
+      const currentNowMs = Date.now();
+      setRecords((prev) =>
+        prev.filter((record) => !isExpiredPendingPickupRecord(record, currentNowMs))
+      );
+      void loadAll();
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [records, loadAll]);
+
   async function handleRefresh() {
     setRefreshing(true);
     try {
@@ -1547,18 +1727,19 @@ export default function StudentCirculationPage({
 
   const recordUiById = React.useMemo(() => {
     const map: Record<string, CirculationRecordUiState> = {};
-    for (const record of records) {
+    for (const record of visibleRecords) {
       map[record.id] = getRecordUiState(
         record,
         finesByBorrowId[record.id],
-        serverNow
+        serverNow,
+        nowMs
       );
     }
     return map;
-  }, [records, finesByBorrowId, serverNow]);
+  }, [visibleRecords, finesByBorrowId, serverNow, nowMs]);
 
   const filteredRecords = React.useMemo(() => {
-    let rows = [...records];
+    let rows = [...visibleRecords];
 
     const q = search.trim().toLowerCase();
     if (q) {
@@ -1627,7 +1808,7 @@ export default function StudentCirculationPage({
     });
 
     return rows;
-  }, [records, search, statusFilter, sortOption, recordUiById, serverNow]);
+  }, [visibleRecords, search, statusFilter, sortOption, recordUiById, serverNow]);
 
   const activeRecords = React.useMemo(
     () => filteredRecords.filter((record) => !recordUiById[record.id]?.isReturned),
@@ -1640,7 +1821,7 @@ export default function StudentCirculationPage({
   );
 
   const dashboardSummary = React.useMemo(() => {
-    return records.reduce(
+    return visibleRecords.reduce(
       (acc, record) => {
         const ui = recordUiById[record.id];
         if (!ui) return acc;
@@ -1660,7 +1841,7 @@ export default function StudentCirculationPage({
         totalRecordedFine: 0,
       }
     );
-  }, [records, recordUiById]);
+  }, [visibleRecords, recordUiById]);
 
   const totalActiveFine = React.useMemo(
     () =>
