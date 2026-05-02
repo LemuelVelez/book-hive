@@ -33,7 +33,6 @@ import {
   RefreshCcw,
   Search,
   TrendingUp,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -54,8 +53,7 @@ import { fetchBooks, type BookDTO, type LibraryArea } from "@/lib/books";
 import { fetchBorrowRecords, type BorrowRecordDTO } from "@/lib/borrows";
 import ExportPreviewStatistics, {
   type PrintableBookStatisticsRecord,
-  type PrintableCollegeStatisticsRecord,
-  type PrintableTopBorrowerOfYearRecord,
+  type PrintableProgramStatisticsRecord,
 } from "@/components/statistics-preview/export-preview-statistics";
 
 type StatisticsRow = {
@@ -84,21 +82,13 @@ type AreaBreakdownRow = {
   activeBorrowCount: number;
 };
 
-type CollegeBreakdownRow = {
+type ProgramBreakdownRow = {
   key: string;
   label: string;
-  uniqueBorrowerCount: number;
+  collegeLabel: string;
+  collegeColor: string;
   totalBorrowCount: number;
   activeBorrowCount: number;
-  topBorrowerName: string;
-  topBorrowerBorrowCount: number;
-};
-
-type TopBorrowerOfYearRow = {
-  key: string;
-  name: string;
-  college: string;
-  totalBorrowCount: number;
 };
 
 type ChartTooltipPayload = {
@@ -110,9 +100,20 @@ type ChartTooltipPayload = {
 };
 
 const PIE_COLORS = ["#22c55e", "#f59e0b", "#38bdf8", "#a855f7"];
-const MAX_TOP_BORROWERS_OF_YEAR = 5;
+const COLLEGE_COLORS = [
+  "#60a5fa",
+  "#34d399",
+  "#f59e0b",
+  "#a855f7",
+  "#f472b6",
+  "#22d3ee",
+  "#fb7185",
+  "#c084fc",
+  "#facc15",
+  "#2dd4bf",
+];
 const MAX_BOOK_CHART_ITEMS = 10;
-const MAX_COLLEGE_CHART_ITEMS = 10;
+const MAX_PROGRAM_CHART_ITEMS = 10;
 
 function pickNumber(...values: Array<number | string | null | undefined>) {
   for (const value of values) {
@@ -298,35 +299,36 @@ function normalizeCollegeLabel(college?: string | null, course?: string | null) 
   return normalizeCollegeLabelFromCourse(course);
 }
 
-function getBorrowerKey(record: BorrowRecordDTO) {
-  return String(
-    record.userId ||
-      record.studentId ||
-      record.studentEmail ||
-      record.studentName ||
-      record.id
-  ).trim();
+function normalizeProgramLabel(course?: string | null, college?: string | null) {
+  const rawCourse = String(course || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!rawCourse) return normalizeCollegeLabel(college, course);
+
+  const parts = rawCourse
+    .split(/\s[-–—|]\s|:/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const program = parts.find((part) => !/college of/i.test(part)) || rawCourse;
+
+  return program.length <= 60 ? program : shortenLabel(program, 60);
 }
 
-function getBorrowerLabel(record: BorrowRecordDTO) {
-  return String(
-    record.studentName ||
-      record.studentId ||
-      record.studentEmail ||
-      `User ${record.userId}`
-  ).trim();
+function hashString(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
 }
 
-function getBorrowRecordYear(record: BorrowRecordDTO) {
-  const raw = String(record.borrowDate || "").trim();
-  const slicedYear = Number(raw.slice(0, 4));
-
-  if (Number.isFinite(slicedYear)) return slicedYear;
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  return parsed.getFullYear();
+function getCollegeColor(collegeLabel: string) {
+  const safeLabel = collegeLabel || "Unassigned";
+  return COLLEGE_COLORS[hashString(safeLabel) % COLLEGE_COLORS.length];
 }
 
 function buildBorrowCountsMap(records: BorrowRecordDTO[]) {
@@ -473,7 +475,7 @@ function ChartTooltip({
 
 type StatisticsDetailState =
   | { kind: "book"; row: StatisticsRow }
-  | { kind: "college"; row: CollegeBreakdownRow }
+  | { kind: "program"; row: ProgramBreakdownRow }
   | null;
 
 function DetailField({
@@ -506,33 +508,39 @@ function BookStatisticsDetails({ row }: { row: StatisticsRow }) {
   );
 }
 
-function CollegeStatisticsDetails({ row }: { row: CollegeBreakdownRow }) {
+function ProgramStatisticsDetails({ row }: { row: ProgramBreakdownRow }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <DetailField label="College" value={row.label} />
-      <DetailField label="Unique Borrowers" value={fmtCount(row.uniqueBorrowerCount)} />
+      <DetailField label="Program" value={row.label} />
+      <DetailField
+        label="College"
+        value={
+          <span className="inline-flex items-center gap-2">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: row.collegeColor }}
+            />
+            {row.collegeLabel}
+          </span>
+        }
+      />
       <DetailField label="Total Borrowed" value={fmtCount(row.totalBorrowCount)} />
       <DetailField label="Currently Borrowed" value={fmtCount(row.activeBorrowCount)} />
-      <DetailField label="Top Borrower" value={row.topBorrowerName || "—"} />
-      <DetailField
-        label="Top Borrower Borrow Count"
-        value={`${fmtCount(row.topBorrowerBorrowCount)} borrow record${row.topBorrowerBorrowCount === 1 ? "" : "s"}`}
-      />
     </div>
   );
 }
 
-function CollegeBreakdownAccordion({
+function ProgramBreakdownAccordion({
   rows,
   onOpenDetails,
 }: {
-  rows: CollegeBreakdownRow[];
-  onOpenDetails: (row: CollegeBreakdownRow) => void;
+  rows: ProgramBreakdownRow[];
+  onOpenDetails: (row: ProgramBreakdownRow) => void;
 }) {
   return (
     <Accordion type="multiple" className="space-y-3">
       {rows.map((row) => {
-        const summary = `${row.label} • ${fmtCount(row.uniqueBorrowerCount)} borrowers • ${fmtCount(row.totalBorrowCount)} total • ${fmtCount(row.activeBorrowCount)} active • Top: ${row.topBorrowerName || "—"}`;
+        const summary = `${row.label} • ${row.collegeLabel} • ${fmtCount(row.totalBorrowCount)} total • ${fmtCount(row.activeBorrowCount)} active`;
 
         return (
           <AccordionItem
@@ -541,8 +549,14 @@ function CollegeBreakdownAccordion({
             className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/60 px-3 text-white"
           >
             <AccordionTrigger className="items-start gap-3 py-3 text-left hover:no-underline [&>svg]:ml-3 [&>svg]:mt-0.5 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:self-start [&>svg]:text-white/80 [&>svg]:opacity-100">
-              <span className="block min-w-0 flex-1 whitespace-normal wrap-break-word pr-2 text-sm font-medium leading-5" title={summary}>
-                {summary}
+              <span className="flex min-w-0 flex-1 items-start gap-2 pr-2 text-sm font-medium leading-5" title={summary}>
+                <span
+                  className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: row.collegeColor }}
+                />
+                <span className="block min-w-0 whitespace-normal wrap-break-word">
+                  {summary}
+                </span>
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-3 pt-0">
@@ -611,7 +625,6 @@ export default function LibrarianStatisticsPage() {
   const [areaFilter, setAreaFilter] = React.useState("all");
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [selectedDetail, setSelectedDetail] = React.useState<StatisticsDetailState>(null);
-  const currentYear = React.useMemo(() => new Date().getFullYear(), []);
 
   const load = React.useCallback(async () => {
     setError(null);
@@ -819,35 +832,21 @@ export default function LibrarianStatisticsPage() {
     return borrowRecords.filter((record) => allowedBookIds.has(String(record.bookId || "")));
   }, [borrowRecords, filtered]);
 
-  const uniqueBorrowerCount = React.useMemo(() => {
-    return new Set(
-      filteredBorrowRecords
-        .map((record) => getBorrowerKey(record))
-        .filter((value) => value.length > 0)
-    ).size;
-  }, [filteredBorrowRecords]);
-
-  const collegeBreakdown = React.useMemo<CollegeBreakdownRow[]>(() => {
-    const map = new Map<
-      string,
-      CollegeBreakdownRow & {
-        borrowers: Map<string, { name: string; totalBorrowCount: number }>;
-      }
-    >();
+  const programBreakdown = React.useMemo<ProgramBreakdownRow[]>(() => {
+    const map = new Map<string, ProgramBreakdownRow>();
 
     for (const record of filteredBorrowRecords) {
-      const label = normalizeCollegeLabel(record.college, record.course);
-      const key = label.toLowerCase();
+      const collegeLabel = normalizeCollegeLabel(record.college, record.course);
+      const label = normalizeProgramLabel(record.course, record.college);
+      const key = `${collegeLabel.toLowerCase()}::${label.toLowerCase()}`;
 
       const current = map.get(key) ?? {
         key,
         label,
-        uniqueBorrowerCount: 0,
+        collegeLabel,
+        collegeColor: getCollegeColor(collegeLabel),
         totalBorrowCount: 0,
         activeBorrowCount: 0,
-        topBorrowerName: "—",
-        topBorrowerBorrowCount: 0,
-        borrowers: new Map<string, { name: string; totalBorrowCount: number }>(),
       };
 
       current.totalBorrowCount += 1;
@@ -856,115 +855,51 @@ export default function LibrarianStatisticsPage() {
         current.activeBorrowCount += 1;
       }
 
-      const borrowerKey = getBorrowerKey(record);
-      const borrower = current.borrowers.get(borrowerKey) ?? {
-        name: getBorrowerLabel(record),
-        totalBorrowCount: 0,
-      };
-
-      borrower.totalBorrowCount += 1;
-      current.borrowers.set(borrowerKey, borrower);
-
       map.set(key, current);
     }
 
-    return Array.from(map.values())
-      .map((entry) => {
-        const rankedBorrowers = Array.from(entry.borrowers.values()).sort((a, b) => {
-          if (b.totalBorrowCount !== a.totalBorrowCount) {
-            return b.totalBorrowCount - a.totalBorrowCount;
-          }
-
-          return a.name.localeCompare(b.name);
-        });
-
-        const topBorrower = rankedBorrowers[0];
-
-        return {
-          key: entry.key,
-          label: entry.label,
-          uniqueBorrowerCount: entry.borrowers.size,
-          totalBorrowCount: entry.totalBorrowCount,
-          activeBorrowCount: entry.activeBorrowCount,
-          topBorrowerName: topBorrower?.name || "—",
-          topBorrowerBorrowCount: topBorrower?.totalBorrowCount || 0,
-        };
-      })
-      .sort((a, b) => {
-        if (b.totalBorrowCount !== a.totalBorrowCount) {
-          return b.totalBorrowCount - a.totalBorrowCount;
-        }
-
-        if (b.uniqueBorrowerCount !== a.uniqueBorrowerCount) {
-          return b.uniqueBorrowerCount - a.uniqueBorrowerCount;
-        }
-
-        return a.label.localeCompare(b.label);
-      });
-  }, [filteredBorrowRecords]);
-
-  const collegeBreakdownChartData = React.useMemo(
-    () =>
-      collegeBreakdown.slice(0, MAX_COLLEGE_CHART_ITEMS).map((row) => ({
-        name: shortenLabel(row.label, 18),
-        fullLabel: row.label,
-        uniqueBorrowerCount: row.uniqueBorrowerCount,
-        totalBorrowCount: row.totalBorrowCount,
-        activeBorrowCount: row.activeBorrowCount,
-        topBorrowerName: row.topBorrowerName,
-      })),
-    [collegeBreakdown]
-  );
-
-  const topBorrowersOfYear = React.useMemo<TopBorrowerOfYearRow[]>(() => {
-    const map = new Map<string, TopBorrowerOfYearRow>();
-
-    for (const record of filteredBorrowRecords) {
-      if (getBorrowRecordYear(record) !== currentYear) continue;
-
-      const key = getBorrowerKey(record);
-      if (!key) continue;
-
-      const current = map.get(key) ?? {
-        key,
-        name: getBorrowerLabel(record),
-        college: normalizeCollegeLabel(record.college, record.course),
-        totalBorrowCount: 0,
-      };
-
-      current.totalBorrowCount += 1;
-
-      if (!current.college || current.college === "Unassigned") {
-        current.college = normalizeCollegeLabel(record.college, record.course);
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.totalBorrowCount !== a.totalBorrowCount) {
+        return b.totalBorrowCount - a.totalBorrowCount;
       }
 
-      map.set(key, current);
-    }
+      if (a.collegeLabel !== b.collegeLabel) {
+        return a.collegeLabel.localeCompare(b.collegeLabel);
+      }
 
-    return Array.from(map.values())
-      .sort((a, b) => {
-        if (b.totalBorrowCount !== a.totalBorrowCount) {
-          return b.totalBorrowCount - a.totalBorrowCount;
-        }
+      return a.label.localeCompare(b.label);
+    });
+  }, [filteredBorrowRecords]);
 
-        return a.name.localeCompare(b.name);
-      })
-      .slice(0, MAX_TOP_BORROWERS_OF_YEAR);
-  }, [currentYear, filteredBorrowRecords]);
-
-  const topBorrowersOfYearChartData = React.useMemo(
+  const programBreakdownChartData = React.useMemo(
     () =>
-      topBorrowersOfYear.map((row) => ({
-        name: shortenLabel(row.name, 18),
-        fullName: row.name,
-        college: row.college,
+      programBreakdown.slice(0, MAX_PROGRAM_CHART_ITEMS).map((row) => ({
+        name: shortenLabel(row.label, 18),
+        fullLabel: row.label,
+        collegeLabel: row.collegeLabel,
+        fill: row.collegeColor,
         totalBorrowCount: row.totalBorrowCount,
+        activeBorrowCount: row.activeBorrowCount,
       })),
-    [topBorrowersOfYear]
+    [programBreakdown]
   );
 
-  const topCollege = collegeBreakdown[0] ?? null;
-  const topBorrowerOfYear = topBorrowersOfYear[0] ?? null;
+  const programCollegeLegend = React.useMemo(() => {
+    const map = new Map<string, { label: string; color: string; programCount: number }>();
+
+    for (const row of programBreakdown) {
+      const current = map.get(row.collegeLabel) ?? {
+        label: row.collegeLabel,
+        color: row.collegeColor,
+        programCount: 0,
+      };
+
+      current.programCount += 1;
+      map.set(row.collegeLabel, current);
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [programBreakdown]);
 
   const printableRecords = React.useMemo<PrintableBookStatisticsRecord[]>(
     () =>
@@ -983,28 +918,16 @@ export default function LibrarianStatisticsPage() {
     [filtered]
   );
 
-  const printableCollegeRecords = React.useMemo<PrintableCollegeStatisticsRecord[]>(
+  const printableProgramRecords = React.useMemo<PrintableProgramStatisticsRecord[]>(
     () =>
-      collegeBreakdown.map((row) => ({
-        college: row.label,
-        uniqueBorrowerCount: row.uniqueBorrowerCount,
+      programBreakdown.map((row) => ({
+        program: row.label,
+        college: row.collegeLabel,
+        collegeColor: row.collegeColor,
         totalBorrowCount: row.totalBorrowCount,
         activeBorrowCount: row.activeBorrowCount,
-        topBorrowerName: row.topBorrowerName,
-        topBorrowerBorrowCount: row.topBorrowerBorrowCount,
       })),
-    [collegeBreakdown]
-  );
-
-  const printableTopBorrowerRecords = React.useMemo<PrintableTopBorrowerOfYearRecord[]>(
-    () =>
-      topBorrowersOfYear.map((row, index) => ({
-        rank: index + 1,
-        borrowerName: row.name,
-        college: row.college,
-        totalBorrowCount: row.totalBorrowCount,
-      })),
-    [topBorrowersOfYear]
+    [programBreakdown]
   );
 
   return (
@@ -1013,7 +936,7 @@ export default function LibrarianStatisticsPage() {
         <div>
           <h2 className="text-lg font-semibold leading-tight">Book Borrowing Statistics</h2>
           <p className="text-xs text-white/70">
-            Track how many times each book was borrowed, what is currently out, and which colleges account for the most borrower activity in the current filter.
+            Track how many times each book was borrowed, what is currently out, and which programs account for the most borrower activity in the current filter.
           </p>
         </div>
 
@@ -1043,7 +966,7 @@ export default function LibrarianStatisticsPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 mb-4 md:grid-cols-2 xl:grid-cols-7">
+      <div className="grid gap-3 mb-4 md:grid-cols-2 xl:grid-cols-4">
         <StatsCard
           title="Book Titles"
           value={fmtCount(totals.totalTitles)}
@@ -1060,32 +983,9 @@ export default function LibrarianStatisticsPage() {
           subtitle="Active borrow records not yet returned."
         />
         <StatsCard
-          title="Unique Borrowers"
-          value={fmtCount(uniqueBorrowerCount)}
-          subtitle="Distinct users behind the filtered borrow records."
-        />
-        <StatsCard
-          title="Colleges Represented"
-          value={fmtCount(collegeBreakdown.length)}
-          subtitle="Student colleges found in the filtered borrow data."
-        />
-        <StatsCard
-          title="Top College"
-          value={topCollege?.label || "—"}
-          subtitle={
-            topCollege
-              ? `${fmtCount(topCollege.totalBorrowCount)} borrow record${topCollege.totalBorrowCount === 1 ? "" : "s"}`
-              : "No student college data for this filter."
-          }
-        />
-        <StatsCard
-          title={`Top Borrower ${currentYear}`}
-          value={topBorrowerOfYear?.name || "—"}
-          subtitle={
-            topBorrowerOfYear
-              ? `${fmtCount(topBorrowerOfYear.totalBorrowCount)} borrow record${topBorrowerOfYear.totalBorrowCount === 1 ? "" : "s"} this year`
-              : `No borrower activity recorded for ${currentYear}.`
-          }
+          title="Programs Represented"
+          value={fmtCount(programBreakdown.length)}
+          subtitle="Student programs found in the filtered borrow data."
         />
       </div>
 
@@ -1251,18 +1151,18 @@ export default function LibrarianStatisticsPage() {
 
 
       <GraphCard
-        title="Borrowers by college"
-        subtitle={`Shows the top ${MAX_COLLEGE_CHART_ITEMS} student colleges by borrower activity for the current book filter.`}
+        title="Borrowers by program"
+        subtitle={`Shows the top ${MAX_PROGRAM_CHART_ITEMS} student programs by borrower activity for the current book filter, with colors grouped by college.`}
         icon={<GraduationCap className="h-4 w-4" />}
       >
-        {collegeBreakdown.length === 0 ? (
-          <div className="text-sm text-white/60">No borrower college data available for this filter.</div>
+        {programBreakdown.length === 0 ? (
+          <div className="text-sm text-white/60">No borrower program data available for this filter.</div>
         ) : (
           <>
             <div className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={collegeBreakdownChartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                  <BarChart data={programBreakdownChartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                     <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                     <XAxis
                       dataKey="name"
@@ -1279,143 +1179,63 @@ export default function LibrarianStatisticsPage() {
                       content={<ChartTooltip valueFormatter={fmtCount} />}
                       cursor={{ fill: "rgba(255,255,255,0.05)" }}
                       formatter={(value: number) => fmtCount(value)}
-                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullLabel || "College"}
+                      labelFormatter={(_, payload) => {
+                        const item = payload?.[0]?.payload;
+                        return item?.collegeLabel ? `${item.fullLabel} • ${item.collegeLabel}` : item?.fullLabel || "Program";
+                      }}
                     />
                     <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
-                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[8, 8, 0, 0]} fill="#60a5fa" />
-                    <Bar dataKey="uniqueBorrowerCount" name="Unique Borrowers" radius={[8, 8, 0, 0]} fill="#34d399" />
+                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[8, 8, 0, 0]}>
+                      {programBreakdownChartData.map((entry) => (
+                        <Cell key={`${entry.fullLabel}-${entry.collegeLabel}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-white/60">Top college</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{topCollege?.label || "—"}</div>
-                  <div className="mt-1 text-xs text-white/55">
-                    {topCollege
-                      ? `${fmtCount(topCollege.totalBorrowCount)} borrow records from ${fmtCount(topCollege.uniqueBorrowerCount)} borrower${topCollege.uniqueBorrowerCount === 1 ? "" : "s"}`
-                      : "No college activity found yet."}
-                  </div>
+                  <div className="text-xs text-white/60">Programs represented</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{fmtCount(programBreakdown.length)}</div>
+                  <div className="mt-1 text-xs text-white/55">Student programs found in the filtered borrow activity.</div>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-white/60">Top borrower in leading college</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{topCollege?.topBorrowerName || "—"}</div>
-                  <div className="mt-1 text-xs text-white/55">
-                    {topCollege
-                      ? `${fmtCount(topCollege.topBorrowerBorrowCount)} borrow record${topCollege.topBorrowerBorrowCount === 1 ? "" : "s"}`
-                      : "Waiting for borrower data."}
+                  <div className="text-xs text-white/60">Active program borrows</div>
+                  <div className="mt-1 text-sm font-semibold text-white">
+                    {fmtCount(programBreakdown.reduce((sum, row) => sum + row.activeBorrowCount, 0))}
                   </div>
+                  <div className="mt-1 text-xs text-white/55">Borrow records not yet returned across grouped programs.</div>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-center gap-2 text-xs text-white/60">
-                    <Users className="h-3.5 w-3.5" />
-                    <span>Unique borrowers</span>
+                  <div className="text-xs text-white/60">College color coding</div>
+                  <div className="mt-2 space-y-2">
+                    {programCollegeLegend.slice(0, 6).map((item) => (
+                      <div key={item.label} className="flex items-center justify-between gap-3 text-xs text-white/70">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span className="truncate">{item.label}</span>
+                        </span>
+                        <span className="shrink-0 font-semibold text-white">{fmtCount(item.programCount)}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="mt-1 text-sm font-semibold text-white">{fmtCount(uniqueBorrowerCount)}</div>
-                  <div className="mt-1 text-xs text-white/55">Across {fmtCount(collegeBreakdown.length)} college group{collegeBreakdown.length === 1 ? "" : "s"} in the filtered view.</div>
                 </div>
               </div>
             </div>
             <div className="mt-4 space-y-3">
               <p className="text-xs text-white/60">
-                Borrower activity grouped by student college for the current filter.
+                Borrower activity grouped by student program for the current filter. Each color represents the college attached to the program.
               </p>
-              <CollegeBreakdownAccordion
-                rows={collegeBreakdown}
-                onOpenDetails={(row) => setSelectedDetail({ kind: "college", row })}
+              <ProgramBreakdownAccordion
+                rows={programBreakdown}
+                onOpenDetails={(row) => setSelectedDetail({ kind: "program", row })}
               />
-            </div>
-          </>
-        )}
-      </GraphCard>
-
-      <GraphCard
-        title={`Top borrowers of ${currentYear}`}
-        subtitle={`Shows the top ${MAX_TOP_BORROWERS_OF_YEAR} borrowers for the current year within the active filter.`}
-        icon={<Users className="h-4 w-4" />}
-      >
-        {topBorrowersOfYear.length === 0 ? (
-          <div className="text-sm text-white/60">No borrower activity available for {currentYear}.</div>
-        ) : (
-          <>
-            <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topBorrowersOfYearChartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: "#cbd5e1", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval={0}
-                      angle={-18}
-                      textAnchor="end"
-                      height={56}
-                    />
-                    <YAxis tick={{ fill: "#cbd5e1", fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip
-                      content={<ChartTooltip valueFormatter={fmtCount} />}
-                      cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                      formatter={(value: number) => fmtCount(value)}
-                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || "Borrower"}
-                    />
-                    <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
-                    <Bar dataKey="totalBorrowCount" name="Borrowed This Year" radius={[8, 8, 0, 0]} fill="#f59e0b" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-white/60">Leading borrower</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{topBorrowerOfYear?.name || "—"}</div>
-                  <div className="mt-1 text-xs text-white/55">
-                    {topBorrowerOfYear
-                      ? `${fmtCount(topBorrowerOfYear.totalBorrowCount)} borrow record${topBorrowerOfYear.totalBorrowCount === 1 ? "" : "s"} in ${currentYear}`
-                      : `No borrower activity recorded for ${currentYear}.`}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-white/60">Leading borrower college</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{topBorrowerOfYear?.college || "—"}</div>
-                  <div className="mt-1 text-xs text-white/55">
-                    Based on the borrower profile attached to each borrow record.
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-center gap-2 text-xs text-white/60">
-                    <Users className="h-3.5 w-3.5" />
-                    <span>Borrowers ranked</span>
-                  </div>
-                  <div className="mt-1 text-sm font-semibold text-white">{fmtCount(topBorrowersOfYear.length)}</div>
-                  <div className="mt-1 text-xs text-white/55">Top borrowers included for {currentYear}.</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {topBorrowersOfYear.map((row, index) => (
-                <div
-                  key={row.key}
-                  className="flex flex-col gap-1 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium leading-5 text-white">
-                      #{index + 1} {row.name}
-                    </div>
-                    <div className="text-xs text-white/60">{row.college || "Unassigned"}</div>
-                  </div>
-                  <div className="text-xs text-white/70 sm:text-right">
-                    <span className="font-semibold text-white">{fmtCount(row.totalBorrowCount)}</span> borrow record{row.totalBorrowCount === 1 ? "" : "s"} in {currentYear}
-                  </div>
-                </div>
-              ))}
             </div>
           </>
         )}
@@ -1496,10 +1316,10 @@ export default function LibrarianStatisticsPage() {
                   <CardContent className="pt-4">
                     <div className="flex items-center gap-2 text-sky-100">
                       <GraduationCap className="h-4 w-4" />
-                      <span className="text-sm font-medium">College overview</span>
+                      <span className="text-sm font-medium">Program overview</span>
                     </div>
                     <p className="mt-2 text-xs text-white/70">
-                      Borrow activity comes from <span className="font-semibold text-white">{fmtCount(collegeBreakdown.length)}</span> student college group{collegeBreakdown.length === 1 ? "" : "s"} and <span className="font-semibold text-white">{fmtCount(uniqueBorrowerCount)}</span> unique borrower{uniqueBorrowerCount === 1 ? "" : "s"} in the current filter.
+                      Borrow activity comes from <span className="font-semibold text-white">{fmtCount(programBreakdown.length)}</span> student program group{programBreakdown.length === 1 ? "" : "s"} in the current filter, with colors grouped by college.
                     </p>
                   </CardContent>
                 </Card>
@@ -1532,7 +1352,7 @@ export default function LibrarianStatisticsPage() {
             <DialogTitle className="whitespace-normal wrap-break-word pr-8 text-left text-white">
               {selectedDetail?.kind === "book"
                 ? selectedDetail.row.title
-                : selectedDetail?.kind === "college"
+                : selectedDetail?.kind === "program"
                   ? selectedDetail.row.label
                   : "Details"}
             </DialogTitle>
@@ -1541,8 +1361,8 @@ export default function LibrarianStatisticsPage() {
           <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
             {selectedDetail?.kind === "book" ? (
               <BookStatisticsDetails row={selectedDetail.row} />
-            ) : selectedDetail?.kind === "college" ? (
-              <CollegeStatisticsDetails row={selectedDetail.row} />
+            ) : selectedDetail?.kind === "program" ? (
+              <ProgramStatisticsDetails row={selectedDetail.row} />
             ) : null}
           </div>
         </DialogContent>
@@ -1552,12 +1372,10 @@ export default function LibrarianStatisticsPage() {
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         records={printableRecords}
-        collegeRecords={printableCollegeRecords}
-        topBorrowerRecords={printableTopBorrowerRecords}
-        reportingYear={currentYear}
+        programRecords={printableProgramRecords}
         fileNamePrefix="bookhive-statistics-report"
         reportTitle="BookHive Library • Statistics Report"
-        reportSubtitle="Printable report for librarian book borrowing statistics and borrower student college activity."
+        reportSubtitle="Printable report for librarian book borrowing statistics and borrower student program activity."
       />
     </DashboardLayout>
   );
