@@ -529,11 +529,11 @@ function StatisticsPdfDocument({
 
                 {rankedProgramRecords.length ? (
                     <View style={pdfStyles.programSectionWrap}>
-                        <Text style={pdfStyles.sectionTitle}>Borrowers by Program</Text>
+                        <Text style={pdfStyles.sectionTitle}>Borrowers by Group</Text>
 
                         <View style={pdfStyles.tableHead}>
                             <View style={pdfStyles.colProgram}>
-                                <Text style={pdfStyles.th}>Program</Text>
+                                <Text style={pdfStyles.th}>Program / Group</Text>
                             </View>
                             <View style={pdfStyles.colProgramCollege}>
                                 <Text style={pdfStyles.th}>College</Text>
@@ -552,7 +552,7 @@ function StatisticsPdfDocument({
                                 style={pdfStyles.row}
                             >
                                 <View style={pdfStyles.colProgram}>
-                                    <Text style={pdfStyles.td}>{row.program || "Unassigned"}</Text>
+                                    <Text style={pdfStyles.td}>{row.program || "Borrower Group"}</Text>
                                 </View>
 
                                 <View style={pdfStyles.colProgramCollege}>
@@ -564,7 +564,7 @@ function StatisticsPdfDocument({
                                             ]}
                                         />
                                         <Text style={pdfStyles.td}>
-                                            {row.college || "Unassigned"}
+                                            {row.college || "Borrower Group"}
                                         </Text>
                                     </View>
                                 </View>
@@ -585,19 +585,19 @@ function StatisticsPdfDocument({
 
                         <View style={pdfStyles.totalsWrap}>
                             <View style={pdfStyles.totalsLine}>
-                                <Text style={pdfStyles.totalsLabel}>Programs Represented</Text>
+                                <Text style={pdfStyles.totalsLabel}>Borrower Groups Represented</Text>
                                 <Text style={pdfStyles.totalsValue}>
                                     {fmtCount(programTotals.programCount)}
                                 </Text>
                             </View>
                             <View style={pdfStyles.totalsLine}>
-                                <Text style={pdfStyles.totalsLabel}>Total Program Borrows</Text>
+                                <Text style={pdfStyles.totalsLabel}>Total Group Borrows</Text>
                                 <Text style={pdfStyles.totalsValue}>
                                     {fmtCount(programTotals.totalBorrowCount)}
                                 </Text>
                             </View>
                             <View style={[pdfStyles.totalsLine, pdfStyles.totalsGrand]}>
-                                <Text style={[pdfStyles.totalsLabel, { fontWeight: 700 }]}>Active Program Borrows</Text>
+                                <Text style={[pdfStyles.totalsLabel, { fontWeight: 700 }]}>Active Group Borrows</Text>
                                 <Text style={[pdfStyles.totalsValue, { fontSize: 10 }]}> 
                                     {fmtCount(programTotals.activeBorrowCount)}
                                 </Text>
@@ -615,10 +615,10 @@ function StatisticsPdfDocument({
                         2) Active = borrow records not yet returned.
                     </Text>
                     <Text style={pdfStyles.noteText}>
-                        3) Program summaries are grouped from the borrower course value attached to each borrow record.
+                        3) Borrower group summaries use the borrower course value for students and the Faculty group for faculty borrowers.
                     </Text>
                     <Text style={pdfStyles.noteText}>
-                        4) Program colors are based on the college attached to each program.
+                        4) Group colors are based on the college or borrower group attached to each record.
                     </Text>
                     <Text style={pdfStyles.noteText}>
                         5) This report is printable for librarian dashboard record-keeping.
@@ -645,7 +645,7 @@ export default function ExportPreviewStatistics({
     programRecords = [],
     fileNamePrefix = "bookhive-statistics-report",
     reportTitle = "BookHive Library • Statistics Report",
-    reportSubtitle = "Printable report for book borrowing statistics.",
+    reportSubtitle = "Printable report for book borrowing statistics and borrower program/faculty group activity.",
 }: ExportPreviewStatisticsProps) {
     const [viewerHeight, setViewerHeight] = React.useState(720);
     const [generatedAtIso, setGeneratedAtIso] = React.useState(() =>
@@ -820,10 +820,10 @@ export default function ExportPreviewStatistics({
                                         {fmtCount(totals.filipinianaBorrowCount)}
                                     </Badge>
                                     <Badge className="bg-cyan-500/20 text-cyan-100 border-cyan-300/40">
-                                        Programs: {fmtCount(programTotals.programCount)}
+                                        Groups: {fmtCount(programTotals.programCount)}
                                     </Badge>
                                     <Badge className="bg-indigo-500/20 text-indigo-100 border-indigo-300/40">
-                                        Program Borrows: {fmtCount(programTotals.totalBorrowCount)}
+                                        Group Borrows: {fmtCount(programTotals.totalBorrowCount)}
                                     </Badge>
                                 </div>
 

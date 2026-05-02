@@ -114,6 +114,7 @@ const COLLEGE_COLORS = [
 ];
 const MAX_BOOK_CHART_ITEMS = 10;
 const MAX_PROGRAM_CHART_ITEMS = 10;
+const FACULTY_GROUP_LABEL = "Faculty";
 
 function pickNumber(...values: Array<number | string | null | undefined>) {
   for (const value of values) {
@@ -316,6 +317,63 @@ function normalizeProgramLabel(course?: string | null, college?: string | null) 
   return program.length <= 60 ? program : shortenLabel(program, 60);
 }
 
+function normalizeBorrowerRoleValue(value: unknown) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (!normalized) return null;
+  if (normalized.includes("faculty")) return "faculty";
+  if (normalized.includes("student")) return "student";
+  if (normalized.includes("assistant_librarian")) return "assistant_librarian";
+  if (normalized.includes("librarian")) return "librarian";
+  if (normalized.includes("admin")) return "admin";
+  if (normalized.includes("guest")) return "guest";
+  if (normalized.includes("other")) return "other";
+
+  return normalized;
+}
+
+function getBorrowerRole(record: BorrowRecordDTO) {
+  const source = record as BorrowRecordDTO & Record<string, unknown>;
+  const roleCandidates = [
+    source.borrowerRole,
+    source.borrowerType,
+    source.userRole,
+    source.role,
+    source.accountType,
+    source.borrower_role,
+    source.borrower_type,
+    source.user_role,
+    source.account_type,
+    source.type,
+  ];
+
+  for (const candidate of roleCandidates) {
+    const role = normalizeBorrowerRoleValue(candidate);
+    if (role) return role;
+  }
+
+  return null;
+}
+
+function getBorrowerProgramGroup(record: BorrowRecordDTO) {
+  const role = getBorrowerRole(record);
+
+  if (role === "faculty") {
+    return {
+      collegeLabel: FACULTY_GROUP_LABEL,
+      label: FACULTY_GROUP_LABEL,
+    };
+  }
+
+  return {
+    collegeLabel: normalizeCollegeLabel(record.college, record.course),
+    label: normalizeProgramLabel(record.course, record.college),
+  };
+}
+
 function hashString(value: string) {
   let hash = 0;
 
@@ -511,7 +569,7 @@ function BookStatisticsDetails({ row }: { row: StatisticsRow }) {
 function ProgramStatisticsDetails({ row }: { row: ProgramBreakdownRow }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <DetailField label="Program" value={row.label} />
+      <DetailField label="Program / Group" value={row.label} />
       <DetailField
         label="College"
         value={
@@ -836,8 +894,7 @@ export default function LibrarianStatisticsPage() {
     const map = new Map<string, ProgramBreakdownRow>();
 
     for (const record of filteredBorrowRecords) {
-      const collegeLabel = normalizeCollegeLabel(record.college, record.course);
-      const label = normalizeProgramLabel(record.course, record.college);
+      const { collegeLabel, label } = getBorrowerProgramGroup(record);
       const key = `${collegeLabel.toLowerCase()}::${label.toLowerCase()}`;
 
       const current = map.get(key) ?? {
@@ -936,7 +993,7 @@ export default function LibrarianStatisticsPage() {
         <div>
           <h2 className="text-lg font-semibold leading-tight">Book Borrowing Statistics</h2>
           <p className="text-xs text-white/70">
-            Track how many times each book was borrowed, what is currently out, and which programs account for the most borrower activity in the current filter.
+            Track how many times each book was borrowed, what is currently out, and which borrower groups account for the most borrower activity in the current filter.
           </p>
         </div>
 
@@ -983,9 +1040,9 @@ export default function LibrarianStatisticsPage() {
           subtitle="Active borrow records not yet returned."
         />
         <StatsCard
-          title="Programs Represented"
+          title="Borrower Groups"
           value={fmtCount(programBreakdown.length)}
-          subtitle="Student programs found in the filtered borrow data."
+          subtitle="Student programs and faculty groups found in the filtered borrow data."
         />
       </div>
 
@@ -1151,12 +1208,12 @@ export default function LibrarianStatisticsPage() {
 
 
       <GraphCard
-        title="Borrowers by program"
-        subtitle={`Shows the top ${MAX_PROGRAM_CHART_ITEMS} student programs by borrower activity for the current book filter, with colors grouped by college.`}
+        title="Borrowers by group"
+        subtitle={`Shows the top ${MAX_PROGRAM_CHART_ITEMS} student programs or faculty groups by borrower activity for the current book filter, with colors grouped by college or borrower group.`}
         icon={<GraduationCap className="h-4 w-4" />}
       >
         {programBreakdown.length === 0 ? (
-          <div className="text-sm text-white/60">No borrower program data available for this filter.</div>
+          <div className="text-sm text-white/60">No borrower group data available for this filter.</div>
         ) : (
           <>
             <div className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
@@ -1196,17 +1253,17 @@ export default function LibrarianStatisticsPage() {
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-white/60">Programs represented</div>
+                  <div className="text-xs text-white/60">Borrower groups represented</div>
                   <div className="mt-1 text-sm font-semibold text-white">{fmtCount(programBreakdown.length)}</div>
-                  <div className="mt-1 text-xs text-white/55">Student programs found in the filtered borrow activity.</div>
+                  <div className="mt-1 text-xs text-white/55">Student programs and faculty groups found in the filtered borrow activity.</div>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-white/60">Active program borrows</div>
+                  <div className="text-xs text-white/60">Active group borrows</div>
                   <div className="mt-1 text-sm font-semibold text-white">
                     {fmtCount(programBreakdown.reduce((sum, row) => sum + row.activeBorrowCount, 0))}
                   </div>
-                  <div className="mt-1 text-xs text-white/55">Borrow records not yet returned across grouped programs.</div>
+                  <div className="mt-1 text-xs text-white/55">Borrow records not yet returned across borrower groups.</div>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
@@ -1230,7 +1287,7 @@ export default function LibrarianStatisticsPage() {
             </div>
             <div className="mt-4 space-y-3">
               <p className="text-xs text-white/60">
-                Borrower activity grouped by student program for the current filter. Each color represents the college attached to the program.
+                Borrower activity grouped by student program or faculty borrower group for the current filter. Each color represents the college or borrower group attached to the record.
               </p>
               <ProgramBreakdownAccordion
                 rows={programBreakdown}
@@ -1316,10 +1373,10 @@ export default function LibrarianStatisticsPage() {
                   <CardContent className="pt-4">
                     <div className="flex items-center gap-2 text-sky-100">
                       <GraduationCap className="h-4 w-4" />
-                      <span className="text-sm font-medium">Program overview</span>
+                      <span className="text-sm font-medium">Borrower group overview</span>
                     </div>
                     <p className="mt-2 text-xs text-white/70">
-                      Borrow activity comes from <span className="font-semibold text-white">{fmtCount(programBreakdown.length)}</span> student program group{programBreakdown.length === 1 ? "" : "s"} in the current filter, with colors grouped by college.
+                      Borrow activity comes from <span className="font-semibold text-white">{fmtCount(programBreakdown.length)}</span> borrower group{programBreakdown.length === 1 ? "" : "s"} in the current filter, with colors grouped by college or faculty group.
                     </p>
                   </CardContent>
                 </Card>
@@ -1375,7 +1432,7 @@ export default function LibrarianStatisticsPage() {
         programRecords={printableProgramRecords}
         fileNamePrefix="bookhive-statistics-report"
         reportTitle="BookHive Library • Statistics Report"
-        reportSubtitle="Printable report for librarian book borrowing statistics and borrower student program activity."
+        reportSubtitle="Printable report for librarian book borrowing statistics and borrower program/faculty group activity."
       />
     </DashboardLayout>
   );

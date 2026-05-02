@@ -38,6 +38,12 @@ export const BORROW_ROUTES = {
   requestReturn: (id: string | number) =>
     api(`/borrow-records/${encodeURIComponent(String(id))}/request-return`), // POST
 
+  // damage reports are filed by librarian/admin users and read-only for borrowers
+  damageReports: (id: string | number) =>
+    api(`/borrow-records/${encodeURIComponent(String(id))}/damage-reports`), // GET
+  createDamageReport: (id: string | number) =>
+    api(`/borrow-records/${encodeURIComponent(String(id))}/damage-reports`), // POST
+
   // sync dashboard-style borrow notifications to email
   emailNotificationSync: api("/borrow-records/notifications/email-sync"), // POST
 } as const;

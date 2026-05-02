@@ -19,6 +19,41 @@ export type BorrowerRole =
     | "guest"
     | "other";
 
+export type BorrowDamageSeverity =
+    | "minor"
+    | "moderate"
+    | "major"
+    | "severe"
+    | string;
+
+export type BorrowDamageReportDTO = {
+    id: string;
+    borrowRecordId?: string | number | null;
+    bookId?: string | number | null;
+    bookTitle?: string | null;
+    accessionNumber?: string | null;
+    copyNumber?: number | null;
+    borrowerId?: string | number | null;
+    borrowerName?: string | null;
+    description: string;
+    severity?: BorrowDamageSeverity | null;
+    status?: string | null;
+    reportedBy?: string | number | null;
+    reportedByName?: string | null;
+    reportedAt?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    borrowerCanRead?: boolean;
+    borrowerCanCreate?: false;
+    borrowerCanEdit?: false;
+};
+
+export type CreateBorrowDamageReportPayload = {
+    description: string;
+    severity?: BorrowDamageSeverity | null;
+    status?: string | null;
+};
+
 export type BorrowRecordDTO = {
     id: string;
     userId: string;
@@ -36,6 +71,23 @@ export type BorrowRecordDTO = {
     returnDate: string | null; // ISO date or null
     status: BorrowStatus;
     fine: number; // pesos
+
+    /**
+     * Borrower classification returned by different backend versions.
+     * Used so faculty borrowers are labeled as Faculty instead of Unassigned.
+     */
+    borrowerRole?: BorrowerRole | string | null;
+    borrowerType?: BorrowerRole | string | null;
+    userRole?: BorrowerRole | string | null;
+    role?: BorrowerRole | string | null;
+    accountType?: BorrowerRole | string | null;
+
+    /**
+     * Damage reports are filed by librarian/admin users and displayed
+     * to the borrower as read-only information.
+     */
+    damageReports?: BorrowDamageReportDTO[] | null;
+    latestDamageReport?: BorrowDamageReportDTO | null;
 
     // ✅ Approved extension info
     extensionCount: number;
@@ -171,7 +223,7 @@ export type BorrowPolicyDTO = {
 
     /**
      * Default borrow period in days for the role.
-     * Faculty default here is 30 days unless backend returns a different value.
+     * Faculty uses the semester-length policy unless backend returns a different value.
      */
     defaultBorrowDurationDays: number;
 
@@ -195,6 +247,9 @@ type BorrowCreateResponse = JsonOk<{
     createdCount?: number;
 }>;
 
+export const FACULTY_SEMESTER_BORROW_DURATION_DAYS = 150;
+export const FACULTY_SEMESTER_BORROW_LABEL = "Per semester";
+
 const DEFAULT_BORROW_POLICIES: Record<BorrowerRole, BorrowPolicyDTO> = {
     student: {
         role: "student",
@@ -205,7 +260,7 @@ const DEFAULT_BORROW_POLICIES: Record<BorrowerRole, BorrowPolicyDTO> = {
     faculty: {
         role: "faculty",
         maxActiveBorrows: 10,
-        defaultBorrowDurationDays: 30,
+        defaultBorrowDurationDays: FACULTY_SEMESTER_BORROW_DURATION_DAYS,
         maxPerAction: 10,
     },
     librarian: {
@@ -379,6 +434,10 @@ export function getFacultyBorrowDurationDays(): number {
     return getFacultyBorrowPolicy().defaultBorrowDurationDays;
 }
 
+export function getFacultyBorrowDurationLabel(): string {
+    return FACULTY_SEMESTER_BORROW_LABEL;
+}
+
 export function validateBorrowQuantityForRole(
     role: BorrowerRole,
     quantity: number
@@ -487,7 +546,7 @@ export async function createBorrowRecord(
  *
  * Client-side default policy now includes:
  * - faculty maximum: 10 books
- * - faculty default duration: 30 days
+ * - faculty default duration: per semester
  */
 export async function createSelfBorrow(
     bookId: string | number,
@@ -495,10 +554,15 @@ export async function createSelfBorrow(
     role: BorrowerRole = "student"
 ): Promise<BorrowRecordDTO> {
     validateBorrowQuantityForRole(role, quantity);
+    const policy = getDefaultBorrowPolicy(role);
 
     const res = await requestJSON<BorrowCreateResponse>(BORROW_ROUTES.createSelf, {
         method: "POST",
-        body: { bookId, quantity },
+        body: {
+            bookId,
+            quantity,
+            borrowDurationDays: policy.defaultBorrowDurationDays,
+        },
     });
 
     const created = normalizeCreatedBorrowRecords(res);
@@ -519,10 +583,15 @@ export async function createSelfBorrowRecords(
     role: BorrowerRole = "student"
 ): Promise<BorrowRecordDTO[]> {
     validateBorrowQuantityForRole(role, quantity);
+    const policy = getDefaultBorrowPolicy(role);
 
     const res = await requestJSON<BorrowCreateResponse>(BORROW_ROUTES.createSelf, {
         method: "POST",
-        body: { bookId, quantity },
+        body: {
+            bookId,
+            quantity,
+            borrowDurationDays: policy.defaultBorrowDurationDays,
+        },
     });
 
     const created = normalizeCreatedBorrowRecords(res);
@@ -710,6 +779,48 @@ export async function updateBorrowDueDate(
         body,
     });
     return res.record;
+}
+
+
+/**
+ * Borrower/staff read access for damage reports attached to a borrow record.
+ * Borrowers should only call this read method so they can view reports filed by the librarian.
+ */
+export async function fetchBorrowDamageReports(
+    id: string | number
+): Promise<BorrowDamageReportDTO[]> {
+    type Resp = JsonOk<{ reports?: BorrowDamageReportDTO[] | null; report?: BorrowDamageReportDTO | null }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.damageReports(id), {
+        method: "GET",
+    });
+
+    if (Array.isArray(res.reports)) return res.reports;
+    return res.report ? [res.report] : [];
+}
+
+/**
+ * Librarian/Admin action: file a damage report for a borrowed/returned book.
+ * Borrower users must not use this write action; borrowers only read the reports.
+ */
+export async function createBorrowDamageReportByLibrarian(
+    id: string | number,
+    payload: CreateBorrowDamageReportPayload
+): Promise<BorrowDamageReportDTO> {
+    const description = String(payload.description || "").trim();
+    if (!description) {
+        throw new Error("Damage report description is required.");
+    }
+
+    type Resp = JsonOk<{ report: BorrowDamageReportDTO }>;
+    const res = await requestJSON<Resp>(BORROW_ROUTES.createDamageReport(id), {
+        method: "POST",
+        body: {
+            description,
+            severity: payload.severity || undefined,
+            status: payload.status || undefined,
+        },
+    });
+    return res.report;
 }
 
 /**
