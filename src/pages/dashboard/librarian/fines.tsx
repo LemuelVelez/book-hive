@@ -63,7 +63,7 @@ import ExportPreviewFines, {
     type PrintableFineRecord,
 } from "@/components/fines-preview/export-preview-fines";
 
-type StatusFilter = "all" | "unresolved" | FineStatus;
+type StatusFilter = "all" | FineStatus;
 type YearFilter = "all" | string;
 
 /* ----------------------- Extra types for merging ----------------------- */
@@ -339,7 +339,7 @@ export default function LibrarianFinesPage() {
     const [error, setError] = React.useState<string | null>(null);
 
     const [search, setSearch] = React.useState("");
-    const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("unresolved");
+    const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("active");
     const [yearFilter, setYearFilter] = React.useState<YearFilter>("all");
     const [updateBusyId, setUpdateBusyId] = React.useState<string | null>(null);
 
@@ -430,9 +430,7 @@ export default function LibrarianFinesPage() {
     const filtered = React.useMemo(() => {
         let rows = [...fines];
 
-        if (statusFilter === "unresolved") {
-            rows = rows.filter((f) => f.status === "active");
-        } else if (statusFilter !== "all") {
+        if (statusFilter !== "all") {
             rows = rows.filter((f) => f.status === statusFilter);
         }
 
@@ -847,9 +845,8 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                         <SelectValue placeholder="Status" />
                                     </SelectTrigger>
                                     <SelectContent className="border-white/10 bg-slate-900 text-white">
-                                        <SelectItem value="unresolved">Unresolved (Active)</SelectItem>
                                         <SelectItem value="all">All statuses</SelectItem>
-                                        <SelectItem value="active">Active only</SelectItem>
+                                        <SelectItem value="active">Active</SelectItem>
                                         <SelectItem value="paid">Paid</SelectItem>
                                         <SelectItem value="cancelled">Cancelled</SelectItem>
                                     </SelectContent>

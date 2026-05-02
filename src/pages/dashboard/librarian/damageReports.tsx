@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
-import { FileText } from "lucide-react";
+import { FileText, Loader2, RefreshCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { UserListItemDTO } from "@/lib/authentication";
 import { listUsers } from "@/lib/authentication";
 import type { FineDTO } from "@/lib/fines";
@@ -12,7 +13,6 @@ import { fetchFines } from "@/lib/fines";
 import type { DamageStatus } from "@/lib/damageReports";
 import { deleteDamageReport, fetchDamageReports, updateDamageReport } from "@/lib/damageReports";
 
-import { DamageReportsHeader } from "@/components/librarian/damage-reports/header";
 import { DamageReportsSection } from "@/components/librarian/damage-reports/list-section";
 import { PhotoPreviewDialog } from "@/components/librarian/damage-reports/photo-preview-dialog";
 import { AssessmentDialog } from "@/components/librarian/damage-reports/assessment-dialog";
@@ -21,7 +21,6 @@ import ExportPreviewDamageReports, {
 } from "@/components/librarian/damage-reports-preview/export-preview-damage-reports";
 
 import type {
-    ActiveStatusFilter,
     DamageReportRow,
     FinePaidIndex,
     Severity,
@@ -44,8 +43,6 @@ export default function LibrarianDamageReportsPage() {
 
     const [rows, setRows] = React.useState<DamageReportRow[]>([]);
     const [search, setSearch] = React.useState("");
-    const [activeStatusFilter, setActiveStatusFilter] = React.useState<ActiveStatusFilter>("all");
-
     const [updatingId, setUpdatingId] = React.useState<string | null>(null);
     const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
@@ -450,16 +447,12 @@ export default function LibrarianDamageReportsPage() {
     const activeList = React.useMemo(() => {
         let list = rows.filter((r) => !getUiArchiveInfo(r).archived);
 
-        if (activeStatusFilter !== "all") {
-            list = list.filter((r) => getUiArchiveInfo(r).status === activeStatusFilter);
-        }
-
         if (qLower) {
             list = list.filter((r) => matchesSearch(r, qLower));
         }
 
         return [...list].sort((a, b) => String(b.id).localeCompare(String(a.id)));
-    }, [rows, activeStatusFilter, qLower, getUiArchiveInfo]);
+    }, [rows, qLower, getUiArchiveInfo]);
 
     const paidArchiveList = React.useMemo(() => {
         let list = rows.filter((r) => getUiArchiveInfo(r).archived);
@@ -550,28 +543,60 @@ export default function LibrarianDamageReportsPage() {
     }, [activeList, paidArchiveList, getUiArchiveInfo]);
 
     const exportSubtitle = React.useMemo(() => {
-        const activeFilterLabel =
-            activeStatusFilter === "all"
-                ? "all active statuses"
-                : `active status: ${activeStatusFilter}`;
-
         const searchLabel = search.trim() ? `search: "${search.trim()}"` : "no search filter";
 
-        return `Printable report for the current filtered damage reports view (${activeFilterLabel}; ${searchLabel}).`;
-    }, [activeStatusFilter, search]);
+        return `Printable report for the current damage reports view (${searchLabel}).`;
+    }, [search]);
 
     return (
         <DashboardLayout title="Damage Reports">
-            <DamageReportsHeader
-                search={search}
-                onSearchChange={setSearch}
-                activeStatusFilter={activeStatusFilter}
-                onActiveStatusFilterChange={setActiveStatusFilter}
-                refreshing={refreshing}
-                loading={loading}
-                onRefresh={handleRefresh}
-                counts={counts}
-            />
+            <div className="mb-4 rounded-xl border border-white/10 bg-slate-900/40 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold leading-tight text-white">Damage Reports</h2>
+                        <p className="mt-1 text-xs text-white/65">
+                            Review reported book damage, assess liability, and archive reports after payment.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-2 text-xs text-white/70 sm:flex-row sm:items-center">
+                        <span className="rounded-full border border-amber-300/30 bg-amber-500/10 px-3 py-1 text-amber-100">
+                            Active: {counts.activeCount}
+                        </span>
+                        <span className="rounded-full border border-emerald-300/30 bg-emerald-500/10 px-3 py-1 text-emerald-100">
+                            Paid archive: {counts.paidCount}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative w-full sm:max-w-md">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
+                        <Input
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Search by user, book, damage type, notes, or paid date…"
+                            className="border-white/20 bg-slate-950/60 pl-9 text-white placeholder:text-white/45"
+                        />
+                    </div>
+
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="border-white/20 text-white/90 hover:bg-white/10"
+                        onClick={handleRefresh}
+                        disabled={refreshing || loading}
+                    >
+                        {refreshing || loading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <RefreshCcw className="h-4 w-4" />
+                        )}
+                        <span className="sr-only">Refresh</span>
+                    </Button>
+                </div>
+            </div>
 
             <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3">
                 <div className="text-xs text-white/65">
