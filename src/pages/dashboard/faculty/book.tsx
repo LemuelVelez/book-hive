@@ -108,6 +108,18 @@ function buildBorrowAssignmentSummary(
     return ` Assigned copies: ${labels.join(", ")}.`
 }
 
+function getBorrowRecordBookGroupId(
+    record: Pick<BorrowRecordDTO, "bookId" | "parentBookId">
+) {
+    const parentBookId = String(record.parentBookId ?? "").trim()
+    return parentBookId || String(record.bookId)
+}
+
+function getCatalogBookGroupId(book: Pick<BookDTO, "id" | "parentBookId">) {
+    const parentBookId = String(book.parentBookId ?? "").trim()
+    return parentBookId || String(book.id)
+}
+
 function getEarliestReservationExpiryDate(records: BorrowRecordDTO[]) {
     return records
         .filter((record) => record.status === "pending_pickup")
@@ -757,7 +769,7 @@ export default function FacultyBooksPage() {
         const map = new Map<string, BorrowRecordDTO[]>()
 
         for (const record of myRecords) {
-            const key = String(record.bookId)
+            const key = getBorrowRecordBookGroupId(record)
             const list = map.get(key)
             if (list) {
                 list.push(record)
@@ -773,7 +785,7 @@ export default function FacultyBooksPage() {
         const tokens = tokenizeSearch(search)
 
         const withStatus: BookWithStatus[] = books.map((book) => {
-            const recordsForBook = myRecordsByBookId.get(String(book.id)) ?? []
+            const recordsForBook = myRecordsByBookId.get(getCatalogBookGroupId(book)) ?? []
             const sorted = sortRecordsNewestFirst(recordsForBook)
 
             const activeRecords = sorted.filter((record) =>

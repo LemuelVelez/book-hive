@@ -133,6 +133,18 @@ function buildBorrowAssignmentSummary(
 }
 
 
+function getBorrowRecordBookGroupId(
+    record: Pick<BorrowRecordDTO, "bookId" | "parentBookId">
+) {
+    const parentBookId = String(record.parentBookId ?? "").trim();
+    return parentBookId || String(record.bookId);
+}
+
+function getCatalogBookGroupId(book: Pick<BookDTO, "id" | "parentBookId">) {
+    const parentBookId = String(book.parentBookId ?? "").trim();
+    return parentBookId || String(book.id);
+}
+
 function getEarliestReservationExpiryDate(records: BorrowRecordDTO[]) {
     return records
         .map((record) => getBorrowReservationExpiryDate(record))
@@ -814,9 +826,25 @@ export default function StudentBooksPage() {
         }
     }
 
+    const myRecordsByBookId = React.useMemo(() => {
+        const map = new Map<string, BorrowRecordDTO[]>();
+
+        for (const record of myRecords) {
+            const key = getBorrowRecordBookGroupId(record);
+            const list = map.get(key);
+            if (list) {
+                list.push(record);
+            } else {
+                map.set(key, [record]);
+            }
+        }
+
+        return map;
+    }, [myRecords]);
+
     const rows: BookWithStatus[] = React.useMemo(() => {
         const byBook: BookWithStatus[] = books.map((book) => {
-            const recordsForBook = myRecords.filter((r) => r.bookId === book.id);
+            const recordsForBook = myRecordsByBookId.get(getCatalogBookGroupId(book)) ?? [];
             const sorted = sortRecordsNewestFirst(recordsForBook);
 
             const activeRecords = sorted.filter((record) =>
@@ -1009,7 +1037,7 @@ export default function StudentBooksPage() {
                     });
             }
         });
-    }, [books, myRecords, filterMode, search, availabilityFilter, libraryAreaFilter, sortOption, nowMs]);
+    }, [books, myRecordsByBookId, filterMode, search, availabilityFilter, libraryAreaFilter, sortOption, nowMs]);
 
     const libraryAreaChoices = React.useMemo(() => {
         const values = new Set<string>();

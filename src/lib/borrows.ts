@@ -63,6 +63,7 @@ export type BorrowRecordDTO = {
     course?: string | null;
     college?: string | null;
     bookId: string;
+    parentBookId?: string | null;
     bookTitle: string | null;
     accessionNumber?: string | null;
     copyNumber?: number | null;
