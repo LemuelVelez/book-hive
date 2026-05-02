@@ -489,17 +489,17 @@ function FineStatusBadge({ ui }: { ui: FineUiState }) {
 function FineTypeBadges({ ui }: { ui: FineUiState }) {
   return (
     <>
-      {ui.isDamage ? (
+      {ui.isDamage && ui.isActive ? (
         <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
           <span className="h-1.5 w-1.5 rounded-full bg-rose-300" />
           Damage fine
         </span>
-      ) : (
+      ) : !ui.isDamage ? (
         <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/40 bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
           <span className="h-1.5 w-1.5 rounded-full bg-sky-300" />
           Borrow-based fine
         </span>
-      )}
+      ) : null}
 
       {ui.isOverdue ? (
         <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">

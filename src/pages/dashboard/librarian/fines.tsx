@@ -1171,7 +1171,7 @@ ${anyFine.damageDetails ?? ""} ${anyFine.damageNotes ?? ""}`.toLowerCase();
                                                                                     {displayReason}
                                                                                 </p>
                                                                             )}
-                                                                            {(damageReportId || damageDescription || damage) && (
+                                                                            {fine.status === "active" && (damageReportId || damageDescription || damage) && (
                                                                                 <div className="rounded-md border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100 md:col-span-2">
                                                                                     <div className="mb-1 flex items-center gap-2 font-medium">
                                                                                         <AlertTriangle className="h-4 w-4" />
