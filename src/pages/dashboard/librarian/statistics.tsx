@@ -100,7 +100,28 @@ type ChartTooltipPayload = {
 };
 
 const PIE_COLORS = ["#22c55e", "#f59e0b", "#38bdf8", "#a855f7"];
-const COLLEGE_COLORS = [
+const DEPARTMENT_COLORS = {
+  CCS: "#a855f7",
+  Educ: "#3b82f6",
+  CLAMS: "#f8fafc",
+  Crim: "#ef4444",
+  CBA: "#eab308",
+  Agri: "#22c55e",
+  Engineering: "#f97316",
+} as const;
+const FACULTY_COLORS = [
+  "#14b8a6",
+  "#ec4899",
+  "#8b5cf6",
+  "#06b6d4",
+  "#84cc16",
+  "#f43f5e",
+  "#6366f1",
+  "#10b981",
+  "#d946ef",
+  "#0ea5e9",
+];
+const FALLBACK_COLLEGE_COLORS = [
   "#60a5fa",
   "#34d399",
   "#f59e0b",
@@ -112,6 +133,7 @@ const COLLEGE_COLORS = [
   "#facc15",
   "#2dd4bf",
 ];
+const AUTO_REFRESH_INTERVAL_MS = 30_000;
 const MAX_BOOK_CHART_ITEMS = 10;
 const MAX_PROGRAM_CHART_ITEMS = 10;
 const FACULTY_GROUP_LABEL = "Faculty";
@@ -180,13 +202,121 @@ function titleCase(value: string) {
     .join(" ");
 }
 
+type DepartmentLabel = keyof typeof DEPARTMENT_COLORS;
+
+function getDepartmentLabel(value?: string | null): DepartmentLabel | null {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+
+  if (!normalized) return null;
+
+  const compact = normalized.replace(/\s+/g, "");
+
+  if (
+    /\bccs\b/.test(normalized) ||
+    normalized.includes("college of computing") ||
+    normalized.includes("computing studies") ||
+    normalized.includes("computer science") ||
+    normalized.includes("information technology") ||
+    normalized.includes("information systems") ||
+    normalized.includes("information system") ||
+    /\bict\b/.test(normalized) ||
+    /\bbsit\b/.test(normalized) ||
+    /\bbscs\b/.test(normalized) ||
+    /\bbsis\b/.test(normalized)
+  ) {
+    return "CCS";
+  }
+
+  if (
+    /\beduc\b/.test(normalized) ||
+    normalized.includes("education") ||
+    normalized.includes("teacher") ||
+    /\bbeed\b/.test(normalized) ||
+    /\bbsed\b/.test(normalized)
+  ) {
+    return "Educ";
+  }
+
+  if (
+    /\bclams\b/.test(normalized) ||
+    normalized.includes("liberal arts") ||
+    normalized.includes("arts and maritime") ||
+    normalized.includes("arts maritime") ||
+    normalized.includes("maritime") ||
+    normalized.includes("marine") ||
+    normalized.includes("nautical") ||
+    normalized.includes("seafaring") ||
+    normalized.includes("english") ||
+    normalized.includes("filipino") ||
+    normalized.includes("communication") ||
+    normalized.includes("political science") ||
+    normalized.includes("public administration") ||
+    normalized.includes("sociology")
+  ) {
+    return "CLAMS";
+  }
+
+  if (
+    /\bcrim\b/.test(normalized) ||
+    normalized.includes("criminology") ||
+    normalized.includes("criminal justice")
+  ) {
+    return "Crim";
+  }
+
+  if (
+    /\bcba\b/.test(normalized) ||
+    normalized.includes("business") ||
+    normalized.includes("accountancy") ||
+    normalized.includes("accounting") ||
+    normalized.includes("marketing") ||
+    normalized.includes("entrepreneurship") ||
+    normalized.includes("financial management") ||
+    normalized.includes("management accounting") ||
+    normalized.includes("office administration")
+  ) {
+    return "CBA";
+  }
+
+  if (
+    /\bagri\b/.test(normalized) ||
+    normalized.includes("agriculture") ||
+    normalized.includes("agricultural") ||
+    normalized.includes("agribusiness") ||
+    normalized.includes("agro")
+  ) {
+    return "Agri";
+  }
+
+  if (
+    compact.includes("engineering") ||
+    normalized.includes("engineering") ||
+    normalized.includes("civil") ||
+    normalized.includes("mechanical") ||
+    normalized.includes("electrical") ||
+    normalized.includes("industrial technology") ||
+    normalized.includes("architecture")
+  ) {
+    return "Engineering";
+  }
+
+  return null;
+}
+
 function normalizeCollegeLabelFromCourse(course?: string | null) {
   const raw = String(course || "").trim();
   if (!raw) return "Unassigned";
 
+  const departmentLabel = getDepartmentLabel(raw);
+  if (departmentLabel) return departmentLabel;
+
   const collegeMatch = raw.match(/college of [a-z0-9&(),/\-\s]+/i);
   if (collegeMatch?.[0]) {
-    return titleCase(collegeMatch[0].replace(/\s+/g, " ").trim());
+    const collegeName = titleCase(collegeMatch[0].replace(/\s+/g, " ").trim());
+    return getDepartmentLabel(collegeName) || collegeName;
   }
 
   const firstSegment = raw
@@ -195,96 +325,7 @@ function normalizeCollegeLabelFromCourse(course?: string | null) {
     .filter(Boolean)[0];
 
   if (firstSegment && /^[A-Z]{2,10}$/.test(firstSegment)) {
-    return firstSegment;
-  }
-
-  const lower = raw.toLowerCase();
-
-  const keywordMap: Array<{ label: string; keywords: string[] }> = [
-    {
-      label: "Maritime",
-      keywords: ["maritime", "marine", "nautical", "seafaring"],
-    },
-    {
-      label: "Computer / IT",
-      keywords: [
-        "information technology",
-        "computer science",
-        "information systems",
-        "information system",
-        "ict",
-        "bsit",
-        "bscs",
-        "bsis",
-      ],
-    },
-    {
-      label: "Business / Accountancy",
-      keywords: [
-        "accountancy",
-        "accounting",
-        "business",
-        "marketing",
-        "entrepreneurship",
-        "financial management",
-        "management accounting",
-        "office administration",
-      ],
-    },
-    {
-      label: "Education",
-      keywords: ["education", "teacher", "beed", "bsed"],
-    },
-    {
-      label: "Engineering / Technology",
-      keywords: [
-        "engineering",
-        "civil",
-        "mechanical",
-        "electrical",
-        "industrial technology",
-        "architecture",
-      ],
-    },
-    {
-      label: "Hospitality / Tourism",
-      keywords: ["hospitality", "tourism", "hotel", "culinary"],
-    },
-    {
-      label: "Health Sciences",
-      keywords: [
-        "nursing",
-        "pharmacy",
-        "medical technology",
-        "medtech",
-        "health",
-        "biology",
-        "psychology",
-      ],
-    },
-    {
-      label: "Criminology",
-      keywords: ["criminology", "criminal justice"],
-    },
-    {
-      label: "Arts / Sciences",
-      keywords: [
-        "english",
-        "filipino",
-        "communication",
-        "political science",
-        "public administration",
-        "sociology",
-        "arts",
-        "science",
-      ],
-    },
-  ];
-
-  for (const entry of keywordMap) {
-    if (entry.keywords.some((keyword) => lower.includes(keyword))) {
-      return entry.label;
-    }
+    return getDepartmentLabel(firstSegment) || firstSegment;
   }
 
   return raw.length <= 40 ? raw : shortenLabel(raw, 40);
@@ -295,7 +336,7 @@ function normalizeCollegeLabel(college?: string | null, course?: string | null) 
     .replace(/\s+/g, " ")
     .trim();
 
-  if (rawCollege) return rawCollege;
+  if (rawCollege) return getDepartmentLabel(rawCollege) || rawCollege;
 
   return normalizeCollegeLabelFromCourse(course);
 }
@@ -358,13 +399,39 @@ function getBorrowerRole(record: BorrowRecordDTO) {
   return null;
 }
 
+function getBorrowerDisplayName(record: BorrowRecordDTO) {
+  const source = record as BorrowRecordDTO & Record<string, unknown>;
+  const candidates = [
+    source.studentName,
+    source.borrowerName,
+    source.fullName,
+    source.name,
+    source.userName,
+    source.studentEmail,
+    source.email,
+    source.userId,
+  ];
+
+  for (const candidate of candidates) {
+    const name = String(candidate || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (name) return name;
+  }
+
+  return "Unknown Faculty";
+}
+
 function getBorrowerProgramGroup(record: BorrowRecordDTO) {
   const role = getBorrowerRole(record);
 
   if (role === "faculty") {
+    const borrowerName = getBorrowerDisplayName(record);
+
     return {
       collegeLabel: FACULTY_GROUP_LABEL,
-      label: FACULTY_GROUP_LABEL,
+      label: borrowerName === "Unknown Faculty" ? FACULTY_GROUP_LABEL : `${FACULTY_GROUP_LABEL} - ${borrowerName}`,
     };
   }
 
@@ -384,9 +451,22 @@ function hashString(value: string) {
   return hash;
 }
 
-function getCollegeColor(collegeLabel: string) {
+function getFacultyColor(groupLabel: string) {
+  const safeLabel = groupLabel || FACULTY_GROUP_LABEL;
+  return FACULTY_COLORS[hashString(safeLabel) % FACULTY_COLORS.length];
+}
+
+function getCollegeColor(collegeLabel: string, groupLabel = collegeLabel) {
   const safeLabel = collegeLabel || "Unassigned";
-  return COLLEGE_COLORS[hashString(safeLabel) % COLLEGE_COLORS.length];
+
+  if (safeLabel === FACULTY_GROUP_LABEL) {
+    return getFacultyColor(groupLabel);
+  }
+
+  const departmentLabel = getDepartmentLabel(safeLabel);
+  if (departmentLabel) return DEPARTMENT_COLORS[departmentLabel];
+
+  return FALLBACK_COLLEGE_COLORS[hashString(safeLabel) % FALLBACK_COLLEGE_COLORS.length];
 }
 
 function buildBorrowCountsMap(records: BorrowRecordDTO[]) {
@@ -531,9 +611,18 @@ function ChartTooltip({
   );
 }
 
+type InventoryMixRow = {
+  key: "available" | "borrowed";
+  name: string;
+  value: number;
+  subtitle: string;
+};
+
 type StatisticsDetailState =
   | { kind: "book"; row: StatisticsRow }
+  | { kind: "area"; row: AreaBreakdownRow }
   | { kind: "program"; row: ProgramBreakdownRow }
+  | { kind: "inventory"; row: InventoryMixRow }
   | null;
 
 function DetailField({
@@ -584,6 +673,27 @@ function ProgramStatisticsDetails({ row }: { row: ProgramBreakdownRow }) {
       />
       <DetailField label="Total Borrowed" value={fmtCount(row.totalBorrowCount)} />
       <DetailField label="Currently Borrowed" value={fmtCount(row.activeBorrowCount)} />
+    </div>
+  );
+}
+
+function AreaStatisticsDetails({ row }: { row: AreaBreakdownRow }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <DetailField label="Library Area" value={row.label} />
+      <DetailField label="Book Titles" value={fmtCount(row.totalTitles)} />
+      <DetailField label="Total Borrowed" value={fmtCount(row.totalBorrowCount)} />
+      <DetailField label="Currently Borrowed" value={fmtCount(row.activeBorrowCount)} />
+    </div>
+  );
+}
+
+function InventoryStatisticsDetails({ row }: { row: InventoryMixRow }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <DetailField label="Inventory Status" value={row.name} />
+      <DetailField label="Copies" value={fmtCount(row.value)} />
+      <DetailField label="Summary" value={row.subtitle} />
     </div>
   );
 }
@@ -684,9 +794,15 @@ export default function LibrarianStatisticsPage() {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [selectedDetail, setSelectedDetail] = React.useState<StatisticsDetailState>(null);
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+
     setError(null);
-    setLoading(true);
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
     try {
       const [books, borrowRecords] = await Promise.all([
@@ -709,9 +825,15 @@ export default function LibrarianStatisticsPage() {
     } catch (err: any) {
       const msg = err?.message || "Failed to load statistics.";
       setError(msg);
-      toast.error("Failed to load", { description: msg });
+      if (!silent) {
+        toast.error("Failed to load", { description: msg });
+      }
     } finally {
-      setLoading(false);
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -719,13 +841,16 @@ export default function LibrarianStatisticsPage() {
     void load();
   }, [load]);
 
+  React.useEffect(() => {
+    const timer = window.setInterval(() => {
+      void load({ silent: true });
+    }, AUTO_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [load]);
+
   async function handleRefresh() {
-    setRefreshing(true);
-    try {
-      await load();
-    } finally {
-      setRefreshing(false);
-    }
+    await load({ silent: true });
   }
 
   const areaOptions = React.useMemo(() => {
@@ -846,6 +971,7 @@ export default function LibrarianStatisticsPage() {
   const topBorrowedChartData = React.useMemo(
     () =>
       topBorrowedRows.map((row) => ({
+        id: row.id,
         name: shortenLabel(row.title, 20),
         fullTitle: row.title,
         author: row.author,
@@ -858,6 +984,7 @@ export default function LibrarianStatisticsPage() {
   const areaBreakdownChartData = React.useMemo(
     () =>
       areaBreakdown.map((row) => ({
+        key: row.key,
         name: shortenLabel(row.label, 18),
         fullLabel: row.label,
         totalTitles: row.totalTitles,
@@ -867,14 +994,16 @@ export default function LibrarianStatisticsPage() {
     [areaBreakdown]
   );
 
-  const inventoryMixData = React.useMemo(
+  const inventoryMixData = React.useMemo<InventoryMixRow[]>(
     () => [
       {
+        key: "available",
         name: "Available",
         value: inventory.availableNow,
         subtitle: `${inventory.availabilityPercent.toFixed(1)}% of filtered copies`,
       },
       {
+        key: "borrowed",
         name: "Borrowed",
         value: inventory.borrowedNow,
         subtitle: `${inventory.utilizationPercent.toFixed(1)}% of filtered copies`,
@@ -901,7 +1030,7 @@ export default function LibrarianStatisticsPage() {
         key,
         label,
         collegeLabel,
-        collegeColor: getCollegeColor(collegeLabel),
+        collegeColor: getCollegeColor(collegeLabel, label),
         totalBorrowCount: 0,
         activeBorrowCount: 0,
       };
@@ -931,6 +1060,7 @@ export default function LibrarianStatisticsPage() {
   const programBreakdownChartData = React.useMemo(
     () =>
       programBreakdown.slice(0, MAX_PROGRAM_CHART_ITEMS).map((row) => ({
+        key: row.key,
         name: shortenLabel(row.label, 18),
         fullLabel: row.label,
         collegeLabel: row.collegeLabel,
@@ -984,6 +1114,33 @@ export default function LibrarianStatisticsPage() {
         totalBorrowCount: row.totalBorrowCount,
         activeBorrowCount: row.activeBorrowCount,
       })),
+    [programBreakdown]
+  );
+
+  const openBookDetailsFromChart = React.useCallback(
+    (data: any) => {
+      const id = String(data?.payload?.id || data?.id || "");
+      const row = topBorrowedRows.find((item) => String(item.id) === id);
+      if (row) setSelectedDetail({ kind: "book", row });
+    },
+    [topBorrowedRows]
+  );
+
+  const openAreaDetailsFromChart = React.useCallback(
+    (data: any) => {
+      const key = String(data?.payload?.key || data?.key || "");
+      const row = areaBreakdown.find((item) => item.key === key);
+      if (row) setSelectedDetail({ kind: "area", row });
+    },
+    [areaBreakdown]
+  );
+
+  const openProgramDetailsFromChart = React.useCallback(
+    (data: any) => {
+      const key = String(data?.payload?.key || data?.key || "");
+      const row = programBreakdown.find((item) => item.key === key);
+      if (row) setSelectedDetail({ kind: "program", row });
+    },
     [programBreakdown]
   );
 
@@ -1073,8 +1230,8 @@ export default function LibrarianStatisticsPage() {
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.fullTitle || "Book"}
                     />
                     <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
-                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[8, 8, 0, 0]} fill="#38bdf8" />
-                    <Bar dataKey="activeBorrowCount" name="Currently Borrowed" radius={[8, 8, 0, 0]} fill="#22c55e" />
+                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[8, 8, 0, 0]} fill="#38bdf8" cursor="pointer" onClick={openBookDetailsFromChart} />
+                    <Bar dataKey="activeBorrowCount" name="Currently Borrowed" radius={[8, 8, 0, 0]} fill="#22c55e" cursor="pointer" onClick={openBookDetailsFromChart} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1128,8 +1285,8 @@ export default function LibrarianStatisticsPage() {
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.fullLabel || "Area"}
                     />
                     <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
-                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[0, 8, 8, 0]} fill="#a855f7" />
-                    <Bar dataKey="activeBorrowCount" name="Currently Borrowed" radius={[0, 8, 8, 0]} fill="#f472b6" />
+                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[0, 8, 8, 0]} fill="#a855f7" cursor="pointer" onClick={openAreaDetailsFromChart} />
+                    <Bar dataKey="activeBorrowCount" name="Currently Borrowed" radius={[0, 8, 8, 0]} fill="#f472b6" cursor="pointer" onClick={openAreaDetailsFromChart} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1175,6 +1332,12 @@ export default function LibrarianStatisticsPage() {
                       paddingAngle={4}
                       stroke="rgba(15,23,42,0.9)"
                       strokeWidth={2}
+                      cursor="pointer"
+                      onClick={(data: any) => {
+                        const key = String(data?.payload?.key || data?.key || "");
+                        const row = inventoryMixData.find((item) => item.key === key);
+                        if (row) setSelectedDetail({ kind: "inventory", row });
+                      }}
                     >
                       {inventoryMixData.map((entry, index) => (
                         <Cell key={`${entry.name}-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -1188,7 +1351,12 @@ export default function LibrarianStatisticsPage() {
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {inventoryMixData.map((item, index) => (
-                  <div key={item.name} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => setSelectedDetail({ kind: "inventory", row: item })}
+                    className="rounded-xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-sky-300/40 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-sky-300/40"
+                  >
                     <div className="flex items-center gap-2 text-xs text-white/60">
                       <span
                         className="h-2.5 w-2.5 rounded-full"
@@ -1198,7 +1366,7 @@ export default function LibrarianStatisticsPage() {
                     </div>
                     <div className="mt-1 text-sm font-semibold text-white">{fmtCount(item.value)}</div>
                     <div className="mt-1 text-xs text-white/55">{item.subtitle}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </>
@@ -1242,7 +1410,7 @@ export default function LibrarianStatisticsPage() {
                       }}
                     />
                     <Legend wrapperStyle={{ color: "#e2e8f0", fontSize: 12 }} />
-                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[8, 8, 0, 0]}>
+                    <Bar dataKey="totalBorrowCount" name="Total Borrowed" radius={[8, 8, 0, 0]} cursor="pointer" onClick={openProgramDetailsFromChart}>
                       {programBreakdownChartData.map((entry) => (
                         <Cell key={`${entry.fullLabel}-${entry.collegeLabel}`} fill={entry.fill} />
                       ))}
@@ -1269,7 +1437,7 @@ export default function LibrarianStatisticsPage() {
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-xs text-white/60">College color coding</div>
                   <div className="mt-2 space-y-2">
-                    {programCollegeLegend.slice(0, 6).map((item) => (
+                    {programCollegeLegend.map((item) => (
                       <div key={item.label} className="flex items-center justify-between gap-3 text-xs text-white/70">
                         <span className="flex min-w-0 items-center gap-2">
                           <span
@@ -1409,17 +1577,25 @@ export default function LibrarianStatisticsPage() {
             <DialogTitle className="whitespace-normal wrap-break-word pr-8 text-left text-white">
               {selectedDetail?.kind === "book"
                 ? selectedDetail.row.title
-                : selectedDetail?.kind === "program"
+                : selectedDetail?.kind === "area"
                   ? selectedDetail.row.label
-                  : "Details"}
+                  : selectedDetail?.kind === "program"
+                    ? selectedDetail.row.label
+                    : selectedDetail?.kind === "inventory"
+                      ? selectedDetail.row.name
+                      : "Details"}
             </DialogTitle>
           </DialogHeader>
 
           <div className="max-h-[calc(95svh-8rem)] overflow-y-auto pr-1">
             {selectedDetail?.kind === "book" ? (
               <BookStatisticsDetails row={selectedDetail.row} />
+            ) : selectedDetail?.kind === "area" ? (
+              <AreaStatisticsDetails row={selectedDetail.row} />
             ) : selectedDetail?.kind === "program" ? (
               <ProgramStatisticsDetails row={selectedDetail.row} />
+            ) : selectedDetail?.kind === "inventory" ? (
+              <InventoryStatisticsDetails row={selectedDetail.row} />
             ) : null}
           </div>
         </DialogContent>
