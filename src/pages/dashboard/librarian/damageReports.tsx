@@ -1,17 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
-import { FileText, Loader2, RefreshCcw, Search } from "lucide-react";
+import { FileText, Loader2, RefreshCcw, Search, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { fetchBooks, type BookDTO } from "@/lib/books";
 import type { UserListItemDTO } from "@/lib/authentication";
 import { listUsers } from "@/lib/authentication";
 import type { FineDTO } from "@/lib/fines";
 import { fetchFines } from "@/lib/fines";
 import type { DamageStatus } from "@/lib/damageReports";
-import { deleteDamageReport, fetchDamageReports, updateDamageReport } from "@/lib/damageReports";
+import { createDamageReport, deleteDamageReport, fetchDamageReports, updateDamageReport } from "@/lib/damageReports";
 
 import { DamageReportsSection } from "@/components/librarian/damage-reports/list-section";
 import { PhotoPreviewDialog } from "@/components/librarian/damage-reports/photo-preview-dialog";
@@ -69,6 +70,20 @@ export default function LibrarianDamageReportsPage() {
     const [feeEdited, setFeeEdited] = React.useState(false);
 
     const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false);
+
+    const [books, setBooks] = React.useState<BookDTO[]>([]);
+    const [booksLoading, setBooksLoading] = React.useState(false);
+    const [booksError, setBooksError] = React.useState<string | null>(null);
+
+    const [createBorrowerId, setCreateBorrowerId] = React.useState("");
+    const [createBookId, setCreateBookId] = React.useState("");
+    const [createDamageType, setCreateDamageType] = React.useState("");
+    const [createSeverity, setCreateSeverity] = React.useState<Severity>("minor");
+    const [createFee, setCreateFee] = React.useState(() => String(suggestedFineFromSeverity("minor")));
+    const [createNotes, setCreateNotes] = React.useState("");
+    const [createPhotos, setCreatePhotos] = React.useState<File[]>([]);
+    const [createPhotosInputKey, setCreatePhotosInputKey] = React.useState(0);
+    const [createSaving, setCreateSaving] = React.useState(false);
 
     const LIABLE_ALLOWED = React.useMemo(() => new Set<string>(["student", "faculty", "other"]), []);
 
@@ -169,16 +184,114 @@ export default function LibrarianDamageReportsPage() {
         }
     }, []);
 
+    const loadBooks = React.useCallback(async () => {
+        setBooksError(null);
+        setBooksLoading(true);
+        try {
+            const list = await fetchBooks();
+            setBooks(list);
+        } catch (err: any) {
+            const msg = err?.message || "Failed to load books.";
+            setBooksError(msg);
+            toast.error("Failed to load books", { description: msg });
+        } finally {
+            setBooksLoading(false);
+        }
+    }, []);
+
     React.useEffect(() => {
         void load();
     }, [load]);
 
+    React.useEffect(() => {
+        void loadUsers();
+        void loadBooks();
+    }, [loadUsers, loadBooks]);
+
     async function handleRefresh() {
         setRefreshing(true);
         try {
-            await load();
+            await Promise.all([load(), loadUsers(), loadBooks()]);
         } finally {
             setRefreshing(false);
+        }
+    }
+
+    async function handleCreateReport(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        const borrowerId = createBorrowerId.trim();
+        const bookId = createBookId.trim();
+        const damageType = createDamageType.trim();
+        const trimmedFee = createFee.trim();
+        const parsedFee = trimmedFee === "" ? 0 : Number(trimmedFee);
+
+        if (!borrowerId) {
+            toast.warning("Select a borrower", {
+                description: "Choose the borrower who will receive this damage report.",
+            });
+            return;
+        }
+
+        const selectedBorrower = users.find((u) => String(u.id) === borrowerId) || null;
+        if (selectedBorrower && !LIABLE_ALLOWED.has(String(selectedBorrower.accountType))) {
+            toast.warning("Ineligible borrower", {
+                description: "Only Student, Faculty, and Other accounts can receive damage reports.",
+            });
+            return;
+        }
+
+        if (!bookId) {
+            toast.warning("Select a book", {
+                description: "Choose the returned book with damage.",
+            });
+            return;
+        }
+
+        if (!damageType) {
+            toast.warning("Enter damage details", {
+                description: "Describe the damage found by the librarian.",
+            });
+            return;
+        }
+
+        if (!Number.isFinite(parsedFee) || parsedFee < 0) {
+            toast.warning("Invalid fine amount", {
+                description: "Fine must be a number greater than or equal to 0.",
+            });
+            return;
+        }
+
+        setCreateSaving(true);
+        try {
+            const created = (await createDamageReport({
+                liableUserId: /^\d+$/.test(borrowerId) ? Number(borrowerId) : borrowerId,
+                bookId: /^\d+$/.test(bookId) ? Number(bookId) : bookId,
+                damageType,
+                severity: createSeverity,
+                fee: parsedFee,
+                notes: createNotes.trim() || null,
+                photos: createPhotos,
+            })) as DamageReportRow;
+
+            setRows((current) => [created, ...current.filter((r) => String(r.id) !== String(created.id))]);
+            setCreateBorrowerId("");
+            setCreateBookId("");
+            setCreateDamageType("");
+            setCreateSeverity("minor");
+            setCreateFee(String(suggestedFineFromSeverity("minor")));
+            setCreateNotes("");
+            setCreatePhotos([]);
+            setCreatePhotosInputKey((key) => key + 1);
+
+            toast.success("Damage report sent", {
+                description: `Report #${created.id} was sent to ${selectedBorrower?.fullName ?? selectedBorrower?.email ?? "the borrower"}.`,
+            });
+        } catch (err: any) {
+            const msg = err?.message || "Failed to send damage report.";
+            toast.error("Send failed", { description: msg });
+        } finally {
+            setCreateSaving(false);
         }
     }
 
@@ -413,6 +526,23 @@ export default function LibrarianDamageReportsPage() {
         });
     }, [eligibleUsers, liableUserQuery]);
 
+    const bookOptions = React.useMemo(() => {
+        return books.map((book) => ({
+            id: String(book.id),
+            label: `${book.title}${book.author ? ` — ${book.author}` : ""}`,
+        }));
+    }, [books]);
+
+    const selectedCreateBorrower = React.useMemo(() => {
+        if (!createBorrowerId) return null;
+        return users.find((u) => String(u.id) === createBorrowerId) || null;
+    }, [users, createBorrowerId]);
+
+    const selectedCreateBook = React.useMemo(() => {
+        if (!createBookId) return null;
+        return books.find((book) => String(book.id) === createBookId) || null;
+    }, [books, createBookId]);
+
     const selectedLiableUser = React.useMemo(() => {
         if (!assessLiableUserId) return null;
         return users.find((u) => String(u.id) === assessLiableUserId) || null;
@@ -597,6 +727,170 @@ export default function LibrarianDamageReportsPage() {
                     </Button>
                 </div>
             </div>
+
+            <form
+                onSubmit={handleCreateReport}
+                className="mb-4 rounded-xl border border-white/10 bg-slate-900/40 p-4"
+            >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <h3 className="text-base font-semibold leading-tight text-white">Send damage report to borrower</h3>
+                        <p className="mt-1 text-xs text-white/65">
+                            Create the report as the librarian, assign the liable borrower, and make it readable in the borrower account.
+                        </p>
+                    </div>
+                    <Button
+                        type="submit"
+                        className="bg-amber-600 text-white hover:bg-amber-700"
+                        disabled={createSaving || usersLoading || booksLoading}
+                    >
+                        {createSaving ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Send className="mr-2 h-4 w-4" />
+                        )}
+                        Send Report
+                    </Button>
+                </div>
+
+                {(usersError || booksError) && (
+                    <div className="mt-3 rounded-md border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+                        {usersError || booksError}
+                    </div>
+                )}
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-white/80">Borrower</label>
+                        <select
+                            value={createBorrowerId}
+                            onChange={(event) => setCreateBorrowerId(event.target.value)}
+                            className="h-10 w-full rounded-md border border-white/20 bg-slate-950/60 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/70"
+                            disabled={createSaving || usersLoading}
+                        >
+                            <option value="" className="bg-slate-950 text-white">
+                                {usersLoading ? "Loading borrowers…" : "Select borrower"}
+                            </option>
+                            {eligibleUsers.map((user) => (
+                                <option key={user.id} value={String(user.id)} className="bg-slate-950 text-white">
+                                    {user.fullName ?? "Unnamed user"}
+                                    {user.email ? ` — ${user.email}` : ""}
+                                    {user.accountType ? ` (${user.accountType})` : ""}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-white/80">Returned book</label>
+                        <select
+                            value={createBookId}
+                            onChange={(event) => setCreateBookId(event.target.value)}
+                            className="h-10 w-full rounded-md border border-white/20 bg-slate-950/60 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/70"
+                            disabled={createSaving || booksLoading}
+                        >
+                            <option value="" className="bg-slate-950 text-white">
+                                {booksLoading ? "Loading books…" : "Select book"}
+                            </option>
+                            {bookOptions.map((book) => (
+                                <option key={book.id} value={book.id} className="bg-slate-950 text-white">
+                                    {book.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-white/80">Damage found</label>
+                        <Input
+                            value={createDamageType}
+                            onChange={(event) => setCreateDamageType(event.target.value)}
+                            placeholder="Example: torn pages, water damage, broken cover"
+                            className="border-white/20 bg-slate-950/60 text-white placeholder:text-white/45"
+                            disabled={createSaving}
+                        />
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-white/80">Severity</label>
+                            <select
+                                value={createSeverity}
+                                onChange={(event) => {
+                                    const nextSeverity = event.target.value as Severity;
+                                    setCreateSeverity(nextSeverity);
+                                    setCreateFee(String(suggestedFineFromSeverity(nextSeverity)));
+                                }}
+                                className="h-10 w-full rounded-md border border-white/20 bg-slate-950/60 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500/70"
+                                disabled={createSaving}
+                            >
+                                <option value="minor" className="bg-slate-950 text-white">Minor</option>
+                                <option value="moderate" className="bg-slate-950 text-white">Moderate</option>
+                                <option value="major" className="bg-slate-950 text-white">Major</option>
+                            </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-white/80">Fine</label>
+                            <Input
+                                value={createFee}
+                                onChange={(event) => setCreateFee(event.target.value)}
+                                inputMode="decimal"
+                                placeholder="0"
+                                className="border-white/20 bg-slate-950/60 text-white placeholder:text-white/45"
+                                disabled={createSaving}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5 lg:col-span-2">
+                        <label className="text-xs font-medium text-white/80">Notes</label>
+                        <textarea
+                            value={createNotes}
+                            onChange={(event) => setCreateNotes(event.target.value)}
+                            rows={3}
+                            className="w-full rounded-md border border-white/20 bg-slate-950/60 px-3 py-2 text-sm text-white placeholder:text-white/45 focus:outline-none focus:ring-2 focus:ring-amber-500/70"
+                            placeholder="Add exact damage details to send to the borrower."
+                            disabled={createSaving}
+                        />
+                    </div>
+
+                    <div className="space-y-1.5 lg:col-span-2">
+                        <label className="text-xs font-medium text-white/80">Damage photos</label>
+                        <Input
+                            key={createPhotosInputKey}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(event) => {
+                                const files = Array.from(event.target.files ?? []).slice(0, 3);
+                                setCreatePhotos(files);
+                            }}
+                            className="border-white/20 bg-slate-950/60 text-white file:mr-3 file:rounded-md file:border-0 file:bg-amber-500/20 file:px-3 file:py-1.5 file:text-xs file:text-amber-100"
+                            disabled={createSaving}
+                        />
+                    </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 text-xs text-white/70 sm:grid-cols-3">
+                    <div className="rounded-md border border-white/10 bg-slate-950/40 px-3 py-2">
+                        <span className="text-white/45">Reported by:</span>{" "}
+                        <span className="font-medium text-white">Current librarian account</span>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-slate-950/40 px-3 py-2">
+                        <span className="text-white/45">Borrower:</span>{" "}
+                        <span className="font-medium text-white">
+                            {selectedCreateBorrower?.fullName ?? selectedCreateBorrower?.email ?? "Not selected"}
+                        </span>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-slate-950/40 px-3 py-2">
+                        <span className="text-white/45">Book:</span>{" "}
+                        <span className="font-medium text-white">
+                            {selectedCreateBook?.title ?? "Not selected"}
+                        </span>
+                    </div>
+                </div>
+            </form>
 
             <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3">
                 <div className="text-xs text-white/65">

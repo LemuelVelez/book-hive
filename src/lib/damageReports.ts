@@ -8,17 +8,24 @@ export type DamageSeverity = "minor" | "moderate" | "major";
 export type DamageReportDTO = {
     id: string;
 
-    /** The user who submitted/reported the damage (often current borrower at the time). */
+    /** The librarian/admin who created and sent the report. */
     userId: string;
     studentEmail: string | null;
     studentId: string | null;
     studentName?: string | null;
+    reportedByUserId?: string | null;
+    reportedByEmail?: string | null;
+    reportedBySchoolId?: string | null;
+    reportedByName?: string | null;
 
-    /** The user who is LIABLE for the damage (can be previous borrower). */
+    /** The borrower who receives and reads the damage report. */
     liableUserId: string | null;
     liableStudentEmail: string | null;
     liableStudentId: string | null;
     liableStudentName?: string | null;
+    liableUserEmail?: string | null;
+    liableUserSchoolId?: string | null;
+    liableUserName?: string | null;
 
     bookId: string;
     bookTitle: string | null;
@@ -142,6 +149,7 @@ export async function fetchMyDamageReports(): Promise<DamageReportDTO[]> {
 
 export type CreateDamageReportPayload = {
     bookId: string | number;
+    liableUserId: string | number;
     damageType: string;
     severity: DamageSeverity;
     notes?: string | null;
@@ -152,6 +160,7 @@ export type CreateDamageReportPayload = {
 export async function createDamageReport(payload: CreateDamageReportPayload): Promise<DamageReportDTO> {
     const fd = new FormData();
     fd.append("bookId", String(payload.bookId));
+    fd.append("liableUserId", String(payload.liableUserId));
     fd.append("damageType", payload.damageType);
     fd.append("severity", payload.severity);
 

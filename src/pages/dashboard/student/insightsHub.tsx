@@ -50,6 +50,34 @@ function fmtDate(d?: string | null) {
     }
 }
 
+function getReportedByLabel(report: DamageReportDTO) {
+    const anyReport = report as any;
+    return (
+        report.reportedByName ??
+        report.studentName ??
+        anyReport.reportedByFullName ??
+        report.reportedByEmail ??
+        report.studentEmail ??
+        "Librarian"
+    );
+}
+
+function getBorrowerLabel(report: DamageReportDTO) {
+    const anyReport = report as any;
+    return (
+        report.liableUserName ??
+        report.liableStudentName ??
+        anyReport.borrowerName ??
+        report.liableUserEmail ??
+        report.liableStudentEmail ??
+        "You"
+    );
+}
+
+function getDamagePhotoUrls(report: DamageReportDTO) {
+    return Array.isArray(report.photoUrls) ? report.photoUrls : [];
+}
+
 /* ------------------------- Star rating components ------------------------- */
 
 type StarRatingProps = {
@@ -429,8 +457,8 @@ export default function StudentInsightsHubPage() {
                         <CardTitle>Damage records</CardTitle>
                     </div>
                     <p className="mt-1 text-xs text-white/70">
-                        Damage records shown here are created and managed by the librarian after
-                        assessment.
+                        Damage reports shown here are sent by the librarian after a returned
+                        book is checked and assessed.
                     </p>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -457,12 +485,15 @@ export default function StudentInsightsHubPage() {
                             No damage records found.
                             <br />
                             <span className="opacity-80">
-                                Any librarian-assessed damage records linked to your account will appear here.
+                                Any damage report sent to you by the librarian will appear here.
                             </span>
                         </div>
                     ) : (
                         <div className="space-y-2 max-h-72 overflow-y-auto pr-1 support-scroll">
-                            {myDamageReports.map((r) => (
+                            {myDamageReports.map((r) => {
+                                const photoUrls = getDamagePhotoUrls(r);
+
+                                return (
                                 <div
                                     key={r.id}
                                     className="rounded-md border border-white/10 bg-slate-900/70 px-3 py-2 text-xs"
@@ -475,7 +506,21 @@ export default function StudentInsightsHubPage() {
                                             <div className="text-[10px] text-white/50">
                                                 Recorded: {fmtDate(r.reportedAt)}
                                             </div>
-                                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                                            <div className="mt-1 grid gap-1 text-[11px] text-white/70 sm:grid-cols-2">
+                                                <div>
+                                                    <span className="text-white/45">Reported by:</span>{" "}
+                                                    <span className="font-medium text-white/85">{getReportedByLabel(r)}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-white/45">Borrower:</span>{" "}
+                                                    <span className="font-medium text-white/85">{getBorrowerLabel(r)}</span>
+                                                </div>
+                                                <div className="sm:col-span-2">
+                                                    <span className="text-white/45">Book ID:</span>{" "}
+                                                    <span className="font-medium text-white/85">{r.bookId}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2 mt-2">
                                                 <Badge
                                                     className={
                                                         r.status === "paid"
@@ -509,27 +554,27 @@ export default function StudentInsightsHubPage() {
                                             </div>
                                         </div>
 
-                                        {r.photoUrls.length > 0 && (
+                                        {photoUrls.length > 0 && (
                                             <div className="flex flex-col items-start sm:items-end gap-1 mt-2 sm:mt-0">
                                                 <button
                                                     type="button"
-                                                    onClick={() => openPreview(r.photoUrls, 0)}
+                                                    onClick={() => openPreview(photoUrls, 0)}
                                                     className="cursor-pointer relative h-14 w-20 overflow-hidden rounded-md border border-white/20 bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                                                     aria-label="Preview damage photos"
                                                 >
                                                     <img
-                                                        src={r.photoUrls[0]}
+                                                        src={photoUrls[0]}
                                                         alt="Damage"
                                                         className="h-full w-full object-cover"
                                                     />
                                                 </button>
-                                                {r.photoUrls.length > 1 && (
+                                                {photoUrls.length > 1 && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => openPreview(r.photoUrls, 0)}
+                                                        onClick={() => openPreview(photoUrls, 0)}
                                                         className="text-[10px] text-white/60 hover:text-white/90 underline-offset-2 hover:underline"
                                                     >
-                                                        +{r.photoUrls.length - 1} more
+                                                        +{photoUrls.length - 1} more
                                                     </button>
                                                 )}
                                             </div>
@@ -545,7 +590,8 @@ export default function StudentInsightsHubPage() {
                                         </p>
                                     )}
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </CardContent>
