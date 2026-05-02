@@ -18,6 +18,7 @@ import {
     Loader2,
     AlertTriangle,
     CheckCircle2,
+    ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -389,117 +390,157 @@ export default function FacultyDashboardPage() {
 
             {/* KPI cards */}
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                <Card className="bg-slate-800/60 border-white/10">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                            <Layers className="h-4 w-4 text-sky-200" aria-hidden="true" />
-                            Active borrows
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? (
-                            <Skeleton className="h-8 w-24" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-semibold text-white">
-                                    {activeBorrows.length}
-                                </div>
-                                <div className="mt-1 text-xs text-white/60">
-                                    Due soon:{" "}
-                                    <span className="font-semibold text-amber-200">
-                                        {dueSoonActiveBorrows.length}
-                                    </span>{" "}
-                                    • Overdue:{" "}
-                                    <span className="font-semibold text-red-300">
-                                        {overdueActiveBorrows.length}
-                                    </span>
-                                </div>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
+                <Link
+                    to="/dashboard/faculty/borrowed-books"
+                    className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                    aria-label="Open borrowed books"
+                >
+                    <Card className="h-full bg-slate-800/60 border-white/10 transition-colors hover:bg-slate-700/70 cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                                <Layers className="h-4 w-4 text-sky-200" aria-hidden="true" />
+                                Active borrows
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? (
+                                <Skeleton className="h-8 w-24" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-semibold text-white">
+                                        {activeBorrows.length}
+                                    </div>
+                                    <div className="mt-1 text-xs text-white/60">
+                                        Due soon:{" "}
+                                        <span className="font-semibold text-amber-200">
+                                            {dueSoonActiveBorrows.length}
+                                        </span>{" "}
+                                        • Overdue:{" "}
+                                        <span className="font-semibold text-red-300">
+                                            {overdueActiveBorrows.length}
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 inline-flex items-center text-xs font-medium text-sky-200">
+                                        View borrowed books
+                                        <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                <Card className="bg-slate-800/60 border-white/10">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                            <ReceiptText className="h-4 w-4 text-amber-200" aria-hidden="true" />
-                            Active fines
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? (
-                            <Skeleton className="h-8 w-32" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-semibold text-white">
-                                    {peso(totalActiveFines)}
-                                </div>
-                                <div className="mt-1 text-xs text-white/60">
-                                    Total fine records:{" "}
-                                    <span className="font-semibold text-white/80">{fines.length}</span>
-                                </div>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
+                <Link
+                    to="/dashboard/faculty/fines"
+                    className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                    aria-label="Open faculty fines"
+                >
+                    <Card className="h-full bg-slate-800/60 border-white/10 transition-colors hover:bg-slate-700/70 cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                                <ReceiptText className="h-4 w-4 text-amber-200" aria-hidden="true" />
+                                Active fines
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? (
+                                <Skeleton className="h-8 w-32" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-semibold text-white">
+                                        {peso(totalActiveFines)}
+                                    </div>
+                                    <div className="mt-1 text-xs text-white/60">
+                                        Total fine records:{" "}
+                                        <span className="font-semibold text-white/80">{fines.length}</span>
+                                    </div>
+                                    <div className="mt-3 inline-flex items-center text-xs font-medium text-amber-200">
+                                        View fines
+                                        <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                <Card className="bg-slate-800/60 border-white/10">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                            <MessageSquare className="h-4 w-4 text-purple-200" aria-hidden="true" />
-                            Feedback
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? (
-                            <Skeleton className="h-8 w-24" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-semibold text-white">
-                                    {feedbacks.length}
-                                </div>
-                                <div className="mt-1 text-xs text-white/60">
-                                    Avg rating:{" "}
-                                    <span className="font-semibold text-yellow-200">
-                                        {avgRating ? avgRating.toFixed(2) : "—"}
-                                    </span>{" "}
-                                    / 5
-                                </div>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
+                <Link
+                    to="/dashboard/faculty/insights"
+                    className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
+                    aria-label="Open faculty insights feedback"
+                >
+                    <Card className="h-full bg-slate-800/60 border-white/10 transition-colors hover:bg-slate-700/70 cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4 text-purple-200" aria-hidden="true" />
+                                Feedback
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? (
+                                <Skeleton className="h-8 w-24" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-semibold text-white">
+                                        {feedbacks.length}
+                                    </div>
+                                    <div className="mt-1 text-xs text-white/60">
+                                        Avg rating:{" "}
+                                        <span className="font-semibold text-yellow-200">
+                                            {avgRating ? avgRating.toFixed(2) : "—"}
+                                        </span>{" "}
+                                        / 5
+                                    </div>
+                                    <div className="mt-3 inline-flex items-center text-xs font-medium text-purple-200">
+                                        Open Insights Hub
+                                        <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                <Card className="bg-slate-800/60 border-white/10">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                            <AlertTriangle className="h-4 w-4 text-rose-200" aria-hidden="true" />
-                            Damage reports
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? (
-                            <Skeleton className="h-8 w-24" />
-                        ) : (
-                            <>
-                                <div className="text-2xl font-semibold text-white">
-                                    {damageReports.length}
-                                </div>
-                                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/70">
-                                    <Badge className="bg-slate-700/70 border-white/10 text-white">
-                                        Pending: {damageStatusSummary.Pending}
-                                    </Badge>
-                                    <Badge className="bg-amber-600/70 border-amber-400/20 text-white">
-                                        Assessed: {damageStatusSummary.Assessed}
-                                    </Badge>
-                                    <Badge className="bg-emerald-600/70 border-emerald-400/20 text-white">
-                                        Paid: {damageStatusSummary.Paid}
-                                    </Badge>
-                                </div>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
+                <Link
+                    to="/dashboard/faculty/insights"
+                    className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+                    aria-label="Open faculty damage reports"
+                >
+                    <Card className="h-full bg-slate-800/60 border-white/10 transition-colors hover:bg-slate-700/70 cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-rose-200" aria-hidden="true" />
+                                Damage reports
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? (
+                                <Skeleton className="h-8 w-24" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-semibold text-white">
+                                        {damageReports.length}
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/70">
+                                        <Badge className="bg-slate-700/70 border-white/10 text-white">
+                                            Pending: {damageStatusSummary.Pending}
+                                        </Badge>
+                                        <Badge className="bg-amber-600/70 border-amber-400/20 text-white">
+                                            Assessed: {damageStatusSummary.Assessed}
+                                        </Badge>
+                                        <Badge className="bg-emerald-600/70 border-emerald-400/20 text-white">
+                                            Paid: {damageStatusSummary.Paid}
+                                        </Badge>
+                                    </div>
+                                    <div className="mt-3 inline-flex items-center text-xs font-medium text-rose-200">
+                                        Open damage reports
+                                        <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </Link>
             </div>
 
             {/* Quick actions (routes verified from your App.tsx) */}
