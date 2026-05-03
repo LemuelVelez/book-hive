@@ -128,3 +128,17 @@ export async function createFeedback(
     });
     return res.feedback;
 }
+
+export async function notifyFeedbacksByEmail(opts?: { limit?: number }) {
+    type Resp = JsonOk<{
+        message?: string;
+        notified?: boolean;
+        recipientCount?: number;
+        feedbackCount?: number;
+    }>;
+
+    return requestJSON<Resp>(FEEDBACK_ROUTES.notifyLibrarians, {
+        method: "POST",
+        body: opts?.limit ? { limit: opts.limit } : {},
+    });
+}

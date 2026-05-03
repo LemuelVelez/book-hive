@@ -44,6 +44,7 @@ export const ROUTES = {
     verifyConfirm: api("/auth/verify-email/confirm"), // POST token
     forgotPassword: api("/auth/forgot-password"),
     resetPassword: api("/auth/reset-password"),
+    notifyPendingApprovals: api("/auth/notify-pending-approvals"), // POST (librarian/admin)
   },
   users: {
     checkStudentId: (studentId: string) =>

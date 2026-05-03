@@ -35,6 +35,7 @@ import {
   CalendarDays,
   BadgeCheck,
   Clock3,
+  Mail,
 } from "lucide-react";
 import { useSession } from "@/hooks/use-session";
 import {
@@ -42,6 +43,7 @@ import {
   approveUserById,
   disapproveUserById,
   deleteUserById,
+  notifyPendingApprovalsByEmail,
 } from "@/lib/authentication";
 import { ROUTES } from "@/api/auth/route";
 import {
@@ -447,6 +449,7 @@ export default function LibrarianUsersPage() {
   const [users, setUsers] = React.useState<UserRowDTO[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [notifyingPendingApprovals, setNotifyingPendingApprovals] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [accountabilityByUserId, setAccountabilityByUserId] = React.useState<
@@ -532,6 +535,26 @@ export default function LibrarianUsersPage() {
       await loadUsers();
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleNotifyPendingApprovals = async () => {
+    setNotifyingPendingApprovals(true);
+    try {
+      const result = await notifyPendingApprovalsByEmail();
+      toast.success("Approval notice sent", {
+        description:
+          result.message ||
+          `Pending approval email sent for ${result.pendingCount ?? pendingCount} account${
+            (result.pendingCount ?? pendingCount) === 1 ? "" : "s"
+          }.`,
+      });
+    } catch (e: any) {
+      toast.error("Approval notice failed", {
+        description: e?.message || "Unable to send approval notification email.",
+      });
+    } finally {
+      setNotifyingPendingApprovals(false);
     }
   };
 
@@ -1010,7 +1033,27 @@ export default function LibrarianUsersPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="border-amber-400/30 text-amber-100 hover:bg-amber-500/10"
+            onClick={handleNotifyPendingApprovals}
+            disabled={notifyingPendingApprovals || loading || pendingCount === 0}
+            title={
+              pendingCount > 0
+                ? "Email librarians/admins about pending approvals"
+                : "No pending accounts to notify"
+            }
+          >
+            {notifyingPendingApprovals ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="mr-2 h-4 w-4" />
+            )}
+            Email pending notice
+          </Button>
+
           <Button
             type="button"
             variant="outline"

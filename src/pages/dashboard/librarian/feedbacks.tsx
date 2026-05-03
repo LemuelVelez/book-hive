@@ -22,10 +22,14 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 
-import { FileText, Loader2, RefreshCcw, Search, Star } from "lucide-react";
+import { FileText, Loader2, Mail, RefreshCcw, Search, Star } from "lucide-react";
 import { toast } from "sonner";
 
-import { fetchFeedbacks, type FeedbackDTO } from "@/lib/feedbacks";
+import {
+    fetchFeedbacks,
+    notifyFeedbacksByEmail,
+    type FeedbackDTO,
+} from "@/lib/feedbacks";
 import ExportPreviewFeedbacks, {
     type PrintableFeedbackRecord,
 } from "@/components/feedbacks-preview/export-preview-feedbacks";
@@ -100,6 +104,7 @@ function getUserName(f: FeedbackRow): string {
 export default function LibrarianFeedbacksPage() {
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
+    const [notifyingFeedbacks, setNotifyingFeedbacks] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
 
     const [rows, setRows] = React.useState<FeedbackRow[]>([]);
@@ -134,6 +139,26 @@ export default function LibrarianFeedbacksPage() {
             await load();
         } finally {
             setRefreshing(false);
+        }
+    }
+
+    async function handleNotifyFeedbacks() {
+        setNotifyingFeedbacks(true);
+        try {
+            const result = await notifyFeedbacksByEmail({ limit: 20 });
+            toast.success("Feedback notice sent", {
+                description:
+                    result.message ||
+                    `Feedback email sent for ${result.feedbackCount ?? rows.length} feedback${
+                        (result.feedbackCount ?? rows.length) === 1 ? "" : "s"
+                    }.`,
+            });
+        } catch (err: any) {
+            toast.error("Feedback notice failed", {
+                description: err?.message || "Unable to send feedback notification email.",
+            });
+        } finally {
+            setNotifyingFeedbacks(false);
         }
     }
 
@@ -198,6 +223,26 @@ export default function LibrarianFeedbacksPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="border-amber-400/30 text-amber-100 hover:bg-amber-500/10"
+                        onClick={handleNotifyFeedbacks}
+                        disabled={notifyingFeedbacks || loading || rows.length === 0}
+                        title={
+                            rows.length > 0
+                                ? "Email librarians/admins about recent feedbacks"
+                                : "No feedbacks to notify"
+                        }
+                    >
+                        {notifyingFeedbacks ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Mail className="mr-2 h-4 w-4" />
+                        )}
+                        Email feedback notice
+                    </Button>
+
                     <Button
                         type="button"
                         variant="outline"

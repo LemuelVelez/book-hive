@@ -7,4 +7,5 @@ export const FEEDBACK_ROUTES = {
     list: api("/feedbacks"), // GET (librarian/admin)
     create: api("/feedbacks"), // POST (student + staff)
     my: api("/feedbacks/my"), // GET (current user's feedbacks)
+    notifyLibrarians: api("/feedbacks/notify-librarians"), // POST (librarian/admin)
 } as const;

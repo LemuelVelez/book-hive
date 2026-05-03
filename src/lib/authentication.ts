@@ -577,3 +577,19 @@ export async function sendLoginCredentialsById(id: string, opts?: { password?: s
     body: opts?.password ? { password: opts.password } : {},
   });
 }
+
+/* ---------------- approval notification email ---------------- */
+
+export async function notifyPendingApprovalsByEmail() {
+  type Resp = JsonOk<{
+    message?: string;
+    notified?: boolean;
+    recipientCount?: number;
+    pendingCount?: number;
+  }>;
+
+  return requestJSON<Resp>(ROUTES.auth.notifyPendingApprovals, {
+    method: "POST",
+    body: {},
+  });
+}
